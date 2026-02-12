@@ -8,7 +8,7 @@
 </h1>
 
 
-🏥 Healthcare Fraud Detection System
+##🏥 Healthcare Fraud Detection System
 
 📌 Project Overview
 This project aims to detect fraudulent healthcare claims using data engineering techniques and a Machine Learning model.
@@ -16,7 +16,7 @@ The pipeline follows a simplified data architecture with structured data layers 
 
 ---
  
-🎯 Project Objectives
+##🎯 Project Objectives
 Clean and prepare healthcare claims data
 Perform exploratory data analysis (EDA)
 Apply SQL queries for analytical insights
@@ -25,7 +25,7 @@ Evaluate model performance
 
 ---
 
-🏗️ Project Architecture
+##🏗️ Project Architecture
 The project structure is organized as follows
 
 healthcare-fraud-detection
@@ -43,7 +43,7 @@ healthcare-fraud-detection
 
 ---
 
-🛠️ Tools & Technologies
+##🛠️ Tools & Technologies
 Python
 Pandas
 NumPy
@@ -53,7 +53,7 @@ Matplotlib
 
 ---
 
-📊 Machine Learning Model
+##📊 Machine Learning Model
 The fraud detection model classifies claims as:
 Legitimate Claim
 Fraudulent Claim
@@ -65,7 +65,7 @@ Model evaluation (Accuracy, Precision, Recall)
 
 ---
 
-📈 Future Improvements
+##📈 Future Improvements
 Add advanced feature engineering
 Handle imbalanced datasets
 Deploy model as API
