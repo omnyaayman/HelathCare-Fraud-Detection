@@ -29,10 +29,10 @@ The system follows a modular production-ready structure:
 ```text
 Healthcare-Fraud-System/
 ├── 📁 app/               # FastAPI layer (Routes, Schemas, Main)
-├── 📁 core/              # Global Configurations (.env handler)
-├── 📁 services/          # External Connectors (Azure SQL, RabbitMQ)
+├── 📁 core/              # # Global Configurations (.env handler)
+├── 📁 frontend/             # interface of web
 ├── 📁 ml/                # XGBoost Model & Logic Engine
-├── 📁 spark_worker/      # Big Data Processing (Delta Lake handler)
-├── 📁 notebooks/         # EDA & Model Training Research
+├── 📁 services/          # External Connectors (Azure SQL, RabbitMQ)
+├── 📁 spark/      # Big Data Processing (Delta Lake handler)
 ├── 📄 .env               # Environment Secrets (Not for GitHub)
 └── 📄 requirements.txt   # Production Dependencies
