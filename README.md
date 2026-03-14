@@ -2,7 +2,7 @@
   <img src="https://svg-banners.vercel.app/api?type=origin&text1=Healthcare%20Fraud&text2=Detection%20System%20🚀&width=900&height=200&color=0078D4"/>
 </p>
 
-# 🏥 Healthcare Fraud Detection System (Enterprise Edition)
+# 🏥 Healthcare Fraud Detection System 
 
 [![FastAPI](https://img.shields.io/badge/API-FastAPI-05998b.svg?style=flat&logo=fastapi)](https://fastapi.tiangolo.com/)
 [![Apache Spark](https://img.shields.io/badge/Engine-Apache_Spark-E25A1C.svg?style=flat&logo=apachespark)](https://spark.apache.org/)
@@ -10,7 +10,7 @@
 [![Azure](https://img.shields.io/badge/Cloud-Azure_SQL-0089D6.svg?style=flat&logo=microsoftazure)](https://azure.microsoft.com/)
 
 ## 📌 Project Overview
-An advanced, end-to-end healthcare fraud detection pipeline. This system processes medical claims in **real-time** via FastAPI and handles **Big Data batch processing** using PySpark and Delta Lake. The core logic utilizes an **XGBoost** model paired with a custom **Medical Logic Engine** to flag suspicious activities.
+An advanced, end-to-end healthcare fraud detection pipeline. This system processes medical claims in **real-time** via FastAPI and handles **Big Data processing** using PySpark and Delta Lake. The core logic utilizes an **XGBoost** model paired with a custom **Medical Logic Engine** to flag suspicious activities.
 
 ---
 
