@@ -1,72 +1,38 @@
-
 <p align="center">
-  <img src="https://svg-banners.vercel.app/api?type=origin&text1=Healthcare&%250FraudDetection&width=900&height=150&color=blue"/>
+  <img src="https://svg-banners.vercel.app/api?type=origin&text1=Healthcare%20Fraud&text2=Detection%20System%20🚀&width=900&height=200&color=0078D4"/>
 </p>
- 
-<h1 align="center" style="color:#3498DB;">
-  
-</h1>
 
+# 🏥 Healthcare Fraud Detection System (Enterprise Edition)
 
-##🏥 Healthcare Fraud Detection System
+[![FastAPI](https://img.shields.io/badge/API-FastAPI-05998b.svg?style=flat&logo=fastapi)](https://fastapi.tiangolo.com/)
+[![Apache Spark](https://img.shields.io/badge/Engine-Apache_Spark-E25A1C.svg?style=flat&logo=apachespark)](https://spark.apache.org/)
+[![Delta Lake](https://img.shields.io/badge/Storage-Delta_Lake-00ADD8.svg?style=flat&logo=delta-lake)](https://delta.io/)
+[![Azure](https://img.shields.io/badge/Cloud-Azure_SQL-0089D6.svg?style=flat&logo=microsoftazure)](https://azure.microsoft.com/)
 
-📌 Project Overview
-This project aims to detect fraudulent healthcare claims using data engineering techniques and a Machine Learning model.
-The pipeline follows a simplified data architecture with structured data layers and SQL analysis before applying a fraud detection ML model.
-
----
- 
-##🎯 Project Objectives
-Clean and prepare healthcare claims data
-Perform exploratory data analysis (EDA)
-Apply SQL queries for analytical insights
-Build a Machine Learning model for fraud detection
-Evaluate model performance
+## 📌 Project Overview
+An advanced, end-to-end healthcare fraud detection pipeline. This system processes medical claims in **real-time** via FastAPI and handles **Big Data batch processing** using PySpark and Delta Lake. The core logic utilizes an **XGBoost** model paired with a custom **Medical Logic Engine** to flag suspicious activities.
 
 ---
 
-##🏗️ Project Architecture
-The project structure is organized as follows
-
-healthcare-fraud-detection
-│
-├── data
-│   ├── bronze   → Raw data
-│   ├── silver   → Cleaned & processed data
-│   └── gold     → Final analytical dataset
-│
-├── notebooks    → EDA & ML notebooks
-├── sql          → SQL queries for analysis
-├── models       → Saved ML models
-├── requirements.txt
-└── README.md
+## 🎯 Key Features
+- **Real-time Inference:** REST API to audit claims instantly.
+- **Explainable AI:** Uses PDP plots to explain why a claim was flagged (Distance, Red Flags, etc.).
+- **Medallion Architecture:** Data organized into Bronze, Silver, and Gold layers within **Delta Lake**.
+- **Medical Logic Engine:** Specialized rules to detect Z-score anomalies and medical mismatches.
+- **Message Broker Integration:** Asynchronous processing using **RabbitMQ**.
 
 ---
 
-##🛠️ Tools & Technologies
-Python
-Pandas
-NumPy
-SQL
-Scikit-learn
-Matplotlib
+## 🏗️ Project Architecture & Directory Structure
+The system follows a modular production-ready structure:
 
----
-
-##📊 Machine Learning Model
-The fraud detection model classifies claims as:
-Legitimate Claim
-Fraudulent Claim
-Steps:
-Data preprocessing
-Feature selection
-Model training
-Model evaluation (Accuracy, Precision, Recall)
-
----
-
-##📈 Future Improvements
-Add advanced feature engineering
-Handle imbalanced datasets
-Deploy model as API
-Automate data pipeline
+```text
+Healthcare-Fraud-System/
+├── 📁 app/               # FastAPI layer (Routes, Schemas, Main)
+├── 📁 core/              # Global Configurations (.env handler)
+├── 📁 services/          # External Connectors (Azure SQL, RabbitMQ)
+├── 📁 ml/                # XGBoost Model & Logic Engine
+├── 📁 spark_worker/      # Big Data Processing (Delta Lake handler)
+├── 📁 notebooks/         # EDA & Model Training Research
+├── 📄 .env               # Environment Secrets (Not for GitHub)
+└── 📄 requirements.txt   # Production Dependencies
