@@ -75,6 +75,4 @@ The system includes a **React-based dashboard** built using **Vite** for fast de
 - `lucide-react` – Icon set
 - `tailwindcss` – Utility-first CSS framework
 - `vite` – Fast build tool
-
-For development, ESLint and TypeScript types are included for code quality and type safety.
 --- 
