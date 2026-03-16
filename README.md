@@ -36,3 +36,45 @@ Healthcare-Fraud-System/
 ├── 📁 spark/      # Big Data Processing (Delta Lake handler)
 ├── 📄 .env               # Environment Secrets (Not for GitHub)
 └── 📄 requirements.txt   # Production Dependencies
+```
+---
+
+## 🖥️ Frontend
+
+The system includes a **React-based dashboard** built using **Vite** for fast development and optimized builds. The frontend provides an interface to submit medical claims, visualize fraud predictions, and display analytics such as feature importance and anomaly indicators.
+
+### Requirements
+
+- [Node.js](https://nodejs.org/) (v18+ recommended)
+- [npm](https://www.npmjs.com/) or [yarn](https://yarnpkg.com/)
+
+### Setup Instructions
+
+1. Navigate to the `frontend/` directory:
+  ```bash
+  cd frontend
+  ```
+2. Install dependencies:
+  ```bash
+  npm install
+  # or
+  yarn install
+  ```
+3. Start the development server:
+  ```bash
+  npm run dev
+  # or
+  yarn dev
+  ```
+
+### Main Dependencies
+
+- `react`, `react-dom` – Core UI library
+- `react-router-dom` – Routing
+- `chart.js`, `react-chartjs-2` – Data visualization
+- `lucide-react` – Icon set
+- `tailwindcss` – Utility-first CSS framework
+- `vite` – Fast build tool
+
+For development, ESLint and TypeScript types are included for code quality and type safety.
+--- 
