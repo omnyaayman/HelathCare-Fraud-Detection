@@ -3,16 +3,33 @@ import { Line } from 'react-chartjs-2';
 import {
   Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Filler,
 } from 'chart.js';
-import { RefreshCw, CheckCircle, AlertCircle } from 'lucide-react';
-import { generateMockMetrics } from '../../mockData';
+import { RefreshCw, CheckCircle, AlertCircle, Loader, Cpu, Database, TrendingUp } from 'lucide-react';
+import api from '../../api';
 import Skeleton from '../../components/Skeleton';
 
+// تسجيل مكونات Chart.js
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Filler);
 
+// إعدادات الرسم البياني (GitHub Dark Style)
 const chartOpts = {
-  responsive: true, maintainAspectRatio: false,
-  plugins: { legend: { display: false }, tooltip: { backgroundColor: '#1c2128', borderColor: '#383e47', borderWidth: 1, titleColor: '#c9d1d9', bodyColor: '#8b949e', padding: 8, cornerRadius: 4 } },
-  scales: { x: { grid: { color: '#21262d' }, ticks: { color: '#8b949e', font: { size: 11 } } }, y: { grid: { color: '#21262d' }, ticks: { color: '#8b949e', font: { size: 11 } } } },
+  responsive: true,
+  maintainAspectRatio: false,
+  plugins: { 
+    legend: { display: false },
+    tooltip: { 
+      backgroundColor: '#1c2128', 
+      borderColor: '#383e47', 
+      borderWidth: 1, 
+      titleColor: '#c9d1d9', 
+      bodyColor: '#8b949e', 
+      padding: 10, 
+      cornerRadius: 4 
+    } 
+  },
+  scales: { 
+    x: { grid: { color: '#21262d' }, ticks: { color: '#8b949e', font: { size: 11 } } }, 
+    y: { grid: { color: '#21262d' }, ticks: { color: '#8b949e', font: { size: 11 } }, min: 0, max: 1 } 
+  },
 };
 
 export default function ModelManagement() {
@@ -21,163 +38,157 @@ export default function ModelManagement() {
   const [retraining, setRetraining] = useState(false);
   const [message, setMessage] = useState(null);
 
-  const flash = (type, text) => { setMessage({ type, text }); setTimeout(() => setMessage(null), 4000); };
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setMetrics(generateMockMetrics());
-      setLoading(false);
-    }, 800);
-    return () => clearTimeout(timer);
-  }, []);
-
-  const handleRetrain = () => {
-    setRetraining(true);
-    setTimeout(() => {
-      setRetraining(false);
-      flash('success', 'Model retrained successfully — new version deployed');
-      setMetrics((prev) => ({
-        ...prev,
-        model_accuracy: Math.min(prev.model_accuracy + 0.002, 0.999),
-        model_f1: Math.min(prev.model_f1 + 0.003, 0.999),
-        last_retrain: new Date().toISOString(),
-        model_history: [
-          ...prev.model_history,
-          {
-            version: `v${prev.model_history.length + 1}.0`,
-            date: new Date().toISOString().slice(0, 10),
-            accuracy: Math.min(prev.model_accuracy + 0.002, 0.999),
-            f1: Math.min(prev.model_f1 + 0.003, 0.999),
-          },
-        ],
-      }));
-    }, 3000);
+  const flash = (type, text) => { 
+    setMessage({ type, text }); 
+    setTimeout(() => setMessage(null), 5000); 
   };
 
-  if (loading) return <div className="space-y-6"><div className="grid grid-cols-2 lg:grid-cols-4 gap-4">{Array.from({ length: 4 }, (_, i) => <div key={i} className="bg-surface border border-border rounded-lg p-4"><Skeleton rows={2} /></div>)}</div></div>;
+  const fetchModelData = async () => {
+    try {
+      const data = await api.getMetrics();
+      setMetrics(data);
+    } catch (error) {
+      flash('error', 'Unable to fetch model metrics. Check database connection.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchModelData();
+  }, []);
+
+  const handleRetrain = async () => {
+    if (!window.confirm("Triggering a retrain will use all new labeled data from SQL. Proceed?")) return;
+    
+    setRetraining(true);
+    try {
+      await api.triggerRetrain(); 
+      flash('success', 'Airflow DAG triggered! The model is now learning from new data.');
+      setTimeout(fetchModelData, 15000); 
+    } catch (error) {
+      flash('error', 'Failed to communicate with the retraining service.');
+    } finally {
+      setRetraining(false);
+    }
+  };
+
+  if (loading || !metrics) return <div className="p-8"><Skeleton rows={10} /></div>;
+
+  const history = metrics.model_history || [];
+  const currentVersion = history.length > 0 ? history[history.length - 1].version : 'v1.0';
+  const lastSync = metrics.last_retrain ? new Date(metrics.last_retrain).toLocaleString() : 'Never';
+  const totalSamples = (metrics.confirmed_fraud || 0) + (metrics.cleared_claims || 0);
 
   return (
     <div className="space-y-6">
       {message && (
-        <div className={`flex items-center gap-2 px-3 py-2.5 rounded-md text-sm ${message.type === 'success' ? 'bg-success/10 border border-success/20 text-success' : 'bg-danger/10 border border-danger/20 text-danger'}`}>
-          {message.type === 'success' ? <CheckCircle size={14} /> : <AlertCircle size={14} />}
-          {message.text}
+        <div className={`flex items-center gap-3 px-4 py-3 rounded-lg border shadow-lg animate-in fade-in slide-in-from-top-2 ${
+          message.type === 'success' ? 'bg-success/10 border-success/20 text-success' : 'bg-danger/10 border-danger/20 text-danger'
+        }`}>
+          {message.type === 'success' ? <CheckCircle size={18} /> : <AlertCircle size={18} />}
+          <p className="text-sm font-medium">{message.text}</p>
         </div>
       )}
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {[
-          { label: 'Accuracy', value: `${(metrics.model_accuracy * 100).toFixed(1)}%` },
-          { label: 'Precision', value: `${(metrics.model_precision * 100).toFixed(1)}%` },
-          { label: 'Recall', value: `${(metrics.model_recall * 100).toFixed(1)}%` },
-          { label: 'F1 Score', value: `${(metrics.model_f1 * 100).toFixed(1)}%` },
+          { label: 'Accuracy', value: metrics.model_accuracy },
+          { label: 'Precision', value: metrics.model_precision },
+          { label: 'Recall', value: metrics.model_recall },
+          { label: 'F1 Score', value: metrics.model_f1 },
         ].map((kpi) => (
-          <div key={kpi.label} className="bg-surface border border-border rounded-lg px-4 py-3">
-            <div className="text-xs text-textSecondary">{kpi.label}</div>
-            <div className="text-lg text-textPrimary font-medium mt-1">{kpi.value}</div>
+          <div key={kpi.label} className="bg-surface border border-border rounded-xl p-4 hover:border-primary/40 transition-all group">
+            <div className="text-[10px] text-textSecondary uppercase font-bold tracking-wider mb-1">{kpi.label}</div>
+            <div className="text-2xl text-textPrimary font-mono group-hover:text-primary transition-colors">
+                {( (kpi.value || 0) * 100).toFixed(1)}%
+            </div>
           </div>
         ))}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Model info */}
-        <div className="bg-surface border border-border rounded-lg overflow-hidden">
-          <div className="px-4 py-3 border-b border-border"><span className="text-xs text-textSecondary">Model Information</span></div>
-          <div className="p-4 space-y-3 text-sm">
-            {[
-              ['Current Version', metrics.model_history[metrics.model_history.length - 1].version],
-              ['Last Retrained', new Date(metrics.last_retrain).toLocaleString()],
-              ['Total Versions', metrics.model_history.length],
-              ['Total Claims Processed', metrics.total_claims.toLocaleString()],
-              ['Avg Processing Time', `${metrics.avg_processing_time}s`],
-            ].map(([label, value]) => (
-              <div key={label} className="flex justify-between">
-                <span className="text-textSecondary">{label}</span>
-                <span className="text-textPrimary">{value}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Retrain trigger */}
-        <div className="bg-surface border border-border rounded-lg overflow-hidden">
-          <div className="px-4 py-3 border-b border-border"><span className="text-xs text-textSecondary">Model Retraining</span></div>
-          <div className="p-4">
-            <p className="text-sm text-textSecondary mb-4">Retrain the model using latest labeled data. This replaces the current model version.</p>
-            <div className="bg-[#0d1117] border border-[#383e47] rounded-lg p-4 mb-4 space-y-2 text-xs text-textSecondary">
-              <div className="flex justify-between"><span>Confirmed fraud labels:</span><span className="text-textPrimary">{metrics.confirmed_fraud}</span></div>
-              <div className="flex justify-between"><span>Confirmed real labels:</span><span className="text-textPrimary">{metrics.cleared_claims}</span></div>
-              <div className="flex justify-between"><span>Total training samples:</span><span className="text-textPrimary">{metrics.confirmed_fraud + metrics.cleared_claims}</span></div>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="bg-surface border border-border rounded-xl shadow-sm">
+          <div className="px-5 py-4 border-b border-border flex items-center justify-between">
+            <div className="flex items-center gap-2">
+                <Cpu size={16} className="text-primary" />
+                <span className="text-xs font-bold text-textPrimary uppercase">Active Model Specs</span>
             </div>
-            <button
-              onClick={handleRetrain}
-              disabled={retraining}
-              className={`flex items-center gap-2 px-4 py-2 text-sm rounded-md transition-colors duration-150 ${
-                retraining
-                  ? 'bg-border/50 text-textSecondary cursor-not-allowed'
-                  : 'bg-primary/15 border border-primary/30 text-primary hover:bg-primary/25'
-              }`}
-            >
-              <RefreshCw size={14} className={retraining ? 'animate-spin' : ''} />
-              {retraining ? 'Retraining...' : 'Trigger Retrain'}
-            </button>
-            {retraining && (
-              <div className="mt-3">
-                <div className="h-1.5 bg-border/30 rounded-full overflow-hidden"><div className="h-full bg-primary rounded-full animate-pulse" style={{ width: '60%' }} /></div>
-                <p className="text-xs text-textSecondary mt-1">Processing labeled data and updating model weights...</p>
-              </div>
-            )}
+            <span className="text-[10px] bg-primary/10 text-primary px-2 py-0.5 rounded-full font-bold">Stable</span>
+          </div>
+          <div className="p-5 space-y-4">
+            <div className="flex justify-between items-center text-sm">
+              <span className="text-textSecondary">Production Version</span>
+              <span className="font-mono font-bold text-textPrimary">{currentVersion}</span>
+            </div>
+            <div className="flex justify-between items-center text-sm">
+              <span className="text-textSecondary">Last Weight Update</span>
+              <span className="text-textPrimary text-xs">{lastSync}</span>
+            </div>
+            <div className="flex justify-between items-center text-sm">
+              <span className="text-textSecondary">Validated Samples</span>
+              <span className="text-textPrimary font-mono">{totalSamples.toLocaleString()} records</span>
+            </div>
           </div>
         </div>
+
+        <div className="bg-surface border border-border rounded-xl p-6 flex flex-col justify-between border-t-4 border-t-warning/30">
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 text-warning">
+                <Database size={18} />
+                <span className="text-xs font-bold uppercase tracking-tight">Data Drift Management</span>
+            </div>
+            <p className="text-xs text-textSecondary leading-relaxed">
+              When enough new labels are verified in **Azure SQL**, trigger a retrain to update the XGBoost engine.
+              The F1-Score helps balance precision and recall.
+            </p>
+          </div>
+          <button
+            onClick={handleRetrain}
+            disabled={retraining}
+            className={`mt-6 w-full flex items-center justify-center gap-2 py-3 rounded-lg font-bold transition-all shadow-md ${
+              retraining ? 'bg-border text-textSecondary cursor-not-allowed' : 'bg-primary text-white hover:brightness-110 active:scale-[0.98]'
+            }`}
+          >
+            {retraining ? <Loader className="animate-spin" size={18} /> : <RefreshCw size={18} />}
+            {retraining ? 'Pipeline in Progress...' : 'Trigger Airflow Retrain'}
+          </button>
+        </div>
       </div>
 
-      {/* Performance chart */}
-      <div className="bg-surface border border-border rounded-lg p-4">
-        <div className="text-xs text-textSecondary mb-3">Performance Over Versions</div>
-        <div className="h-56">
-          <Line data={{
-            labels: metrics.model_history.map((m) => m.version),
-            datasets: [
-              { label: 'Accuracy', data: metrics.model_history.map((m) => m.accuracy), borderColor: '#58a6ff', backgroundColor: '#58a6ff15', borderWidth: 1.5, fill: true, pointRadius: 3, tension: 0.2 },
-              { label: 'F1', data: metrics.model_history.map((m) => m.f1), borderColor: '#3fb950', backgroundColor: '#3fb95015', borderWidth: 1.5, fill: true, pointRadius: 3, tension: 0.2 },
-            ],
-          }} options={{ ...chartOpts, scales: { ...chartOpts.scales, y: { ...chartOpts.scales.y, min: 0.8, max: 1.0, ticks: { ...chartOpts.scales.y.ticks, callback: (v) => `${(v * 100).toFixed(0)}%` } } } }} />
+      <div className="bg-surface border border-border rounded-xl p-5 shadow-sm">
+        <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-2">
+                <TrendingUp size={16} className="text-success" />
+                <h3 className="text-xs font-bold text-textSecondary uppercase tracking-wider">Accuracy Performance History</h3>
+            </div>
+            <div className="text-[10px] text-textSecondary font-mono">Records: {history.length} versions</div>
         </div>
-        <div className="flex gap-4 mt-3 justify-center">
-          <div className="flex items-center gap-1.5 text-xs text-textSecondary"><span className="w-2 h-2 rounded-sm bg-primary" />Accuracy</div>
-          <div className="flex items-center gap-1.5 text-xs text-textSecondary"><span className="w-2 h-2 rounded-sm bg-success" />F1</div>
+        <div className="h-64">
+          {history.length > 0 ? (
+            <Line data={{
+              labels: history.map(m => m.version),
+              datasets: [{ 
+                label: 'Accuracy',
+                data: history.map(m => m.accuracy), 
+                borderColor: '#58a6ff', 
+                backgroundColor: 'rgba(88, 166, 255, 0.1)', 
+                fill: true, 
+                tension: 0.4,
+                pointRadius: 5,
+                pointHoverRadius: 7,
+                pointBackgroundColor: '#58a6ff',
+                pointBorderColor: '#1c2128',
+                pointBorderWidth: 2
+              }]
+            }} options={chartOpts} />
+          ) : (
+            <div className="h-full flex flex-col items-center justify-center border-2 border-dashed border-border rounded-xl bg-bg/20">
+                <AlertCircle size={24} className="text-textSecondary mb-2" />
+                <p className="text-xs text-textSecondary italic">No historical data available for this model yet.</p>
+            </div>
+          )}
         </div>
-      </div>
-
-      {/* Version history table */}
-      <div className="bg-surface border border-border rounded-lg overflow-hidden">
-        <div className="px-4 py-3 border-b border-border"><span className="text-xs text-textSecondary">Version History</span></div>
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-border">
-              <th className="text-left px-4 py-2.5 text-xs text-textSecondary font-medium">Version</th>
-              <th className="text-left px-4 py-2.5 text-xs text-textSecondary font-medium">Date</th>
-              <th className="text-right px-4 py-2.5 text-xs text-textSecondary font-medium">Accuracy</th>
-              <th className="text-right px-4 py-2.5 text-xs text-textSecondary font-medium">F1 Score</th>
-              <th className="text-right px-4 py-2.5 text-xs text-textSecondary font-medium">Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {[...metrics.model_history].reverse().map((m, i) => (
-              <tr key={m.version} className="border-b border-border last:border-0">
-                <td className="px-4 py-2.5 text-primary font-mono text-xs">{m.version}</td>
-                <td className="px-4 py-2.5 text-textSecondary text-xs">{m.date}</td>
-                <td className="px-4 py-2.5 text-textPrimary font-mono text-xs text-right">{(m.accuracy * 100).toFixed(1)}%</td>
-                <td className="px-4 py-2.5 text-textPrimary font-mono text-xs text-right">{(m.f1 * 100).toFixed(1)}%</td>
-                <td className="px-4 py-2.5 text-right">
-                  <span className={`text-xs px-2 py-0.5 rounded border ${i === 0 ? 'bg-success/10 border-success/20 text-success' : 'bg-border/20 border-border text-textSecondary'}`}>
-                    {i === 0 ? 'Active' : 'Archived'}
-                  </span>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
       </div>
     </div>
   );

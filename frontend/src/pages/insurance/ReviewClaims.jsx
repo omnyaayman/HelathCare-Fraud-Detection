@@ -1,27 +1,11 @@
 import { useState, useEffect } from 'react';
-import { generateMockClaims } from '../../mockData';
+import api from '../../api'; 
 import StatusBadge from '../../components/StatusBadge';
 import Skeleton from '../../components/Skeleton';
 import Modal from '../../components/Modal';
 import Pagination from '../../components/Pagination';
 import BulkActions from '../../components/BulkActions';
-
-const CLAIM_COLUMNS = [
-  { key: 'id', label: 'Claim ID' },
-  { key: 'patient_name', label: 'Patient' },
-  { key: 'patient_id', label: 'Patient ID' },
-  { key: 'provider_name', label: 'Provider' },
-  { key: 'service_date', label: 'Service Date' },
-  { key: 'admission_label', label: 'Admission' },
-  { key: 'diagnosis_label', label: 'Diagnosis' },
-  { key: 'procedure_label', label: 'Procedure' },
-  { key: 'service_label', label: 'Service' },
-  { key: 'amount', label: 'Amount' },
-  { key: 'fraud_score', label: 'Fraud Score' },
-  { key: 'status', label: 'Status' },
-  { key: 'label', label: 'Label' },
-  { key: 'claim_date', label: 'Claim Date' },
-];
+import { Loader, Search, Filter, AlertCircle, FileText } from 'lucide-react';
 
 const PAGE_SIZE = 10;
 
@@ -30,182 +14,202 @@ export default function ReviewClaims() {
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState(null);
   const [search, setSearch] = useState('');
-  const [sortBy, setSortBy] = useState('submitted_at');
+  const [sortBy, setSortBy] = useState('claim_date');
   const [page, setPage] = useState(1);
 
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setClaims(generateMockClaims(80));
+  // 1. جلب البيانات من Azure SQL
+  const fetchClaims = async () => {
+    setLoading(true);
+    try {
+      const data = await api.getClaims();
+      setClaims(data || []);
+    } catch (error) {
+      console.error("Audit Fetch Error:", error);
+    } finally {
       setLoading(false);
-    }, 900);
-    return () => clearTimeout(timer);
+    }
+  };
+
+  useEffect(() => {
+    fetchClaims();
   }, []);
 
+  // 2. تحديث التصنيف (Real/Fraud)
+  const handleLabel = async (claimId, label) => {
+    try {
+      const status = label === 'Fraud' ? 'Fraud Confirmed' : 'Cleared';
+      
+      // نستخدم PATCH لتحديث السجل في SQL
+      await api.updateClaimStatus(claimId, { status, label });
+
+      setClaims((prev) =>
+        prev.map((c) => (c.id === claimId ? { ...c, label, status } : c))
+      );
+      setSelected(null);
+    } catch (error) {
+      alert("Failed to update status on Azure server.");
+    }
+  };
+
+  // 3. الفلترة والترتيب الذكي (Handling Nulls)
   const filtered = claims
-    .filter(
-      (c) =>
-        c.id.toLowerCase().includes(search.toLowerCase()) ||
-        c.patient_name.toLowerCase().includes(search.toLowerCase()) ||
-        c.provider_name.toLowerCase().includes(search.toLowerCase())
-    )
+    .filter((c) => {
+        const q = search.toLowerCase();
+        return (
+          c.id?.toString().toLowerCase().includes(q) ||
+          c.patient_name?.toLowerCase().includes(q) ||
+          c.provider_name?.toLowerCase().includes(q)
+        );
+    })
     .sort((a, b) => {
-      if (sortBy === 'fraud_score') return b.fraud_score - a.fraud_score;
-      if (sortBy === 'amount') return b.amount - a.amount;
-      return new Date(b.claim_date) - new Date(a.claim_date);
+      if (sortBy === 'fraud_score') return (b.fraud_score || 0) - (a.fraud_score || 0);
+      if (sortBy === 'amount') return (b.amount || 0) - (a.amount || 0);
+      return new Date(b.claim_date || 0) - new Date(a.claim_date || 0);
     });
 
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
   const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
-  const handleSearch = (val) => {
-    setSearch(val);
-    setPage(1);
-  };
-
-  const handleSort = (val) => {
-    setSortBy(val);
-    setPage(1);
-  };
-
-  const handleLabel = (claimId, label) => {
-    setClaims((prev) =>
-      prev.map((c) =>
-        c.id === claimId
-          ? { ...c, label, status: label === 'Fraud' ? 'Fraud Confirmed' : 'Cleared' }
-          : c
-      )
-    );
-    setSelected(null);
-  };
-
   return (
-    <div>
-      <div className="mb-4">
-        <BulkActions data={filtered} columns={CLAIM_COLUMNS} filename="review_claims" />
+    <div className="space-y-4">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+            <h2 className="text-xl font-bold text-textPrimary flex items-center gap-2">
+                <FileText size={20} className="text-primary" />
+                Claims Audit Workbench
+            </h2>
+            <p className="text-xs text-textSecondary mt-1">Review AI-flagged claims and assign final labels.</p>
+        </div>
+        <BulkActions data={filtered} filename="insurance_audit_export" />
       </div>
 
-      <div className="flex flex-col sm:flex-row gap-3 mb-5">
-        <input
-          type="text"
-          placeholder="Search by ID, patient, or provider..."
-          value={search}
-          onChange={(e) => handleSearch(e.target.value)}
-          className="flex-1 px-3 py-2 bg-surface border border-border rounded-md text-sm text-textPrimary placeholder-textSecondary/50 focus:outline-none focus:border-primary transition-colors duration-150"
-        />
-        <select
-          value={sortBy}
-          onChange={(e) => handleSort(e.target.value)}
-          className="px-3 py-2 bg-surface border border-border rounded-md text-sm text-textPrimary focus:outline-none focus:border-primary transition-colors duration-150"
-        >
-          <option value="submitted_at">Sort by Date</option>
-          <option value="fraud_score">Sort by Fraud Score</option>
-          <option value="amount">Sort by Amount</option>
-        </select>
+      {/* البحث والترتيب */}
+      <div className="flex flex-col sm:flex-row gap-3 bg-surface p-3 border border-border rounded-lg">
+        <div className="relative flex-1">
+          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-textSecondary" />
+          <input
+            type="text"
+            placeholder="Search by ID, Patient, or Hospital..."
+            value={search}
+            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+            className="w-full pl-10 pr-3 py-2 bg-bg border border-border rounded-md text-sm text-textPrimary focus:border-primary outline-none"
+          />
+        </div>
+        <div className="flex items-center gap-2">
+            <Filter size={14} className="text-textSecondary" />
+            <select
+              value={sortBy}
+              onChange={(e) => { setSortBy(e.target.value); setPage(1); }}
+              className="px-3 py-2 bg-bg border border-border rounded-md text-sm text-textPrimary focus:border-primary outline-none"
+            >
+              <option value="claim_date">Sort: Latest First</option>
+              <option value="fraud_score">Sort: AI Risk Score</option>
+              <option value="amount">Sort: Claim Amount</option>
+            </select>
+        </div>
       </div>
 
       {loading ? (
-        <div className="space-y-4">
-          {Array.from({ length: 8 }, (_, i) => (
-            <Skeleton key={i} rows={2} />
-          ))}
+        <div className="p-4 bg-surface border border-border rounded-lg shadow-sm">
+            <Skeleton rows={8} />
         </div>
       ) : (
-        <>
-          <div className="border border-border rounded-lg overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border bg-surface">
-                    <th className="text-left px-4 py-3 text-xs text-textSecondary font-medium">Claim ID</th>
-                    <th className="text-left px-4 py-3 text-xs text-textSecondary font-medium">Patient</th>
-                    <th className="text-left px-4 py-3 text-xs text-textSecondary font-medium hidden md:table-cell">Provider</th>
-                    <th className="text-left px-4 py-3 text-xs text-textSecondary font-medium hidden lg:table-cell">Service Date</th>
-                    <th className="text-left px-4 py-3 text-xs text-textSecondary font-medium">Amount</th>
-                    <th className="text-left px-4 py-3 text-xs text-textSecondary font-medium">Score</th>
-                    <th className="text-left px-4 py-3 text-xs text-textSecondary font-medium">Status</th>
-                    <th className="text-left px-4 py-3 text-xs text-textSecondary font-medium hidden lg:table-cell">Label</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {paginated.map((claim) => (
-                    <tr
-                      key={claim.id}
-                      onClick={() => setSelected(claim)}
-                      className="border-b border-border last:border-0 hover:bg-[#1c2128] cursor-pointer transition-colors duration-100"
-                    >
-                      <td className="px-4 py-3 text-textPrimary font-mono text-xs">{claim.id}</td>
-                      <td className="px-4 py-3 text-textPrimary">{claim.patient_name}</td>
-                      <td className="px-4 py-3 text-textSecondary hidden md:table-cell">{claim.provider_name}</td>
-                      <td className="px-4 py-3 text-textSecondary text-xs hidden lg:table-cell">{claim.service_date}</td>
-                      <td className="px-4 py-3 text-textPrimary">${claim.amount.toLocaleString()}</td>
-                      <td className="px-4 py-3">
-                        <span className={`text-xs font-mono ${claim.fraud_score > 0.7 ? 'text-danger' : claim.fraud_score > 0.4 ? 'text-warning' : 'text-success'}`}>
-                          {(claim.fraud_score * 100).toFixed(0)}%
+        <div className="bg-surface border border-border rounded-lg overflow-hidden shadow-sm">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm text-left">
+              <thead className="bg-bg/50 border-b border-border">
+                <tr className="text-xs text-textSecondary uppercase tracking-wider">
+                  <th className="px-6 py-4 font-bold">Claim ID</th>
+                  <th className="px-6 py-4 font-bold">Patient</th>
+                  <th className="px-6 py-4 font-bold">Hospital</th>
+                  <th className="px-6 py-4 font-bold">Amount</th>
+                  <th className="px-6 py-4 font-bold">Risk Score</th>
+                  <th className="px-6 py-4 font-bold">Status</th>
+                  <th className="px-6 py-4 font-bold text-right">Review</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {paginated.map((c) => (
+                  <tr 
+                    key={c.id} 
+                    onClick={() => setSelected(c)} 
+                    className="hover:bg-primary/5 cursor-pointer transition-colors group"
+                  >
+                    <td className="px-6 py-4 font-mono text-xs text-primary font-bold">{c.id}</td>
+                    <td className="px-6 py-4 text-textPrimary font-medium">{c.patient_name || 'N/A'}</td>
+                    <td className="px-6 py-4 text-textSecondary text-xs">{c.provider_name || 'N/A'}</td>
+                    <td className="px-6 py-4 text-textPrimary font-mono">${(c.amount || 0).toLocaleString()}</td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-2">
+                        <div className="w-12 h-1.5 bg-bg rounded-full overflow-hidden">
+                            <div 
+                                className={`h-full rounded-full ${ (c.fraud_score || 0) > 0.7 ? 'bg-danger' : (c.fraud_score || 0) > 0.4 ? 'bg-warning' : 'bg-success' }`}
+                                style={{ width: `${(c.fraud_score || 0) * 100}%` }}
+                            />
+                        </div>
+                        <span className={`font-mono text-xs font-bold ${ (c.fraud_score || 0) > 0.6 ? 'text-danger' : 'text-textSecondary'}`}>
+                          {((c.fraud_score || 0) * 100).toFixed(0)}%
                         </span>
-                      </td>
-                      <td className="px-4 py-3"><StatusBadge status={claim.status} /></td>
-                      <td className="px-4 py-3 hidden lg:table-cell">
-                        {claim.label ? <StatusBadge status={claim.label} /> : <span className="text-textSecondary text-xs">—</span>}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            {filtered.length === 0 && (
-              <div className="px-4 py-8 text-center text-sm text-textSecondary">No claims match your search</div>
-            )}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4"><StatusBadge status={c.status} /></td>
+                    <td className="px-6 py-4 text-right">
+                      <button className="text-xs font-bold text-primary group-hover:underline">Review Details</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-          <Pagination currentPage={page} totalPages={totalPages} onPageChange={setPage} />
-        </>
+          {filtered.length === 0 && (
+            <div className="p-20 text-center">
+                <AlertCircle size={40} className="mx-auto text-textSecondary/20 mb-3" />
+                <p className="text-sm text-textSecondary italic">No claims found matching your criteria.</p>
+            </div>
+          )}
+        </div>
       )}
 
-      <Modal open={!!selected} onClose={() => setSelected(null)} title={`Review ${selected?.id}`}>
+      <Pagination currentPage={page} totalPages={totalPages} onPageChange={setPage} />
+
+      {/* نافذة المراجعة التفصيلية */}
+      <Modal open={!!selected} onClose={() => setSelected(null)} title={`Claim Audit: ${selected?.id}`} wide>
         {selected && (
-          <div>
-            <div className="space-y-3 text-sm mb-6">
-              {[
-                ['Patient', selected.patient_name],
-                ['Patient ID', selected.patient_id],
-                ['Provider', selected.provider_name],
-                ['Service Date', selected.service_date],
-                ['Claim Date', selected.claim_date],
-                ['Admission', selected.admission_label],
-                ['Diagnosis', `${selected.diagnosis_code} — ${selected.diagnosis_label}`],
-                ['Procedure', `${selected.procedure_code} — ${selected.procedure_label}`],
-                ['Service', selected.service_label],
-                ['Discharge', selected.discharge_label],
-                ['Amount', `$${selected.amount.toLocaleString()}`],
-                ['Fraud Score', `${(selected.fraud_score * 100).toFixed(1)}%`],
-                ['Current Status', null],
-              ].map(([label, value]) => (
-                <div key={label} className="flex justify-between border-b border-[#383e47] pb-2 last:border-0">
-                  <span className="text-textSecondary">{label}</span>
-                  {label === 'Current Status' ? (
-                    <StatusBadge status={selected.status} />
-                  ) : (
-                    <span className={`text-textPrimary ${label === 'Fraud Score' && selected.fraud_score > 0.7 ? '!text-danger' : ''}`}>
-                      {value}
-                    </span>
-                  )}
-                </div>
-              ))}
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 text-sm">
+              <div className="space-y-3 bg-bg/50 p-4 rounded-lg border border-border">
+                <h4 className="text-[10px] uppercase font-bold text-textSecondary mb-2 tracking-widest">Medical Context</h4>
+                <p className="flex justify-between"><span className="text-textSecondary">Patient:</span> <span className="font-medium">{selected.patient_name}</span></p>
+                <p className="flex justify-between"><span className="text-textSecondary">Diagnosis:</span> <span className="text-textPrimary text-xs">{selected.diagnosis_code || 'Not Provided'}</span></p>
+                <p className="flex justify-between"><span className="text-textSecondary">Procedure:</span> <span className="text-textPrimary text-xs">{selected.procedure_code || 'Not Provided'}</span></p>
+              </div>
+              <div className="space-y-3 bg-bg/50 p-4 rounded-lg border border-border">
+                <h4 className="text-[10px] uppercase font-bold text-textSecondary mb-2 tracking-widest">Financial & Risk</h4>
+                <p className="flex justify-between"><span className="text-textSecondary">Claim Amount:</span> <span className="font-bold text-textPrimary">${selected.amount?.toLocaleString()}</span></p>
+                <p className="flex justify-between"><span className="text-textSecondary">AI Risk Level:</span> <span className={`font-bold ${selected.fraud_score > 0.7 ? 'text-danger' : 'text-textPrimary'}`}>{(selected.fraud_score * 100).toFixed(1)}%</span></p>
+                <p className="flex justify-between"><span className="text-textSecondary">Service Date:</span> <span className="text-textPrimary">{selected.service_date || 'N/A'}</span></p>
+              </div>
             </div>
 
-            <div className="border-t border-[#383e47] pt-4">
-              <p className="text-xs text-textSecondary mb-3">Assign label to this claim:</p>
-              <div className="flex gap-3">
-                <button
-                  onClick={() => handleLabel(selected.id, 'Real')}
-                  className="flex-1 px-4 py-2 text-sm bg-success/10 border border-success/30 rounded-md text-success hover:bg-success/20 transition-colors duration-150"
+            <div className="pt-6 border-t border-border">
+              <div className="bg-warning/5 border border-warning/20 p-3 rounded-md mb-6 flex items-start gap-3">
+                <AlertCircle size={16} className="text-warning mt-0.5" />
+                <p className="text-xs text-textSecondary leading-relaxed">
+                    By labeling this claim, you are confirming its validity for payment. This action updates the **Azure SQL** record and will be used for future model retraining.
+                </p>
+              </div>
+              <div className="flex gap-4">
+                <button 
+                  onClick={() => handleLabel(selected.id, 'Real')} 
+                  className="flex-1 py-3 bg-success text-white rounded-lg font-bold hover:bg-success/90 transition-all shadow-md active:scale-95"
                 >
-                  Mark as Real
+                  Approve (Legitimate)
                 </button>
-                <button
-                  onClick={() => handleLabel(selected.id, 'Fraud')}
-                  className="flex-1 px-4 py-2 text-sm bg-danger/10 border border-danger/30 rounded-md text-danger hover:bg-danger/20 transition-colors duration-150"
+                <button 
+                  onClick={() => handleLabel(selected.id, 'Fraud')} 
+                  className="flex-1 py-3 bg-danger text-white rounded-lg font-bold hover:bg-danger/90 transition-all shadow-md active:scale-95"
                 >
-                  Mark as Fraud
+                  Reject (Fraudulent)
                 </button>
               </div>
             </div>

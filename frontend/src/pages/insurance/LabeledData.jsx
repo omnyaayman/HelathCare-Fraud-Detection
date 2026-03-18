@@ -1,5 +1,6 @@
-import { useState } from 'react';
-import { Plus, AlertCircle, CheckCircle } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Plus, AlertCircle, CheckCircle, Loader, Database, Search, Filter } from 'lucide-react';
+import api from '../../api'; 
 import Modal from '../../components/Modal';
 import Pagination from '../../components/Pagination';
 import BulkActions from '../../components/BulkActions';
@@ -10,249 +11,211 @@ const PAGE_SIZE = 10;
 const COLUMNS = [
   { key: 'id', label: 'Record ID' },
   { key: 'claim_id', label: 'Claim ID' },
-  { key: 'patient_name', label: 'Patient Name' },
-  { key: 'provider_name', label: 'Provider' },
-  { key: 'procedure_label', label: 'Procedure' },
-  { key: 'service_label', label: 'Service' },
+  { key: 'patient_name', label: 'Patient' },
+  { key: 'provider_name', label: 'Hospital' },
   { key: 'amount', label: 'Amount' },
-  { key: 'label', label: 'Label' },
-  { key: 'notes', label: 'Notes' },
-  { key: 'claim_date', label: 'Date' },
+  { key: 'label', label: 'Status' },
+  { key: 'claim_date', label: 'Audit Date' },
 ];
-
-function generateId() {
-  return 'LBL-' + String(Math.floor(Math.random() * 90000) + 10000);
-}
 
 export default function LabeledData() {
   const [records, setRecords] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
   const [search, setSearch] = useState('');
   const [labelFilter, setLabelFilter] = useState('All');
   const [page, setPage] = useState(1);
   const [message, setMessage] = useState(null);
-  const [form, setForm] = useState({ claim_id: '', patient_name: '', provider_name: '', procedure_label: '', service_label: '', amount: '', label: 'Fraud', notes: '' });
+  
+  const [form, setForm] = useState({ 
+    claim_id: '', patient_name: '', provider_name: '', 
+    amount: '', label: 'Fraud', notes: '' 
+  });
 
-  const flash = (type, text) => {
-    setMessage({ type, text });
-    setTimeout(() => setMessage(null), 3000);
+  const flash = (type, text) => { 
+    setMessage({ type, text }); 
+    setTimeout(() => setMessage(null), 3000); 
   };
 
   const update = (field, value) => setForm((prev) => ({ ...prev, [field]: value }));
 
-  const handleAdd = () => {
-    if (!form.claim_id.trim() && !form.patient_name.trim()) { flash('error', 'Claim ID or patient name is required'); return; }
-    const record = {
-      id: generateId(),
-      claim_id: form.claim_id,
-      patient_name: form.patient_name,
-      provider_name: form.provider_name,
-      procedure_label: form.procedure_label,
-      service_label: form.service_label,
-      amount: Number(form.amount) || 0,
-      label: form.label,
-      notes: form.notes,
-      claim_date: new Date().toISOString().slice(0, 10),
-    };
-    setRecords((prev) => [record, ...prev]);
-    setForm({ claim_id: '', patient_name: '', provider_name: '', procedure_label: '', service_label: '', amount: '', label: 'Fraud', notes: '' });
-    setShowAdd(false);
-    flash('success', `Labeled record added (${record.label})`);
+  // 1. جلب البيانات المصنفة من Azure SQL
+  const fetchLabeledData = async () => {
+    setLoading(true);
+    try {
+      const data = await api.getLabeledData();
+      setRecords(data || []);
+    } catch (error) {
+      flash('error', 'Failed to pull training data from Azure.');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleImport = (rows) => {
-    const imported = rows.map((r) => ({
-      id: r.id || generateId(),
-      claim_id: r.claim_id || '',
-      patient_name: r.patient_name || '',
-      provider_name: r.provider_name || r.provider || '',
-      procedure_label: r.procedure_label || r.procedure || '',
-      service_label: r.service_label || r.service || '',
-      amount: Number(r.amount) || 0,
-      label: r.label === 'Real' ? 'Real' : r.label === 'Fraud' ? 'Fraud' : 'Fraud',
-      notes: r.notes || '',
-      claim_date: r.claim_date || new Date().toISOString().slice(0, 10),
-    }));
-    setRecords((prev) => [...imported, ...prev]);
-    setPage(1);
+  useEffect(() => {
+    fetchLabeledData();
+  }, []);
+
+  // 2. إضافة سجل يدوي (مثلاً حالة تم اكتشافها يدوياً)
+  const handleAdd = async () => {
+    if (!form.claim_id.trim()) { flash('error', 'Claim ID is essential'); return; }
+    
+    try {
+      const payload = { ...form, amount: parseFloat(form.amount) || 0 };
+      await api.createLabeledRecord(payload);
+      
+      flash('success', 'Record secured in training set');
+      setShowAdd(false);
+      setForm({ claim_id: '', patient_name: '', provider_name: '', amount: '', label: 'Fraud', notes: '' });
+      fetchLabeledData();
+    } catch (error) {
+      flash('error', 'Database write failed');
+    }
   };
 
+  // 3. استيراد بيانات ضخمة (CSV) للتدريب
+  const handleImport = async (rows) => {
+    try {
+      await api.importLabeledData(rows);
+      flash('success', `${rows.length} ground-truth records imported`);
+      fetchLabeledData();
+    } catch (error) {
+      flash('error', 'Bulk sync failed');
+    }
+  };
+
+  // 4. منطق الفلترة
   const filtered = records
     .filter((r) => labelFilter === 'All' || r.label === labelFilter)
     .filter((r) => {
-      if (!search.trim()) return true;
       const q = search.toLowerCase();
-      return (
-        r.id.toLowerCase().includes(q) ||
-        r.claim_id.toLowerCase().includes(q) ||
-        r.patient_name.toLowerCase().includes(q) ||
-        r.provider_name.toLowerCase().includes(q)
-      );
+      return !search || r.claim_id?.toLowerCase().includes(q) || r.patient_name?.toLowerCase().includes(q);
     });
 
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
   const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
-  const fraudCount = records.filter((r) => r.label === 'Fraud').length;
-  const realCount = records.filter((r) => r.label === 'Real').length;
-
   return (
-    <div>
+    <div className="space-y-6">
       {message && (
-        <div className={`flex items-center gap-2 px-3 py-2.5 mb-4 rounded-md text-sm ${message.type === 'success' ? 'bg-success/10 border border-success/20 text-success' : 'bg-danger/10 border border-danger/20 text-danger'}`}>
-          {message.type === 'success' ? <CheckCircle size={14} /> : <AlertCircle size={14} />}
-          {message.text}
+        <div className={`flex items-center gap-2 px-4 py-3 rounded-lg border shadow-sm animate-in fade-in slide-in-from-top-2 ${
+          message.type === 'success' ? 'bg-success/10 border-success/20 text-success' : 'bg-danger/10 border-danger/20 text-danger'
+        }`}>
+          {message.type === 'success' ? <CheckCircle size={16} /> : <AlertCircle size={16} />}
+          <p className="text-sm font-medium">{message.text}</p>
         </div>
       )}
 
-      {/* Summary cards */}
-      <div className="grid grid-cols-3 gap-4 mb-5">
-        <div className="bg-surface border border-border rounded-lg p-4">
-          <div className="text-xs text-textSecondary mb-1">Total Records</div>
-          <div className="text-xl font-mono text-textPrimary">{records.length}</div>
+      {/* Stats Section */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="bg-surface border border-border p-5 rounded-xl">
+          <p className="text-[10px] uppercase font-bold text-textSecondary mb-2">Total Training Set</p>
+          <div className="flex items-center gap-3">
+            <Database className="text-primary" size={20} />
+            <p className="text-3xl font-mono text-textPrimary">{records.length}</p>
+          </div>
         </div>
-        <div className="bg-surface border border-border rounded-lg p-4">
-          <div className="text-xs text-textSecondary mb-1">Confirmed Fraud</div>
-          <div className="text-xl font-mono text-danger">{fraudCount}</div>
+        <div className="bg-surface border border-border p-5 rounded-xl border-b-2 border-b-danger">
+          <p className="text-[10px] uppercase font-bold text-textSecondary mb-2 text-danger">Fraud Samples</p>
+          <p className="text-3xl font-mono text-danger">{records.filter(r => r.label === 'Fraud').length}</p>
         </div>
-        <div className="bg-surface border border-border rounded-lg p-4">
-          <div className="text-xs text-textSecondary mb-1">Confirmed Real</div>
-          <div className="text-xl font-mono text-success">{realCount}</div>
+        <div className="bg-surface border border-border p-5 rounded-xl border-b-2 border-b-success">
+          <p className="text-[10px] uppercase font-bold text-textSecondary mb-2 text-success">Clean Samples</p>
+          <p className="text-3xl font-mono text-success">{records.filter(r => r.label === 'Real').length}</p>
         </div>
       </div>
 
-      <p className="text-xs text-textSecondary mb-4">
-        Add verified fraud/real claim data here. This data is used for model retraining — not for live detection.
-      </p>
-
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4">
-        <div className="flex flex-col sm:flex-row gap-3 flex-1 w-full">
-          <input
-            type="text"
-            placeholder="Search by ID, claim, patient, or provider..."
-            value={search}
+      {/* Toolbar */}
+      <div className="flex flex-col md:flex-row gap-4 bg-surface p-4 border border-border rounded-xl">
+        <div className="relative flex-1">
+          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-textSecondary" />
+          <input 
+            type="text" 
+            placeholder="Search training data..." 
+            value={search} 
             onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-            className="flex-1 px-3 py-2 bg-surface border border-border rounded-md text-sm text-textPrimary placeholder-textSecondary/50 focus:outline-none focus:border-primary transition-colors duration-150"
+            className="w-full pl-10 pr-4 py-2 bg-bg border border-border rounded-lg text-sm text-textPrimary focus:border-primary outline-none"
           />
-          <select
-            value={labelFilter}
+        </div>
+        
+        <div className="flex gap-2">
+          <select 
+            value={labelFilter} 
             onChange={(e) => { setLabelFilter(e.target.value); setPage(1); }}
-            className="px-3 py-2 bg-surface border border-border rounded-md text-sm text-textPrimary focus:outline-none focus:border-primary transition-colors duration-150"
+            className="bg-bg border border-border px-3 py-2 rounded-lg text-sm text-textPrimary outline-none"
           >
-            <option value="All">All labels</option>
-            <option value="Fraud">Fraud</option>
-            <option value="Real">Real</option>
+            <option value="All">All Labels</option>
+            <option value="Fraud">Fraud Only</option>
+            <option value="Real">Clean Only</option>
           </select>
-          <button
-            onClick={() => setShowAdd(true)}
-            className="flex items-center gap-2 px-3 py-2 text-sm bg-primary/15 border border-primary/30 rounded-md text-primary hover:bg-primary/25 transition-colors duration-150 whitespace-nowrap"
-          >
-            <Plus size={14} />
-            Add record
+          <button onClick={() => setShowAdd(true)} className="bg-primary text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 hover:brightness-110">
+            <Plus size={16} /> New Entry
           </button>
         </div>
       </div>
 
-      <div className="mb-4">
-        <BulkActions
-          data={filtered}
-          columns={COLUMNS}
-          onImport={handleImport}
-          filename="labeled_data"
-          importLabel="Import labeled data (CSV)"
-          exportLabel="Export labeled data"
-        />
-      </div>
+      <BulkActions 
+        data={filtered} 
+        onImport={handleImport} 
+        filename="fraud_detection_ground_truth" 
+        importLabel="Upload Audited Dataset"
+      />
 
-      {records.length === 0 ? (
-        <div className="border border-border rounded-lg px-4 py-12 text-center">
-          <p className="text-sm text-textSecondary mb-1">No labeled data yet</p>
-          <p className="text-xs text-textSecondary">Add records manually or bulk import from CSV</p>
-        </div>
+      {loading ? (
+        <div className="py-20 text-center"><Loader className="animate-spin mx-auto text-primary" size={32} /></div>
       ) : (
-        <>
-          <div className="border border-border rounded-lg overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border bg-surface">
-                    <th className="text-left px-4 py-3 text-xs text-textSecondary font-medium">Record ID</th>
-                    <th className="text-left px-4 py-3 text-xs text-textSecondary font-medium">Claim ID</th>
-                    <th className="text-left px-4 py-3 text-xs text-textSecondary font-medium">Patient</th>
-                    <th className="text-left px-4 py-3 text-xs text-textSecondary font-medium hidden md:table-cell">Provider</th>
-                    <th className="text-left px-4 py-3 text-xs text-textSecondary font-medium hidden lg:table-cell">Procedure</th>
-                    <th className="text-left px-4 py-3 text-xs text-textSecondary font-medium hidden lg:table-cell">Service</th>
-                    <th className="text-left px-4 py-3 text-xs text-textSecondary font-medium">Amount</th>
-                    <th className="text-left px-4 py-3 text-xs text-textSecondary font-medium">Label</th>
-                    <th className="text-left px-4 py-3 text-xs text-textSecondary font-medium hidden lg:table-cell">Date</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {paginated.map((r) => (
-                    <tr key={r.id} className="border-b border-border last:border-0 hover:bg-[#1c2128] transition-colors duration-100">
-                      <td className="px-4 py-3 text-textPrimary font-mono text-xs">{r.id}</td>
-                      <td className="px-4 py-3 text-textPrimary font-mono text-xs">{r.claim_id || '—'}</td>
-                      <td className="px-4 py-3 text-textPrimary">{r.patient_name || '—'}</td>
-                      <td className="px-4 py-3 text-textSecondary hidden md:table-cell">{r.provider_name || '—'}</td>
-                      <td className="px-4 py-3 text-textSecondary hidden lg:table-cell">{r.procedure_label || '—'}</td>
-                      <td className="px-4 py-3 text-textSecondary hidden lg:table-cell">{r.service_label || '—'}</td>
-                      <td className="px-4 py-3 text-textPrimary">{r.amount ? `$${r.amount.toLocaleString()}` : '—'}</td>
-                      <td className="px-4 py-3"><StatusBadge status={r.label === 'Fraud' ? 'Fraud Confirmed' : 'Cleared'} /></td>
-                      <td className="px-4 py-3 text-textSecondary hidden lg:table-cell">{r.claim_date}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-          <Pagination currentPage={page} totalPages={totalPages} onPageChange={setPage} />
-        </>
+        <div className="bg-surface border border-border rounded-xl overflow-hidden shadow-sm">
+          <table className="w-full text-sm text-left">
+            <thead className="bg-bg/50 border-b border-border">
+              <tr className="text-[10px] uppercase font-bold text-textSecondary tracking-wider">
+                {COLUMNS.map(col => <th key={col.key} className="px-6 py-4">{col.label}</th>)}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {paginated.map((r) => (
+                <tr key={r.id} className="hover:bg-bg/30 transition-colors">
+                  <td className="px-6 py-4 font-mono text-[10px] text-textSecondary">{r.id}</td>
+                  <td className="px-6 py-4 font-mono text-xs text-primary font-bold">{r.claim_id}</td>
+                  <td className="px-6 py-4 text-textPrimary">{r.patient_name || '—'}</td>
+                  <td className="px-6 py-4 text-textSecondary text-xs">{r.provider_name || '—'}</td>
+                  <td className="px-6 py-4 text-textPrimary font-mono">${(r.amount || 0).toLocaleString()}</td>
+                  <td className="px-6 py-4"><StatusBadge status={r.label === 'Fraud' ? 'Fraud Confirmed' : 'Cleared'} /></td>
+                  <td className="px-6 py-4 text-textSecondary text-[10px]">{r.claim_date}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {filtered.length === 0 && <div className="p-10 text-center text-textSecondary italic">No records match your filters.</div>}
+        </div>
       )}
 
-      {/* Add record modal */}
-      <Modal open={showAdd} onClose={() => setShowAdd(false)} title="Add labeled record">
-        <div className="space-y-4">
-          <div>
-            <label className="block text-xs text-textSecondary mb-1.5">Claim ID</label>
-            <input type="text" value={form.claim_id} onChange={(e) => update('claim_id', e.target.value)} className="w-full px-3 py-2 bg-[#0d1117] border border-[#383e47] rounded-md text-sm text-textPrimary placeholder-textSecondary/50 focus:outline-none focus:border-primary transition-colors duration-150" placeholder="e.g. CLM-0001" />
-          </div>
-          <div>
-            <label className="block text-xs text-textSecondary mb-1.5">Patient Name</label>
-            <input type="text" value={form.patient_name} onChange={(e) => update('patient_name', e.target.value)} className="w-full px-3 py-2 bg-[#0d1117] border border-[#383e47] rounded-md text-sm text-textPrimary placeholder-textSecondary/50 focus:outline-none focus:border-primary transition-colors duration-150" placeholder="e.g. John Doe" />
-          </div>
+      <Pagination currentPage={page} totalPages={totalPages} onPageChange={setPage} />
+
+      {/* Add Modal */}
+      <Modal open={showAdd} onClose={() => setShowAdd(false)} title="Add Ground Truth Record">
+        <div className="space-y-4 p-2">
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs text-textSecondary mb-1.5">Provider</label>
-              <input type="text" value={form.provider_name} onChange={(e) => update('provider_name', e.target.value)} className="w-full px-3 py-2 bg-[#0d1117] border border-[#383e47] rounded-md text-sm text-textPrimary placeholder-textSecondary/50 focus:outline-none focus:border-primary transition-colors duration-150" placeholder="Hospital/clinic name" />
+              <label className="block text-[10px] uppercase font-bold text-textSecondary mb-1">Claim ID *</label>
+              <input type="text" value={form.claim_id} onChange={e => update('claim_id', e.target.value)} className="w-full bg-bg border border-border p-2 rounded text-sm text-textPrimary focus:border-primary outline-none" placeholder="e.g. CLM-123" />
             </div>
             <div>
-              <label className="block text-xs text-textSecondary mb-1.5">Amount</label>
-              <input type="number" value={form.amount} onChange={(e) => update('amount', e.target.value)} className="w-full px-3 py-2 bg-[#0d1117] border border-[#383e47] rounded-md text-sm text-textPrimary placeholder-textSecondary/50 focus:outline-none focus:border-primary transition-colors duration-150" placeholder="15000" />
+              <label className="block text-[10px] uppercase font-bold text-textSecondary mb-1">Final Label</label>
+              <select value={form.label} onChange={e => update('label', e.target.value)} className="w-full bg-bg border border-border p-2 rounded text-sm text-textPrimary focus:border-primary outline-none">
+                <option value="Fraud">Fraud (Confirmed)</option>
+                <option value="Real">Real (Legitimate)</option>
+              </select>
             </div>
           </div>
           <div>
-            <label className="block text-xs text-textSecondary mb-1.5">Procedure</label>
-            <input type="text" value={form.procedure_label} onChange={(e) => update('procedure_label', e.target.value)} className="w-full px-3 py-2 bg-[#0d1117] border border-[#383e47] rounded-md text-sm text-textPrimary placeholder-textSecondary/50 focus:outline-none focus:border-primary transition-colors duration-150" placeholder="e.g. MRI Brain" />
+            <label className="block text-[10px] uppercase font-bold text-textSecondary mb-1">Patient Name</label>
+            <input type="text" value={form.patient_name} onChange={e => update('patient_name', e.target.value)} className="w-full bg-bg border border-border p-2 rounded text-sm text-textPrimary focus:border-primary outline-none" />
           </div>
           <div>
-            <label className="block text-xs text-textSecondary mb-1.5">Service Type</label>
-            <input type="text" value={form.service_label} onChange={(e) => update('service_label', e.target.value)} className="w-full px-3 py-2 bg-[#0d1117] border border-[#383e47] rounded-md text-sm text-textPrimary placeholder-textSecondary/50 focus:outline-none focus:border-primary transition-colors duration-150" placeholder="e.g. Inpatient" />
+            <label className="block text-[10px] uppercase font-bold text-textSecondary mb-1">Audit Notes</label>
+            <textarea value={form.notes} onChange={e => update('notes', e.target.value)} className="w-full bg-bg border border-border p-2 rounded text-sm text-textPrimary focus:border-primary outline-none h-20" placeholder="Reason for this label..."></textarea>
           </div>
-          <div>
-            <label className="block text-xs text-textSecondary mb-1.5">Label *</label>
-            <select value={form.label} onChange={(e) => update('label', e.target.value)} className="w-full px-3 py-2 bg-[#0d1117] border border-[#383e47] rounded-md text-sm text-textPrimary focus:outline-none focus:border-primary transition-colors duration-150">
-              <option value="Fraud">Fraud (confirmed fraudulent)</option>
-              <option value="Real">Real (confirmed legitimate)</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs text-textSecondary mb-1.5">Notes</label>
-            <textarea value={form.notes} onChange={(e) => update('notes', e.target.value)} rows={3} className="w-full px-3 py-2 bg-[#0d1117] border border-[#383e47] rounded-md text-sm text-textPrimary placeholder-textSecondary/50 focus:outline-none focus:border-primary transition-colors duration-150 resize-none" placeholder="Additional details or evidence notes" />
-          </div>
-          <div className="flex justify-end gap-3 pt-2">
-            <button onClick={() => setShowAdd(false)} className="px-4 py-2 text-sm border border-border rounded-md text-textSecondary hover:text-textPrimary hover:border-textSecondary transition-colors duration-150">Cancel</button>
-            <button onClick={handleAdd} className="px-4 py-2 text-sm bg-primary/15 border border-primary/30 rounded-md text-primary hover:bg-primary/25 transition-colors duration-150">Add record</button>
-          </div>
+          <button onClick={handleAdd} className="w-full bg-primary text-white py-3 rounded-lg font-bold shadow-lg shadow-primary/20 hover:brightness-110 transition-all mt-4">Save to Training Set</button>
         </div>
       </Modal>
     </div>
