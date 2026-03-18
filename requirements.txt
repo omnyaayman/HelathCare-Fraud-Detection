@@ -24,7 +24,7 @@ pyarrow==23.0.1
 pandas==2.2.3
 numpy==2.1.2
 joblib==1.5.3
-scikit-learn==1.8.0
+scikit-learn
 xgboost==3.2.0
 
 # Visualization 
