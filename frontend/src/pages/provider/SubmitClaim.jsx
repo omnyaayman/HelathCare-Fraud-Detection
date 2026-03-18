@@ -3,6 +3,7 @@ import { CheckCircle, Loader, Search, AlertCircle, AlertTriangle, ArrowRight, Us
 import { useAuth } from '../../context/AuthContext';
 import api from '../../api';
 import { ADMISSION_TYPES, DIAGNOSES, PROCEDURES, SERVICES, DISCHARGE_TYPES } from '../../constants';
+import StatusBadge from '../../components/StatusBadge';
 
 const initialForm = {
   policy_id: '',
