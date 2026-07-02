@@ -3,6 +3,7 @@ import { CheckCircle, Loader, Search, AlertCircle, AlertTriangle, ArrowRight, Us
 import { useAuth } from '../../context/AuthContext';
 import api from '../../api';
 import { ADMISSION_TYPES, DIAGNOSES, PROCEDURES, SERVICES, DISCHARGE_TYPES } from '../../constants';
+import StatusBadge from '../../components/StatusBadge';
 
 const initialForm = {
   policy_id: '',
@@ -13,6 +14,7 @@ const initialForm = {
   procedure_code: '',
   service_type: '',
   discharge_type: 'Home',
+  claim_amount: '', // 📌 تمت إضافة حقل المبلغ هنا
 };
 
 const steps = ["Policy Check", "Claim Details", "AI Result"];
@@ -34,7 +36,6 @@ export default function SubmitClaim() {
     
     setSubmitting(true);
     try {
-      // إرسال طلب للباك إند لفحص البوليصة في Azure SQL
       const data = await api.submitClaim({ policy_number: trimmed, check_only: true });
       
       if (data.policy_status === 'Active') {
@@ -60,7 +61,7 @@ export default function SubmitClaim() {
       
       const payload = {
         policy_number: form.policy_id,
-        claim_amount: selectedService?.cost || 500,
+        claim_amount: parseFloat(form.claim_amount) || 0, // 📌 التعديل: إرسال المبلغ المكتوب يدوياً
         service_type: selectedService?.label || 'General',
         diagnosis_code: form.diagnosis_code,
         procedure_code: form.procedure_code,
@@ -163,10 +164,25 @@ export default function SubmitClaim() {
                 {PROCEDURES.map(p => <option key={p.code} value={p.code}>{p.label}</option>)}
               </select>
             </div>
+            
+            {/* 📌 تمت إضافة مربع إدخال مبلغ المطالبة هنا */}
+            <div>
+              <label className="block text-[10px] uppercase font-bold text-textSecondary mb-2">Claim Amount ($)</label>
+              <input 
+                type="number" 
+                value={form.claim_amount} 
+                onChange={(e) => setForm({...form, claim_amount: e.target.value})} 
+                placeholder="Enter amount..." 
+                className={inputClass} 
+              />
+            </div>
           </div>
+
           <div className="flex gap-4 mt-10">
             <button onClick={() => setStep(0)} className="flex-1 py-3 border border-border rounded-lg text-sm font-bold text-textSecondary hover:bg-bg transition-all">Go Back</button>
-            <button onClick={handleSubmit} disabled={submitting || !form.service_type} className="flex-[2] py-3 bg-primary text-white rounded-lg font-bold shadow-lg shadow-primary/20 flex items-center justify-center gap-2">
+            
+            {/* 📌 زر الإرسال هيقف لو مفيش مبلغ مكتوب */}
+            <button onClick={handleSubmit} disabled={submitting || !form.service_type || !form.claim_amount} className="flex-[2] py-3 bg-primary text-white rounded-lg font-bold shadow-lg shadow-primary/20 flex items-center justify-center gap-2">
               {submitting ? <><Loader className="animate-spin" size={18}/> Analyzing...</> : 'Analyze Risk & Submit'}
             </button>
           </div>
@@ -197,7 +213,7 @@ export default function SubmitClaim() {
               : "Claim verified successfully and queued for payment processing."}
           </p>
           
-          <button onClick={() => {setStep(0); setResolvedPatient(null); setPolicyInput('');}} className="px-10 py-4 bg-textPrimary text-white rounded-full font-bold hover:scale-105 transition-all shadow-xl">
+          <button onClick={() => {setStep(0); setResolvedPatient(null); setForm(initialForm); setPolicyInput('');}} className="px-10 py-4 bg-textPrimary text-white rounded-full font-bold hover:scale-105 transition-all shadow-xl">
             Submit New Claim
           </button>
         </div>

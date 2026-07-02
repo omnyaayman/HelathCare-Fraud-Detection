@@ -1,0 +1,10 @@
+{
+  "Total_Claims": 19779,
+  "Total_Fraud_Claims": 4885,
+  "Overall_Fraud_Rate": 24.7,
+  "Total_Amount": 24615251837.66,
+  "Fraud_Amount": 6356102843.14,
+  "Total_Patients": 19768,
+  "Total_Providers": 1000,
+  "Average_Claim_Amount": 1244514.48
+}

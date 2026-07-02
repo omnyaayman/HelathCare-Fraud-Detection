@@ -1,0 +1,33 @@
+{
+  "name": "Fraud Detection Dashboards",
+  "description": "لوحات تحليل الاحتيال والمطالبات الطبية",
+  "dashboards": [
+    {
+      "name": "📊 Fraud Overview Dashboard",
+      "description": "نظرة عامة على حالة الاحتيال في النظام",
+      "cards": [
+        {
+          "name": "Fraud Summary",
+          "type": "table",
+          "query": "SELECT COUNT(*) AS total_claims, SUM(CASE WHEN is_fraud = 1 THEN 1 ELSE 0 END) AS fraud_claims, ROUND(SUM(CASE WHEN is_fraud = 1 THEN 1 ELSE 0 END) * 100.0 / COUNT(*), 2) AS fraud_rate FROM dbo.Claims"
+        },
+        {
+          "name": "Fraud by Risk Level",
+          "type": "bar",
+          "query": "SELECT risk_level, COUNT(*) AS count FROM dbo.Claims WHERE risk_level IS NOT NULL GROUP BY risk_level"
+        }
+      ]
+    },
+    {
+      "name": "🏥 Provider Risk Dashboard",
+      "description": "تحليل مخاطر مقدمي الخدمات",
+      "cards": [
+        {
+          "name": "Top 10 Risk Providers",
+          "type": "table",
+          "query": "SELECT TOP 10 provider_id, COUNT(*) AS claims, SUM(CASE WHEN is_fraud = 1 THEN 1 ELSE 0 END) AS fraud, ROUND(SUM(CASE WHEN is_fraud = 1 THEN 1 ELSE 0 END) * 100.0 / COUNT(*), 2) AS fraud_rate FROM dbo.Claims WHERE provider_id IS NOT NULL GROUP BY provider_id HAVING COUNT(*) >= 5 ORDER BY fraud_rate DESC"
+        }
+      ]
+    }
+  ]
+}

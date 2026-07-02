@@ -1,0 +1,16 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y \
+    curl \
+    unixodbc \
+    unixodbc-dev \
+    && apt-get clean
+
+COPY requirements.consumer.txt .
+RUN pip install --no-cache-dir --trusted-host pypi.org --trusted-host files.pythonhosted.org -r requirements.consumer.txt
+
+COPY . .
+
+CMD ["python", "kafka_consumer.py"]

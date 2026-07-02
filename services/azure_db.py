@@ -1,36 +1,41 @@
-from sqlalchemy import create_engine
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy import create_engine, MetaData
+from sqlalchemy.orm import sessionmaker, DeclarativeBase
 from core.config import settings
 
-# إعدادات المحرك (Engine) مع الربط القوي بـ Azure
-# أضفنا pool_size و pool_recycle لمنع سقوط الاتصال بعد فترة خمول
+
+# =========================
+# ORM Base
+# =========================
+class Base(DeclarativeBase):
+    pass
+
+
+# =========================
+# ENGINE (Azure SQL)
+# =========================
 engine = create_engine(
     settings.DATABASE_URL,
-    pool_pre_ping=True,      # يتأكد من أن الاتصال فعال قبل كل طلب
-    pool_size=10,            # عدد الاتصالات الدائمة
-    max_overflow=20,         # أقصى زيادة للاتصالات عند الضغط
-    pool_recycle=300,        # إعادة تدوير الاتصال كل 5 دقائق لمنع الـ Timeout
-    connect_args={
-        "timeout": 30        # زيادة وقت انتظار الاتصال لـ 30 ثانية
-    }
+    pool_pre_ping=True,
+    pool_size=10,
+    max_overflow=20,
+    pool_recycle=300,
+    echo=False,
+    future=True
 )
 
-# إنشاء مصنع الجلسات
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-# القاعدة الأساسية لتعريف الجداول (Models)
-Base = declarative_base()
+# =========================
+# METADATA (Schema aware)
+# =========================
+metadata = MetaData(schema=settings.DB_SCHEMA)
 
-# دالة الحصول على الجلسة (Dependency Injection)
-def get_db():
-    db = SessionLocal()
-    try:
-        # اختبار سريع للاتصال قبل إرسال الجلسة للراوتس
-        # db.execute("SELECT 1") 
-        yield db
-    except Exception as e:
-        print(f"❌ Database Session Error: {e}")
-        raise
-    finally:
-        db.close()
+
+# =========================
+# SESSION FACTORY
+# =========================
+SessionLocal = sessionmaker(
+    bind=engine,
+    autoflush=False,
+    autocommit=False,
+    future=True
+)

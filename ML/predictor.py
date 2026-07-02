@@ -1,55 +1,91 @@
 import joblib
 import pandas as pd
 import os
-import sys
-from core.constants import *
+import logging
+from dotenv import load_dotenv
 
-# 1. لازم الكلاس ده يكون موجود هنا بالظبط عشان joblib يعرف يقرأ الملف
-class FraudInferenceSystem:
-    def __init__(self):
-        self.model = None
+BASE_DIR_ENV = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+load_dotenv(os.path.join(BASE_DIR_ENV, ".env"))
 
-# خدعة برمجية لإقناع joblib إن الكلاس موجود في الموديول الرئيسي
-import __main__
-__main__.FraudInferenceSystem = FraudInferenceSystem
+from core.constants import (
+    MODEL_PATH,
+    ENCODERS_PATH,
+    XGB_FEATURES,
+    FRAUD_THRESHOLD,
+    HIGH_RISK_THRESHOLD
+)
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+
+FIELD_MAP = {
+    "claim_amount": "Claim_Amount",
+    "deductible_amount": "Deductible_Amount",
+    "copay_amount": "CoPay_Amount",
+    "patient_age": "Patient_Age",
+    "gender": "Patient_Gender",
+    "provider_type": "Provider_Type",
+    "provider_specialty": "Provider_Specialty",
+    "diagnosis_code": "Diagnosis_Code",
+    "number_of_procedures": "Number_of_Procedures",
+    "admission_type": "Admission_Type",
+    "discharge_type": "Discharge_Type",
+    "service_type": "Service_Type",
+    "distance_miles": "Provider_Patient_Distance_Miles",
+    "claim_date": "Claim_Date",
+    "service_date": "Service_Date",
+    "policy_expiration_date": "Policy_Expiration_Date",
+    "claim_submitted_late": "Claim_Submitted_Late",
+}
+
 
 class FraudPredictor:
+
     def __init__(self):
-        # تحميل الموديلات مع معالجة الأخطاء
-        self.model_xgb = self._load(MODEL_PATH)
-        self.model_clf = self._load(CLASSIFIER_PATH)
-        # تحميل النظام الكامل
-        self.model_complete = self._load(COMPLETE_SYSTEM_PATH)
-        self.encoders = self._load(ENCODERS_PATH)
+        self.model = None
+        self.encoders = None
+        self.features = XGB_FEATURES
+        self.is_loaded = False
+        self._load()
 
-    def _load(self, path):
-        full_path = os.path.join(os.getcwd(), path)
-        if not os.path.exists(full_path):
-            print(f"⚠️ Warning: File not found at {full_path}")
-            return None
-        try:
-            # تحميل الموديل
-            return joblib.load(full_path)
-        except Exception as e:
-            print(f"❌ Error loading {path}: {e}")
-            return None
+    def _load(self):
+        if os.path.exists(MODEL_PATH):
+            self.model = joblib.load(MODEL_PATH)
 
-    def predict(self, raw_data):
-        # لو الموديل الكبير (Complete System) متحملش، هنستخدم الـ XGBoost كبديل
-        try:
-            # هنا كود الـ Feature Engineering اللي كتبناه قبل كدا
-            # ...
-            score = 0.5 # قيمة افتراضية
-            if self.model_xgb:
-                # افتراض أننا جهزنا الـ DataFrame بـ 28 عمود
-                # score = self.model_xgb.predict_proba(df)[0][1]
-                pass
-                
-            return {
-                "fraud_score": round(float(score), 4),
-                "prediction": "Fraud" if score > 0.5 else "Normal"
-            }
-        except Exception as e:
-            return {"error": str(e), "fraud_score": 0.5, "prediction": "Normal"}
+        if os.path.exists(ENCODERS_PATH):
+            self.encoders = joblib.load(ENCODERS_PATH)
+
+        self.is_loaded = self.model is not None
+
+    def predict(self, claim_data: dict) -> dict:
+
+        if not self.is_loaded:
+            return {"fraud_score": 0, "is_fraud": False, "risk_level": "UNKNOWN"}
+
+        mapped = {FIELD_MAP.get(k.lower(), k): v for k, v in claim_data.items()}
+        df = pd.DataFrame([mapped])
+
+        for col in self.features:
+            if col not in df.columns:
+                df[col] = 0
+
+        X = df[self.features]
+
+        prob = float(self.model.predict_proba(X)[0][1])
+
+        if prob >= HIGH_RISK_THRESHOLD:
+            risk = "CRITICAL"
+        elif prob >= FRAUD_THRESHOLD:
+            risk = "HIGH"
+        else:
+            risk = "LOW"
+
+        return {
+            "fraud_score": round(prob, 4),
+            "is_fraud": prob >= FRAUD_THRESHOLD,
+            "risk_level": risk
+        }
+
 
 predictor = FraudPredictor()

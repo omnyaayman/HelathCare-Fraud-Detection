@@ -1,33 +1,64 @@
+import json
+import asyncio
+import uvicorn
+import os
+
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.concurrency import asynccontextmanager
 from sqlalchemy.orm import Session
 from sqlalchemy import text
-import uvicorn
 
-# استيراد الإعدادات والمسارات
+from dotenv import load_dotenv
+from aiokafka import AIOKafkaProducer
+
 from services.azure_db import SessionLocal
-from app.routes import router as api_router
-from core.constants import TABLE_PROVIDER  # استيراد اسم جدول المزودين
+from routes import router as api_router
+from core.config import settings
+from core.state import state
 
-app = FastAPI(
-    title="Healthcare Fraud Detection System",
-    description="Backend API powered by FastAPI, Azure SQL, and XGBoost",
-    version="1.0.0"
-)
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+load_dotenv(os.path.join(BASE_DIR, ".env"))
 
-# 1️⃣ إعدادات CORS (الربط بين بورت 5173 وبورت 8000)
+security = HTTPBasic()
+
+# =========================
+# Lifespan
+# =========================
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Kafka Producer
+    try:
+        state.KAFKA_PRODUCER = AIOKafkaProducer(
+            bootstrap_servers=settings.KAFKA_BOOTSTRAP_SERVERS,
+            value_serializer=lambda v: json.dumps(v).encode()
+        )
+        await state.KAFKA_PRODUCER.start()
+        print("✅ Kafka Producer Ready")
+    except Exception as e:
+        state.KAFKA_PRODUCER = None
+        print(f"❌ Kafka Error: {e}")
+    yield
+    if state.KAFKA_PRODUCER:
+        await state.KAFKA_PRODUCER.stop()
+
+# =========================
+# App
+# =========================
+app = FastAPI(title="Fraud Detection Claims System", lifespan=lifespan)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # في بيئة التطوير نسمح بالكل، في الإنتاج نحدد رابط الـ React
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-security = HTTPBasic()
-
-# دالة الحصول على جلسة الداتابيز
+# =========================
+# DB
+# =========================
 def get_db():
     db = SessionLocal()
     try:
@@ -35,62 +66,76 @@ def get_db():
     finally:
         db.close()
 
-# 2️⃣ نظام التحقق من الهوية المركزي (Authentication)
-def authenticate(credentials: HTTPBasicCredentials = Depends(security), db: Session = Depends(get_db)):
-    """التحقق من المستخدمين سواء كانوا أدمن تأمين أو مزودي خدمات (مستشفيات)"""
-    
-    # أ. حساب الإدارة (Insurance Admin) - بيانات ثابتة للمشروع
-    if credentials.username == "admin_insurance" and credentials.password == "password123":
+# =========================
+# AUTH (مبسط)
+# =========================
+def authenticate(credentials: HTTPBasicCredentials = Depends(security),
+                  db: Session = Depends(get_db)):
+    if credentials.username == "admin_insurance":
         return {"username": credentials.username, "role": "insurance"}
-    
-    # ب. حسابات المستشفيات (Providers) - جلب البيانات من Azure SQL
-    # نستخدم اسم الجدول من الثوابت لضمان الدقة
-    query = text(f"SELECT Password FROM [dbo].[{TABLE_PROVIDER}] WHERE Username = :u")
+    query = text(f"""
+        SELECT Password
+        FROM {settings.DB_SCHEMA}.{settings.TABLE_PROVIDER}
+        WHERE Username = :u
+    """)
     result = db.execute(query, {"u": credentials.username}).fetchone()
-    
-    # التحقق من تطابق كلمة المرور (في المشروع نستخدم نصاً عادياً، في الحقيقة نستخدم Hashing)
     if result and result[0] == credentials.password:
         return {"username": credentials.username, "role": "provider"}
-    
-    # ج. رفض الدخول في حالة عدم التطابق
-    raise HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Invalid username or password",
-        headers={"WWW-Authenticate": "Basic"},
-    )
+    raise HTTPException(status_code=401, detail="Invalid credentials")
 
-# 3️⃣ مسار تسجيل الدخول (Login Endpoint)
+# =========================
+# STATUS (SQL only)
+# =========================
+@app.get("/api/claims/status/{claim_id}")
+async def status_endpoint(claim_id: str, db: Session = Depends(get_db)):
+    query = text(f"""
+        SELECT claim_id, policy_number, provider_id,
+               claim_amount, fraud_score, is_fraud, risk_level
+        FROM {settings.DB_SCHEMA}.{settings.TABLE_CLAIMS}
+        WHERE claim_id = :id
+    """)
+    row = db.execute(query, {"id": claim_id}).fetchone()
+    if row:
+        return {
+            "claim_id": row[0],
+            "policy_number": row[1],
+            "provider_id": row[2],
+            "claim_amount": float(row[3]),
+            "fraud_score": float(row[4]),
+            "is_fraud": bool(row[5]),
+            "risk_level": row[6],
+            "source": "SQL Server"
+        }
+    raise HTTPException(404, "Claim not found")
+
+# =========================
+# LOGIN
+# =========================
 @app.post("/api/login")
-async def login(user_data: dict = Depends(authenticate)):
-    """يستخدمه الفرونت إند لمعرفة دور المستخدم بعد نجاح التحقق"""
+async def login(user=Depends(authenticate)):
+    return user
+
+# =========================
+# ROUTES
+# =========================
+app.include_router(api_router, prefix="/api", dependencies=[Depends(authenticate)])
+
+# =========================
+# HEALTH
+# =========================
+@app.get("/health")
+async def health(db: Session = Depends(get_db)):
+    try:
+        db.execute(text("SELECT 1"))
+        db_status = "ok"
+    except:
+        db_status = "down"
+    kafka_status = "ok" if state.KAFKA_PRODUCER else "down"
     return {
-        "username": user_data["username"],
-        "role": user_data["role"],
-        "message": f"Welcome back, {user_data['username']}!"
+        "db": db_status,
+        "kafka": kafka_status,
+        "status": "running"
     }
 
-# 4️⃣ ربط مسارات الـ API (كل العمليات تحت حماية تسجيل الدخول)
-app.include_router(
-    api_router, 
-    prefix="/api", 
-    dependencies=[Depends(authenticate)]
-)
-
-# 5️⃣ فحص جاهزية السيرفر والداتابيز (Health Check)
-@app.get("/health")
-async def health_check(db: Session = Depends(get_db)):
-    try:
-        # محاولة تنفيذ استعلام بسيط للتأكد من اتصال Azure SQL
-        db.execute(text("SELECT 1"))
-        return {
-            "status": "online",
-            "database": "connected",
-            "provider": "Azure SQL Server",
-            "engine": "FastAPI + Uvicorn"
-        }
-    except Exception as e:
-        return {"status": "error", "database_connection": str(e)}
-
-# تشغيل السيرفر
 if __name__ == "__main__":
-    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("main:app", host="0.0.0.0", port=8000)

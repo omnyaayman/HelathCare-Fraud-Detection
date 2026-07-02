@@ -1,0 +1,472 @@
+services:
+  # =====================================================
+  # ZOOKEEPER
+  # =====================================================
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.4.0
+    container_name: zookeeper
+    environment:
+      - ZOOKEEPER_CLIENT_PORT=2181
+      - ZOOKEEPER_TICK_TIME=2000
+    ports:
+      - "2181:2181"
+    networks:
+      - fraud-network
+    restart: unless-stopped
+
+  # =====================================================
+  # KAFKA - مع إعدادات الإنتاج
+  # =====================================================
+  kafka:
+    image: confluentinc/cp-kafka:7.4.0
+    container_name: kafka
+    depends_on:
+      - zookeeper
+    environment:
+      - KAFKA_BROKER_ID=1
+      - KAFKA_ZOOKEEPER_CONNECT=zookeeper:2181
+      - KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://kafka:29092
+      - KAFKA_LISTENERS=PLAINTEXT://:29092
+      - KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1
+      - KAFKA_AUTO_CREATE_TOPICS_ENABLE=true
+      - KAFKA_DELETE_TOPIC_ENABLE=true
+      - KAFKA_CLUSTER_ID=PtIespzeSHCZ5hJJyV-luQ
+    ports:
+      - "9092:9092"
+      - "29092:29092"
+    networks:
+      - fraud-network
+    restart: unless-stopped
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-broker-api-versions --bootstrap-server localhost:29092 || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+      start_period: 60s
+
+  # =====================================================
+  # KAFKA-UI
+  # =====================================================
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: kafka-ui
+    depends_on:
+      - kafka
+    environment:
+      - KAFKA_CLUSTERS_0_NAME=local
+      - KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS=kafka:29092
+      - KAFKA_CLUSTERS_0_ZOOKEEPER=zookeeper:2181
+    ports:
+      - "8082:8080"
+    networks:
+      - fraud-network
+    restart: unless-stopped
+
+  # =====================================================
+  # INIT-TOPICS (مرة واحدة)
+  # =====================================================
+  init-topics:
+    image: python:3.11-slim
+    container_name: init-topics
+    depends_on:
+      kafka:
+        condition: service_healthy
+    volumes:
+      - ./scripts/init_kafka_topics.py:/init_kafka_topics.py
+    working_dir: /
+    command: >
+      sh -c "
+        pip install --no-cache-dir kafka-python &&
+        python3 /init_kafka_topics.py
+      "
+    networks:
+      - fraud-network
+    restart: "no"
+
+  # =====================================================
+  # FASTAPI APP
+  # =====================================================
+  app:
+    build:
+      context: ./app
+      dockerfile: Dockerfile.app
+    container_name: fastapi-app
+    ports:
+      - "8000:8000"
+    environment:
+      - DB_SERVER=${DB_SERVER}
+      - DB_NAME=${DB_NAME}
+      - DB_USER=${DB_USER}
+      - DB_PWD=${DB_PWD}
+      - DB_DRIVER=${DB_DRIVER}
+      - DB_SCHEMA=${DB_SCHEMA}
+      - TABLE_CLAIMS=${TABLE_CLAIMS}
+      - TABLE_PROVIDER=${TABLE_PROVIDER}
+      - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS}
+      - TOPIC_CLAIMS_RAW=${TOPIC_CLAIMS_RAW}
+      - TOPIC_CLAIMS_EVALUATED=${TOPIC_CLAIMS_EVALUATED}
+    depends_on:
+      - kafka
+    networks:
+      - fraud-network
+    volumes:
+      - ./app:/app
+      - ./core:/app/core
+      - ./services:/app/services
+      - ./ML:/app/ML
+    restart: unless-stopped
+
+  # =====================================================
+  # FRAUD-CONSUMER
+  # =====================================================
+  fraud-consumer:
+    build:
+      context: ./kafka-consumer
+      dockerfile: Dockerfile.consumer
+    container_name: fraud-consumer
+    depends_on:
+      - kafka
+      - init-topics
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS}
+      - DB_SERVER=${DB_SERVER}
+      - DB_NAME=${DB_NAME}
+      - DB_USER=${DB_USER}
+      - DB_PWD=${DB_PWD}
+      - DB_DRIVER=${DB_DRIVER}
+      - DB_SCHEMA=${DB_SCHEMA}
+      - TABLE_CLAIMS=${TABLE_CLAIMS}
+      - TOPIC_CLAIMS_RAW=${TOPIC_CLAIMS_RAW}
+      - TOPIC_CLAIMS_EVALUATED=${TOPIC_CLAIMS_EVALUATED}
+      - PYTHONPATH=/app
+    networks:
+      - fraud-network
+    volumes:
+      - ./kafka-consumer:/app
+      - ./core:/app/core
+      - ./ML:/app/ML
+      - ./services:/app/services
+    restart: unless-stopped
+
+  # =====================================================
+  # AIRFLOW-DB
+  # =====================================================
+  airflow-db:
+    image: postgres:15-alpine
+    container_name: airflow-db
+    environment:
+      - POSTGRES_USER=airflow
+      - POSTGRES_PASSWORD=${AIRFLOW_DB_PASSWORD}
+      - POSTGRES_DB=airflow
+      - PGPASSWORD=${AIRFLOW_DB_PASSWORD}
+    networks:
+      - fraud-network
+    volumes:
+      - airflow-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U airflow -d airflow"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+    restart: unless-stopped
+
+  # =====================================================
+  # AIRFLOW-INIT (تهيئة القاعدة - تُنفذ مرة واحدة)
+  # =====================================================
+  airflow-init:
+    build:
+      context: ./airflow
+      dockerfile: Dockerfile.airflow
+    container_name: airflow-init
+    depends_on:
+      airflow-db:
+        condition: service_healthy
+    environment:
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql://airflow:${AIRFLOW_DB_PASSWORD}@airflow-db/airflow
+      - AIRFLOW_ADMIN_PASSWORD=${AIRFLOW_ADMIN_PASSWORD}
+      - AIRFLOW__CORE__LOAD_EXAMPLES=False
+      - AIRFLOW__WEBSERVER__SECRET_KEY=${AIRFLOW__WEBSERVER__SECRET_KEY}
+      - AIRFLOW__CORE__FERNET_KEY=${AIRFLOW__CORE__FERNET_KEY}
+      - AIRFLOW__API_AUTH__JWT_SECRET=${AIRFLOW__API_AUTH__JWT_SECRET}
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - ./airflow/scripts:/opt/airflow/scripts
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
+    entrypoint: ["/bin/bash", "-c"]
+    command: |
+      echo '============================================================'
+      echo '🔧 AIRFLOW INIT - تهيئة قاعدة البيانات'
+      echo '============================================================'
+      echo '⏳ انتظار قاعدة البيانات...'
+      for i in {1..30}; do
+        if nc -z airflow-db 5432 2>/dev/null; then
+          echo '✅ قاعدة البيانات جاهزة!'
+          break
+        fi
+        echo "⏳ محاولة $i/30 - انتظار قاعدة البيانات..."
+        sleep 3
+      done
+      sleep 5
+      echo '🔄 تهيئة قاعدة البيانات (airflow db init)...'
+      airflow db init
+      echo '🔄 ترقية قاعدة البيانات (airflow db upgrade)...'
+      airflow db upgrade
+      echo '👤 إنشاء مستخدم مدير...'
+      airflow users create --username admin --password ${AIRFLOW_ADMIN_PASSWORD} --firstname Admin --lastname User --role Admin --email admin@example.com 2>/dev/null || echo 'ℹ️ المستخدم موجود بالفعل'
+      echo '✅ تم تهيئة Airflow بنجاح!'
+    networks:
+      - fraud-network
+    restart: "no"
+
+  # =====================================================
+  # AIRFLOW-WEBSERVER - مع إعدادات الإنتاج
+  # =====================================================
+  airflow-webserver:
+    build:
+      context: ./airflow
+      dockerfile: Dockerfile.airflow
+    container_name: airflow-webserver
+    depends_on:
+      airflow-db:
+        condition: service_healthy
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=SequentialExecutor
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql://airflow:${AIRFLOW_DB_PASSWORD}@airflow-db/airflow
+      - AIRFLOW__WEBSERVER__DEFAULT_UI_TIMEZONE=UTC
+      - AIRFLOW__WEBSERVER__COOKIE_SECURE=False
+      - AIRFLOW__WEBSERVER__COOKIE_SAMESITE=Lax
+      - AIRFLOW_ADMIN_PASSWORD=${AIRFLOW_ADMIN_PASSWORD}
+      - AIRFLOW__CORE__LOAD_EXAMPLES=False
+      - PYSPARK_PYTHON=/usr/local/bin/python
+      - PYSPARK_DRIVER_PYTHON=/usr/local/bin/python
+      - DB_SERVER=${DB_SERVER}
+      - DB_NAME=${DB_NAME}
+      - DB_USER=${DB_USER}
+      - DB_PWD=${DB_PWD}
+      - DB_DRIVER=${DB_DRIVER}
+      - DB_SCHEMA=${DB_SCHEMA}
+      - TABLE_CLAIMS=${TABLE_CLAIMS}
+      - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS}
+      - TOPIC_CLAIMS_RAW=${TOPIC_CLAIMS_RAW}
+      - TOPIC_CLAIMS_EVALUATED=${TOPIC_CLAIMS_EVALUATED}
+      # ✅ مفاتيح موحدة لجميع المكونات
+      - AIRFLOW__WEBSERVER__SECRET_KEY=${AIRFLOW__WEBSERVER__SECRET_KEY}
+      - AIRFLOW__CORE__FERNET_KEY=${AIRFLOW__CORE__FERNET_KEY}
+      - AIRFLOW__API_AUTH__JWT_SECRET=${AIRFLOW__API_AUTH__JWT_SECRET}
+      - AIRFLOW__LOGGING__LOG_FETCH_TIMEOUT_SEC=30
+    ports:
+      - "8081:8080"
+    networks:
+      - fraud-network
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - ./airflow/scripts:/opt/airflow/scripts
+      - ./data:/opt/airflow/data
+      - ./ML:/opt/airflow/ML
+      - ./core:/opt/airflow/core
+      - ./services:/opt/airflow/services
+      - ./spark/jars:/opt/spark/jars
+      # ✅ مزامنة الوقت مع المضيف
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
+    command: webserver -p 8080
+    restart: unless-stopped
+
+  # =====================================================
+  # AIRFLOW-SCHEDULER - مع إعدادات الإنتاج
+  # =====================================================
+  airflow-scheduler:
+    build:
+      context: ./airflow
+      dockerfile: Dockerfile.airflow
+    container_name: airflow-scheduler
+    depends_on:
+      airflow-db:
+        condition: service_healthy
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=SequentialExecutor
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql://airflow:${AIRFLOW_DB_PASSWORD}@airflow-db/airflow
+      - AIRFLOW__WEBSERVER__DEFAULT_UI_TIMEZONE=UTC
+      - AIRFLOW__WEBSERVER__COOKIE_SECURE=False
+      - AIRFLOW__WEBSERVER__COOKIE_SAMESITE=Lax
+      - AIRFLOW_ADMIN_PASSWORD=${AIRFLOW_ADMIN_PASSWORD}
+      - AIRFLOW__CORE__LOAD_EXAMPLES=False
+      - PYSPARK_PYTHON=/usr/local/bin/python
+      - PYSPARK_DRIVER_PYTHON=/usr/local/bin/python
+      - DB_SERVER=${DB_SERVER}
+      - DB_NAME=${DB_NAME}
+      - DB_USER=${DB_USER}
+      - DB_PWD=${DB_PWD}
+      - DB_DRIVER=${DB_DRIVER}
+      - DB_SCHEMA=${DB_SCHEMA}
+      - TABLE_CLAIMS=${TABLE_CLAIMS}
+      - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS}
+      - TOPIC_CLAIMS_RAW=${TOPIC_CLAIMS_RAW}
+      - TOPIC_CLAIMS_EVALUATED=${TOPIC_CLAIMS_EVALUATED}
+      # ✅ مفاتيح موحدة
+      - AIRFLOW__WEBSERVER__SECRET_KEY=${AIRFLOW__WEBSERVER__SECRET_KEY}
+      - AIRFLOW__CORE__FERNET_KEY=${AIRFLOW__CORE__FERNET_KEY}
+      - AIRFLOW__API_AUTH__JWT_SECRET=${AIRFLOW__API_AUTH__JWT_SECRET}
+    networks:
+      - fraud-network
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - ./airflow/scripts:/opt/airflow/scripts
+      - ./data:/opt/airflow/data
+      - ./ML:/opt/airflow/ML
+      - ./core:/opt/airflow/core
+      - ./services:/opt/airflow/services
+      - ./spark/jars:/opt/spark/jars
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
+    command: scheduler
+    restart: unless-stopped
+
+  # =====================================================
+  # REPORTING-DB
+  # =====================================================
+  reporting-db:
+    image: postgres:15-alpine
+    container_name: reporting-db
+    environment:
+      - POSTGRES_USER=${REPORTING_DB_USER}
+      - POSTGRES_PASSWORD=${REPORTING_DB_PASSWORD}
+      - POSTGRES_DB=${REPORTING_DB_NAME}
+    networks:
+      - fraud-network
+    volumes:
+      - reporting-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${REPORTING_DB_USER} -d ${REPORTING_DB_NAME}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+    restart: unless-stopped
+
+  # =====================================================
+  # DBT
+  # =====================================================
+  dbt:
+    build:
+      context: ./dbt
+      dockerfile: Dockerfile.dbt
+    container_name: dbt
+    depends_on:
+      reporting-db:
+        condition: service_healthy
+    environment:
+      - REPORTING_DB_HOST=${REPORTING_DB_HOST}
+      - REPORTING_DB_PORT=${REPORTING_DB_PORT}
+      - REPORTING_DB_USER=${REPORTING_DB_USER}
+      - REPORTING_DB_PASSWORD=${REPORTING_DB_PASSWORD}
+      - REPORTING_DB_NAME=${REPORTING_DB_NAME}
+      - REPORTING_DB_SCHEMA=${REPORTING_DB_SCHEMA}
+      - DBT_PROFILES_DIR=/app/dbt
+    volumes:
+      - ./dbt:/app/dbt
+      - ./data:/opt/airflow/data
+    networks:
+      - fraud-network
+    command: >
+      sh -c "
+        while true; do
+          if [ -d /opt/airflow/data/gold/claims_enriched ]; then
+            echo '🔄 Running dbt transformations (Parquet -> PostgreSQL)...'
+            dbt run --profiles-dir . && dbt test --profiles-dir .
+          else
+            echo '⏳ Waiting for Gold Layer data... (Parquet not found)'
+          fi
+          echo '⏳ Waiting 10 minutes...'
+          sleep 600
+        done
+      "
+    restart: unless-stopped
+
+  # =====================================================
+  # METABASE-DB
+  # =====================================================
+  metabase-db:
+    image: postgres:15-alpine
+    container_name: metabase-db
+    environment:
+      - POSTGRES_USER=metabase
+      - POSTGRES_PASSWORD=metabase123
+      - POSTGRES_DB=metabase
+    networks:
+      - fraud-network
+    volumes:
+      - metabase-data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  # =====================================================
+  # METABASE
+  # =====================================================
+  metabase:
+    image: metabase/metabase:v0.48.0
+    container_name: metabase
+    ports:
+      - "3000:3000"
+    environment:
+      - MB_DB_TYPE=postgres
+      - MB_DB_DBNAME=metabase
+      - MB_DB_PORT=5432
+      - MB_DB_USER=metabase
+      - MB_DB_PASS=metabase123
+      - MB_DB_HOST=metabase-db
+      - MB_PUBLIC_SHARING_ENABLED=true
+    depends_on:
+      - metabase-db
+      - reporting-db
+    networks:
+      - fraud-network
+    restart: unless-stopped
+
+  # =====================================================
+  # METABASE-INIT
+  # =====================================================
+  metabase-init:
+    image: python:3.11-slim
+    container_name: metabase-init
+    depends_on:
+      - metabase
+      - reporting-db
+    environment:
+      - METABASE_URL=${METABASE_URL}
+      - MB_ADMIN_EMAIL=${MB_ADMIN_EMAIL}
+      - MB_ADMIN_PASSWORD=${MB_ADMIN_PASSWORD}
+      - REPORTING_DB_HOST=${REPORTING_DB_HOST}
+      - REPORTING_DB_PORT=${REPORTING_DB_PORT}
+      - REPORTING_DB_USER=${REPORTING_DB_USER}
+      - REPORTING_DB_PASSWORD=${REPORTING_DB_PASSWORD}
+      - REPORTING_DB_NAME=${REPORTING_DB_NAME}
+    volumes:
+      - ./metabase/init_metabase.py:/init_metabase.py
+      - ./metabase/requirements.metabase.txt:/requirements.metabase.txt
+      - ./.env:/.env
+    working_dir: /
+    command: >
+      sh -c "
+        pip install --no-cache-dir -r /requirements.metabase.txt &&
+        echo '⏳ Waiting for Metabase to start...' &&
+        sleep 30 &&
+        echo '🚀 Initializing Metabase with Reporting DB...' &&
+        python3 /init_metabase.py
+      "
+    networks:
+      - fraud-network
+    restart: "no"
+
+networks:
+  fraud-network:
+    driver: bridge
+
+volumes:
+  kafka-data:
+  airflow-db-data:
+  reporting-data:
+  metabase-data:

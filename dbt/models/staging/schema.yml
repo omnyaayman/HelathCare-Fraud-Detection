@@ -1,0 +1,48 @@
+version: 2
+
+models:
+  - name: stg_claims
+    description: "Staging view of claims data, reading from Gold Layer (Parquet) enriched claims."
+    columns:
+      - name: claim_id
+        description: "Unique claim identifier"
+        tests:
+          - unique
+          - not_null
+      - name: claim_amount
+        description: "Total claim amount"
+        tests:
+          - not_null
+      - name: is_fraud
+        description: "Boolean flag indicating if claim is fraudulent"
+        tests:
+          - accepted_values:
+              values: [true, false]
+      - name: fraud_score
+        description: "Fraud probability score (0-1)"
+      - name: risk_level
+        description: "Risk level: LOW, HIGH, CRITICAL"
+      - name: policy_number
+        description: "Policy number associated with the claim"
+      - name: provider_id
+        description: "Provider identifier"
+      - name: claim_date
+        description: "Date of the claim"
+      - name: claim_year
+        description: "Year of the claim"
+      - name: claim_month
+        description: "Month of the claim"
+      - name: claim_category
+        description: "Category based on claim amount (Low, Medium, High, Very High)"
+      - name: high_claim_flag
+        description: "Flag for claims above threshold"
+      - name: fraud_flag
+        description: "Human-readable fraud flag"
+      - name: risk_category
+        description: "Risk category (Critical Risk, High Risk, Low Risk)"
+      - name: ingested_at
+        description: "Timestamp when data was ingested into Bronze"
+      - name: claim_value_category
+        description: "Claim value category (High Value, Medium Value, Low Value)"
+      - name: fraud_impact_score
+        description: "Fraud score multiplied by claim amount"

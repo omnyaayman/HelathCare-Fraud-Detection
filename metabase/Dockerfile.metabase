@@ -1,0 +1,7 @@
+FROM metabase/metabase:v0.48.0
+
+# تحميل سائق DuckDB إلى المجلد الرسمي للمكونات الإضافية داخل الحاوية
+ADD https://github.com/MotherDuck-Open-Source/metabase_duckdb_driver/releases/download/0.2.12/duckdb.metabase-driver.jar /app/plugins/
+
+# تحديد مسار المكونات الإضافية
+ENV MB_PLUGINS_DIR=/app/plugins

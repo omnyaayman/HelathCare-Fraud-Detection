@@ -1,0 +1,13 @@
+fastapi
+uvicorn[standard]
+sqlalchemy
+pyodbc
+pydantic
+python-dotenv
+aiokafka
+aiohttp
+httpx
+joblib
+pandas
+xgboost
+scikit-learn

@@ -1,0 +1,16 @@
+FROM python:3.11-slim
+
+WORKDIR /app/dbt
+
+RUN apt-get update && apt-get install -y \
+    curl \
+    unixodbc \
+    unixodbc-dev \
+    && apt-get clean
+
+COPY requirements.dbt.txt .
+RUN pip install --no-cache-dir -r requirements.dbt.txt
+
+COPY . .
+
+CMD ["dbt", "run", "--profiles-dir", "."]

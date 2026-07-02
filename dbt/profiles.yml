@@ -1,0 +1,12 @@
+dbt_fraud_detection:
+  target: prod
+  outputs:
+    prod:
+      type: postgres
+      host: "{{ env_var('REPORTING_DB_HOST', 'reporting-db') }}"
+      port: "{{ env_var('REPORTING_DB_PORT', 5432) | int }}"
+      user: "{{ env_var('REPORTING_DB_USER', 'reporting') }}"
+      password: "{{ env_var('REPORTING_DB_PASSWORD', 'reporting123') }}"
+      dbname: "{{ env_var('REPORTING_DB_NAME', 'reporting') }}"
+      schema: "{{ env_var('REPORTING_DB_SCHEMA', 'public') }}"
+      threads: 4
