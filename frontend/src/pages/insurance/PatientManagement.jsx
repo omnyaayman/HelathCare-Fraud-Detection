@@ -92,8 +92,11 @@ export default function PatientManagement() {
   // Logic للبحث والفلترة
   const filtered = patients.filter((p) => {
     const q = search.toLowerCase();
-    const matchesSearch = !search || p.name?.toLowerCase().includes(q) || p.policy_id?.toLowerCase().includes(q);
-    const isActive = p.policy_end >= today;
+    const displayName = p.name || p.Patient_Name || (p.patient_id ? `Patient ${p.patient_id}` : 'Unknown patient');
+    const policyId = p.policy_id || p.Policy_ID || (p.patient_id ? `POL-${p.patient_id}` : '');
+    const matchesSearch = !search || displayName.toLowerCase().includes(q) || policyId.toLowerCase().includes(q);
+    const policyEnd = p.policy_end || p.Policy_End || today;
+    const isActive = policyEnd >= today;
     const matchesPolicy = policyFilter === 'All' || (policyFilter === 'Active' ? isActive : !isActive);
     return matchesSearch && matchesPolicy;
   });
@@ -183,24 +186,34 @@ export default function PatientManagement() {
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {paginated.map((p) => (
-                <tr key={p.patient_id} className="hover:bg-bg/30 transition-colors group">
-                  <td className="px-6 py-4">
-                    <div className="text-sm font-medium text-textPrimary">{p.name}</div>
-                    <div className="text-xs text-textSecondary">{p.gender}, {p.age}y</div>
-                  </td>
-                  <td className="px-6 py-4 font-mono text-xs text-primary font-semibold">{p.policy_id}</td>
-                  <td className="px-6 py-4">
-                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border ${p.policy_end >= today ? 'bg-success/10 text-success border-success/20' : 'bg-danger/10 text-danger border-danger/20'}`}>
-                      {p.policy_end >= today ? 'Active' : 'Expired'}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-right space-x-2">
-                    <button onClick={() => setEditing(p)} className="p-2 text-textSecondary hover:text-primary hover:bg-primary/10 rounded-lg transition-all"><Pencil size={14}/></button>
-                    <button onClick={() => setConfirmDelete(p)} className="p-2 text-textSecondary hover:text-danger hover:bg-danger/10 rounded-lg transition-all"><Trash2 size={14}/></button>
-                  </td>
-                </tr>
-              ))}
+              {paginated.map((p, index) => {
+                const displayName = p.name || p.Patient_Name || (p.patient_id ? `Patient ${p.patient_id}` : 'Unknown patient');
+                const policyId = p.policy_id || p.Policy_ID || (p.patient_id ? `POL-${p.patient_id}` : '—');
+                const patientAge = p.age ?? p.Age ?? '—';
+                const patientGender = p.gender ?? p.Gender ?? '—';
+                const policyEnd = p.policy_end || p.Policy_End || today;
+                const isActive = policyEnd >= today;
+                const rowKey = p.patient_id || p.Patient_ID || p.id || `${displayName}-${index}`;
+
+                return (
+                  <tr key={rowKey} className="hover:bg-bg/30 transition-colors group">
+                    <td className="px-6 py-4">
+                      <div className="text-sm font-medium text-textPrimary">{displayName}</div>
+                      <div className="text-xs text-textSecondary">{patientGender}, {patientAge}y</div>
+                    </td>
+                    <td className="px-6 py-4 font-mono text-xs text-primary font-semibold">{policyId}</td>
+                    <td className="px-6 py-4">
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border ${isActive ? 'bg-success/10 text-success border-success/20' : 'bg-danger/10 text-danger border-danger/20'}`}>
+                        {isActive ? 'Active' : 'Expired'}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-right space-x-2">
+                      <button onClick={() => setEditing(p)} className="p-2 text-textSecondary hover:text-primary hover:bg-primary/10 rounded-lg transition-all"><Pencil size={14}/></button>
+                      <button onClick={() => setConfirmDelete(p)} className="p-2 text-textSecondary hover:text-danger hover:bg-danger/10 rounded-lg transition-all"><Trash2 size={14}/></button>
+                    </td>
+                  </tr>
+                );
+              })}
               {paginated.length === 0 && (
                 <tr>
                   <td colSpan="4" className="px-6 py-12 text-center text-textSecondary italic">No patients found in Azure SQL.</td>

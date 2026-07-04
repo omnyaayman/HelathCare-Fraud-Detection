@@ -1,4 +1,15 @@
-const BASE_URL = 'http://127.0.0.1:8000'; 
+function getBaseUrl() {
+  const configured = import.meta.env?.VITE_API_URL?.trim();
+  if (configured) return configured.replace(/\/$/, '');
+
+  if (typeof window === 'undefined') {
+    return '';
+  }
+
+  return '';
+}
+
+const BASE_URL = getBaseUrl();
 
 // دالة لجلب التوكن من التخزين المحلي
 function getToken() {
