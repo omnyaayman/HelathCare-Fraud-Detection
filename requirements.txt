@@ -39,3 +39,6 @@ streamlit
 streamlit-autorefresh
 pytest==8.3.3    
 plotly
+
+
+azure-eventhub

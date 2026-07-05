@@ -219,6 +219,9 @@ services:
   # =====================================================
   # AIRFLOW-INIT (تهيئة القاعدة - تُنفذ مرة واحدة)
   # =====================================================
+    # =====================================================
+  # AIRFLOW-INIT (تهيئة القاعدة - تُنفذ مرة واحدة تلقائياً)
+  # =====================================================
   airflow-init:
     build:
       context: ./airflow
@@ -231,9 +234,8 @@ services:
       - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql://airflow:${AIRFLOW_DB_PASSWORD:-airflow}@airflow-db/airflow
       - AIRFLOW_ADMIN_PASSWORD=${AIRFLOW_ADMIN_PASSWORD:-admin}
       - AIRFLOW__CORE__LOAD_EXAMPLES=False
-      - AIRFLOW__WEBSERVER__SECRET_KEY=${AIRFLOW__WEBSERVER__SECRET_KEY:-change-me}
-      - AIRFLOW__CORE__FERNET_KEY=${AIRFLOW__CORE__FERNET_KEY:-change-me}
-      - AIRFLOW__API_AUTH__JWT_SECRET=${AIRFLOW__API_AUTH__JWT_SECRET:-change-me}
+      - AIRFLOW__WEBSERVER__SECRET_KEY=${AIRFLOW__WEBSERVER__SECRET_KEY:-change-me-key-12345678}
+      - AIRFLOW__CORE__FERNET_KEY=${AIRFLOW__CORE__FERNET_KEY:-tSloV_0Vf9W68b75eM3_LzQj9PqVzI1ZBlmIunXw7F0=}
     volumes:
       - ./airflow/dags:/opt/airflow/dags
       - ./airflow/scripts:/opt/airflow/scripts
@@ -242,28 +244,26 @@ services:
     entrypoint: ["/bin/bash", "-c"]
     command: |
       echo '============================================================'
-      echo '🔧 AIRFLOW INIT - تهيئة قاعدة البيانات'
+      echo '🔧 AIRFLOW INIT - Running Automated Schema Migrations'
       echo '============================================================'
-      echo '⏳ انتظار قاعدة البيانات...'
-      for i in {1..30}; do
-        if nc -z airflow-db 5432 2>/dev/null; then
-          echo '✅ قاعدة البيانات جاهزة!'
-          break
-        fi
-        echo "⏳ محاولة $i/30 - انتظار قاعدة البيانات..."
-        sleep 3
-      done
-      sleep 5
-      echo '🔄 تهيئة قاعدة البيانات (airflow db init)...'
+      
+      # 1. Initialize backend relational tables
       airflow db init
-      echo '🔄 ترقية قاعدة البيانات (airflow db upgrade)...'
-      airflow db upgrade
-      echo '👤 إنشاء مستخدم مدير...'
-      airflow users create --username admin --password ${AIRFLOW_ADMIN_PASSWORD} --firstname Admin --lastname User --role Admin --email admin@example.com 2>/dev/null || echo 'ℹ️ المستخدم موجود بالفعل'
-      echo '✅ تم تهيئة Airflow بنجاح!'
+      
+      # 2. Automatically seed the Web UI admin credential profile
+      airflow users create \
+        --username admin \
+        --firstname Admin \
+        --lastname User \
+        --role Admin \
+        --email admin@example.com \
+        --password admin || true
+        
+      echo '✅ Airflow schema and users initialized perfectly!'
     networks:
       - fraud-network
     restart: "no"
+
 
   # =====================================================
   # AIRFLOW-WEBSERVER - مع إعدادات الإنتاج

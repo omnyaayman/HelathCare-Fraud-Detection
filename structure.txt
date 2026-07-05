@@ -1,0 +1,521 @@
+.
+├── ./.dbt
+│   └── ./.dbt/profiles.yml
+├── ./.env
+├── ./.gitignore
+├── ./.pytest_cache
+│   ├── ./.pytest_cache/.gitignore
+│   ├── ./.pytest_cache/CACHEDIR.TAG
+│   ├── ./.pytest_cache/README.md
+│   └── ./.pytest_cache/v
+│       └── ./.pytest_cache/v/cache
+│           ├── ./.pytest_cache/v/cache/lastfailed
+│           ├── ./.pytest_cache/v/cache/nodeids
+│           └── ./.pytest_cache/v/cache/stepwise
+├── ./ML
+│   ├── ./ML/classifier.pkl
+│   ├── ./ML/complete_fraud_system.joblib
+│   ├── ./ML/features_list.pkl
+│   ├── ./ML/fraud_fixed.ipynb
+│   ├── ./ML/label_encoders.pkl
+│   ├── ./ML/predictor.py
+│   ├── ./ML/retrain_model.py
+│   └── ./ML/xgb_fraud_model.pkl
+├── ./README.md
+├── ./RunApp.bat
+├── ./RunApp.bat.txt
+├── ./SYSTEM_OVERVIEW.md
+├── ./Untitled-1.ipynb
+├── ./airflow
+│   ├── ./airflow/Dockerfile.airflow
+│   ├── ./airflow/airflow.cfg
+│   ├── ./airflow/dags
+│   │   ├── ./airflow/dags/healthcare_etl_dag.py
+│   │   └── ./airflow/dags/model_retraining_dag.py
+│   ├── ./airflow/requirements.airflow.txt
+│   └── ./airflow/scripts
+│       ├── ./airflow/scripts/delta_lake_handler.py
+│       ├── ./airflow/scripts/gold_layer.py
+│       └── ./airflow/scripts/silver_layer.py
+├── ./airflow.cfg
+├── ./app
+│   ├── ./app/Dockerfile.app
+│   ├── ./app/ML
+│   ├── ./app/__init__.py
+│   ├── ./app/core
+│   ├── ./app/main.py
+│   ├── ./app/requirements.app.txt
+│   ├── ./app/routes.py
+│   ├── ./app/schemas.py
+│   └── ./app/services
+├── ./core
+│   ├── ./core/__init__.py
+│   ├── ./core/config.py
+│   ├── ./core/constants.py
+│   └── ./core/state.py
+├── ./data
+│   ├── ./data/bronze
+│   │   ├── ./data/bronze/admission
+│   │   │   ├── ./data/bronze/admission/.part-00000-80716f62-bc57-4921-b03b-c85d2cda762f-c000.snappy.parquet.crc
+│   │   │   ├── ./data/bronze/admission/_delta_log
+│   │   │   │   ├── ./data/bronze/admission/_delta_log/.00000000000000000000.json.crc
+│   │   │   │   └── ./data/bronze/admission/_delta_log/00000000000000000000.json
+│   │   │   └── ./data/bronze/admission/part-00000-80716f62-bc57-4921-b03b-c85d2cda762f-c000.snappy.parquet
+│   │   ├── ./data/bronze/claims
+│   │   │   ├── ./data/bronze/claims/.part-00000-8e615e19-e4cb-47f6-a7a0-0c0a1103fde6-c000.snappy.parquet.crc
+│   │   │   ├── ./data/bronze/claims/_delta_log
+│   │   │   │   ├── ./data/bronze/claims/_delta_log/.00000000000000000000.json.crc
+│   │   │   │   └── ./data/bronze/claims/_delta_log/00000000000000000000.json
+│   │   │   └── ./data/bronze/claims/part-00000-8e615e19-e4cb-47f6-a7a0-0c0a1103fde6-c000.snappy.parquet
+│   │   ├── ./data/bronze/diagnosis
+│   │   │   ├── ./data/bronze/diagnosis/.part-00000-6eee6612-a5be-43ae-bbf1-cf8cca5978f9-c000.snappy.parquet.crc
+│   │   │   ├── ./data/bronze/diagnosis/_delta_log
+│   │   │   │   ├── ./data/bronze/diagnosis/_delta_log/.00000000000000000000.json.crc
+│   │   │   │   └── ./data/bronze/diagnosis/_delta_log/00000000000000000000.json
+│   │   │   └── ./data/bronze/diagnosis/part-00000-6eee6612-a5be-43ae-bbf1-cf8cca5978f9-c000.snappy.parquet
+│   │   ├── ./data/bronze/discharge
+│   │   │   ├── ./data/bronze/discharge/.part-00000-ee56d2c3-5d44-4f21-ab77-d1cde844fb56-c000.snappy.parquet.crc
+│   │   │   ├── ./data/bronze/discharge/_delta_log
+│   │   │   │   ├── ./data/bronze/discharge/_delta_log/.00000000000000000000.json.crc
+│   │   │   │   └── ./data/bronze/discharge/_delta_log/00000000000000000000.json
+│   │   │   └── ./data/bronze/discharge/part-00000-ee56d2c3-5d44-4f21-ab77-d1cde844fb56-c000.snappy.parquet
+│   │   ├── ./data/bronze/patient
+│   │   │   ├── ./data/bronze/patient/.part-00000-bc79e02b-c3af-43a7-b143-2a8fb2c8c59a-c000.snappy.parquet.crc
+│   │   │   ├── ./data/bronze/patient/_delta_log
+│   │   │   │   ├── ./data/bronze/patient/_delta_log/.00000000000000000000.json.crc
+│   │   │   │   └── ./data/bronze/patient/_delta_log/00000000000000000000.json
+│   │   │   └── ./data/bronze/patient/part-00000-bc79e02b-c3af-43a7-b143-2a8fb2c8c59a-c000.snappy.parquet
+│   │   ├── ./data/bronze/policy
+│   │   │   ├── ./data/bronze/policy/.part-00000-54a0b686-5345-4a34-8acb-446b1202846a-c000.snappy.parquet.crc
+│   │   │   ├── ./data/bronze/policy/_delta_log
+│   │   │   │   ├── ./data/bronze/policy/_delta_log/.00000000000000000000.json.crc
+│   │   │   │   └── ./data/bronze/policy/_delta_log/00000000000000000000.json
+│   │   │   └── ./data/bronze/policy/part-00000-54a0b686-5345-4a34-8acb-446b1202846a-c000.snappy.parquet
+│   │   ├── ./data/bronze/procedure
+│   │   │   ├── ./data/bronze/procedure/.part-00000-e47d8a49-2a7d-4cd8-81ad-26b933519939-c000.snappy.parquet.crc
+│   │   │   ├── ./data/bronze/procedure/_delta_log
+│   │   │   │   ├── ./data/bronze/procedure/_delta_log/.00000000000000000000.json.crc
+│   │   │   │   └── ./data/bronze/procedure/_delta_log/00000000000000000000.json
+│   │   │   └── ./data/bronze/procedure/part-00000-e47d8a49-2a7d-4cd8-81ad-26b933519939-c000.snappy.parquet
+│   │   ├── ./data/bronze/provider
+│   │   │   ├── ./data/bronze/provider/.part-00000-efd5b345-9d52-4ef0-82e0-bc6c191bc64b-c000.snappy.parquet.crc
+│   │   │   ├── ./data/bronze/provider/_delta_log
+│   │   │   │   ├── ./data/bronze/provider/_delta_log/.00000000000000000000.json.crc
+│   │   │   │   └── ./data/bronze/provider/_delta_log/00000000000000000000.json
+│   │   │   └── ./data/bronze/provider/part-00000-efd5b345-9d52-4ef0-82e0-bc6c191bc64b-c000.snappy.parquet
+│   │   └── ./data/bronze/service
+│   │       ├── ./data/bronze/service/.part-00000-1c92a383-921f-427e-bce0-2c2e3fda318a-c000.snappy.parquet.crc
+│   │       ├── ./data/bronze/service/_delta_log
+│   │       │   ├── ./data/bronze/service/_delta_log/.00000000000000000000.json.crc
+│   │       │   └── ./data/bronze/service/_delta_log/00000000000000000000.json
+│   │       └── ./data/bronze/service/part-00000-1c92a383-921f-427e-bce0-2c2e3fda318a-c000.snappy.parquet
+│   ├── ./data/gold
+│   │   ├── ./data/gold/age_analysis
+│   │   │   ├── ./data/gold/age_analysis/.part-00000-44f2fd27-cf57-4fa5-b014-a8aa60c2abe0-c000.snappy.parquet.crc
+│   │   │   ├── ./data/gold/age_analysis/.part-00000-841813ca-957e-4d23-a506-b6032d70c596-c000.snappy.parquet.crc
+│   │   │   ├── ./data/gold/age_analysis/.part-00000-92dfa76a-5131-485c-a380-c8e8f35a0cdb-c000.snappy.parquet.crc
+│   │   │   ├── ./data/gold/age_analysis/.part-00000-c392614d-0fb4-4886-8b27-082c15ac8bdd-c000.snappy.parquet.crc
+│   │   │   ├── ./data/gold/age_analysis/_delta_log
+│   │   │   │   ├── ./data/gold/age_analysis/_delta_log/.00000000000000000000.json.crc
+│   │   │   │   ├── ./data/gold/age_analysis/_delta_log/.00000000000000000001.json.crc
+│   │   │   │   ├── ./data/gold/age_analysis/_delta_log/.00000000000000000002.json.crc
+│   │   │   │   ├── ./data/gold/age_analysis/_delta_log/.00000000000000000003.json.crc
+│   │   │   │   ├── ./data/gold/age_analysis/_delta_log/00000000000000000000.json
+│   │   │   │   ├── ./data/gold/age_analysis/_delta_log/00000000000000000001.json
+│   │   │   │   ├── ./data/gold/age_analysis/_delta_log/00000000000000000002.json
+│   │   │   │   └── ./data/gold/age_analysis/_delta_log/00000000000000000003.json
+│   │   │   ├── ./data/gold/age_analysis/part-00000-44f2fd27-cf57-4fa5-b014-a8aa60c2abe0-c000.snappy.parquet
+│   │   │   ├── ./data/gold/age_analysis/part-00000-841813ca-957e-4d23-a506-b6032d70c596-c000.snappy.parquet
+│   │   │   ├── ./data/gold/age_analysis/part-00000-92dfa76a-5131-485c-a380-c8e8f35a0cdb-c000.snappy.parquet
+│   │   │   └── ./data/gold/age_analysis/part-00000-c392614d-0fb4-4886-8b27-082c15ac8bdd-c000.snappy.parquet
+│   │   ├── ./data/gold/claim_distribution
+│   │   │   ├── ./data/gold/claim_distribution/.part-00000-ab893866-4869-4945-8ef9-72370c3d147d-c000.snappy.parquet.crc
+│   │   │   ├── ./data/gold/claim_distribution/.part-00000-cffd68bd-c6df-4056-83c4-038a005a9c84-c000.snappy.parquet.crc
+│   │   │   ├── ./data/gold/claim_distribution/.part-00000-d8701dd8-7775-4e55-957b-67e9944bf4f3-c000.snappy.parquet.crc
+│   │   │   ├── ./data/gold/claim_distribution/.part-00000-ffa833db-1462-4b5d-95ed-289101d0ae68-c000.snappy.parquet.crc
+│   │   │   ├── ./data/gold/claim_distribution/_delta_log
+│   │   │   │   ├── ./data/gold/claim_distribution/_delta_log/.00000000000000000000.json.crc
+│   │   │   │   ├── ./data/gold/claim_distribution/_delta_log/.00000000000000000001.json.crc
+│   │   │   │   ├── ./data/gold/claim_distribution/_delta_log/.00000000000000000002.json.crc
+│   │   │   │   ├── ./data/gold/claim_distribution/_delta_log/.00000000000000000003.json.crc
+│   │   │   │   ├── ./data/gold/claim_distribution/_delta_log/00000000000000000000.json
+│   │   │   │   ├── ./data/gold/claim_distribution/_delta_log/00000000000000000001.json
+│   │   │   │   ├── ./data/gold/claim_distribution/_delta_log/00000000000000000002.json
+│   │   │   │   └── ./data/gold/claim_distribution/_delta_log/00000000000000000003.json
+│   │   │   ├── ./data/gold/claim_distribution/part-00000-ab893866-4869-4945-8ef9-72370c3d147d-c000.snappy.parquet
+│   │   │   ├── ./data/gold/claim_distribution/part-00000-cffd68bd-c6df-4056-83c4-038a005a9c84-c000.snappy.parquet
+│   │   │   ├── ./data/gold/claim_distribution/part-00000-d8701dd8-7775-4e55-957b-67e9944bf4f3-c000.snappy.parquet
+│   │   │   └── ./data/gold/claim_distribution/part-00000-ffa833db-1462-4b5d-95ed-289101d0ae68-c000.snappy.parquet
+│   │   ├── ./data/gold/dashboard.duckdb
+│   │   ├── ./data/gold/dashboard_kpis
+│   │   │   └── ./data/gold/dashboard_kpis/kpis.json
+│   │   ├── ./data/gold/day_analysis
+│   │   │   ├── ./data/gold/day_analysis/.part-00000-48e02362-bdde-459d-93aa-2a0cd0744ef2-c000.snappy.parquet.crc
+│   │   │   ├── ./data/gold/day_analysis/.part-00000-d3b17698-730d-4670-9e0d-904dcabcfe36-c000.snappy.parquet.crc
+│   │   │   ├── ./data/gold/day_analysis/.part-00000-ea917132-cba4-40ba-bd91-42bcbcccf450-c000.snappy.parquet.crc
+│   │   │   ├── ./data/gold/day_analysis/.part-00000-f14d6b89-b475-460b-a3c5-e4e0667b0eee-c000.snappy.parquet.crc
+│   │   │   ├── ./data/gold/day_analysis/_delta_log
+│   │   │   │   ├── ./data/gold/day_analysis/_delta_log/.00000000000000000000.json.crc
+│   │   │   │   ├── ./data/gold/day_analysis/_delta_log/.00000000000000000001.json.crc
+│   │   │   │   ├── ./data/gold/day_analysis/_delta_log/.00000000000000000002.json.crc
+│   │   │   │   ├── ./data/gold/day_analysis/_delta_log/.00000000000000000003.json.crc
+│   │   │   │   ├── ./data/gold/day_analysis/_delta_log/00000000000000000000.json
+│   │   │   │   ├── ./data/gold/day_analysis/_delta_log/00000000000000000001.json
+│   │   │   │   ├── ./data/gold/day_analysis/_delta_log/00000000000000000002.json
+│   │   │   │   └── ./data/gold/day_analysis/_delta_log/00000000000000000003.json
+│   │   │   ├── ./data/gold/day_analysis/part-00000-48e02362-bdde-459d-93aa-2a0cd0744ef2-c000.snappy.parquet
+│   │   │   ├── ./data/gold/day_analysis/part-00000-d3b17698-730d-4670-9e0d-904dcabcfe36-c000.snappy.parquet
+│   │   │   ├── ./data/gold/day_analysis/part-00000-ea917132-cba4-40ba-bd91-42bcbcccf450-c000.snappy.parquet
+│   │   │   └── ./data/gold/day_analysis/part-00000-f14d6b89-b475-460b-a3c5-e4e0667b0eee-c000.snappy.parquet
+│   │   ├── ./data/gold/diagnosis_fraud
+│   │   │   ├── ./data/gold/diagnosis_fraud/.part-00000-0c0fa3bb-9466-4dbc-a6df-63667f406da0-c000.snappy.parquet.crc
+│   │   │   ├── ./data/gold/diagnosis_fraud/.part-00000-285a2ddf-4fa5-47d5-9f38-d5bb7284d149-c000.snappy.parquet.crc
+│   │   │   ├── ./data/gold/diagnosis_fraud/.part-00000-58c998d6-7825-4ba6-aa03-65f150925802-c000.snappy.parquet.crc
+│   │   │   ├── ./data/gold/diagnosis_fraud/.part-00000-dd0e3474-5085-4195-93d5-46c1f2440607-c000.snappy.parquet.crc
+│   │   │   ├── ./data/gold/diagnosis_fraud/_delta_log
+│   │   │   │   ├── ./data/gold/diagnosis_fraud/_delta_log/.00000000000000000000.json.crc
+│   │   │   │   ├── ./data/gold/diagnosis_fraud/_delta_log/.00000000000000000001.json.crc
+│   │   │   │   ├── ./data/gold/diagnosis_fraud/_delta_log/.00000000000000000002.json.crc
+│   │   │   │   ├── ./data/gold/diagnosis_fraud/_delta_log/.00000000000000000003.json.crc
+│   │   │   │   ├── ./data/gold/diagnosis_fraud/_delta_log/00000000000000000000.json
+│   │   │   │   ├── ./data/gold/diagnosis_fraud/_delta_log/00000000000000000001.json
+│   │   │   │   ├── ./data/gold/diagnosis_fraud/_delta_log/00000000000000000002.json
+│   │   │   │   └── ./data/gold/diagnosis_fraud/_delta_log/00000000000000000003.json
+│   │   │   ├── ./data/gold/diagnosis_fraud/part-00000-0c0fa3bb-9466-4dbc-a6df-63667f406da0-c000.snappy.parquet
+│   │   │   ├── ./data/gold/diagnosis_fraud/part-00000-285a2ddf-4fa5-47d5-9f38-d5bb7284d149-c000.snappy.parquet
+│   │   │   ├── ./data/gold/diagnosis_fraud/part-00000-58c998d6-7825-4ba6-aa03-65f150925802-c000.snappy.parquet
+│   │   │   └── ./data/gold/diagnosis_fraud/part-00000-dd0e3474-5085-4195-93d5-46c1f2440607-c000.snappy.parquet
+│   │   ├── ./data/gold/geo_patient_analysis
+│   │   │   ├── ./data/gold/geo_patient_analysis/.part-00000-023e999d-3738-40cc-9572-e0be954e7d55-c000.snappy.parquet.crc
+│   │   │   ├── ./data/gold/geo_patient_analysis/.part-00000-6574643d-1187-4617-9caf-34fc562446be-c000.snappy.parquet.crc
+│   │   │   ├── ./data/gold/geo_patient_analysis/.part-00000-8cf8771e-5e82-494d-ab62-090a97cf7074-c000.snappy.parquet.crc
+│   │   │   ├── ./data/gold/geo_patient_analysis/.part-00000-a0b4b948-1209-4ddf-8c3f-1b6eb41e992f-c000.snappy.parquet.crc
+│   │   │   ├── ./data/gold/geo_patient_analysis/_delta_log
+│   │   │   │   ├── ./data/gold/geo_patient_analysis/_delta_log/.00000000000000000000.json.crc
+│   │   │   │   ├── ./data/gold/geo_patient_analysis/_delta_log/.00000000000000000001.json.crc
+│   │   │   │   ├── ./data/gold/geo_patient_analysis/_delta_log/.00000000000000000002.json.crc
+│   │   │   │   ├── ./data/gold/geo_patient_analysis/_delta_log/.00000000000000000003.json.crc
+│   │   │   │   ├── ./data/gold/geo_patient_analysis/_delta_log/00000000000000000000.json
+│   │   │   │   ├── ./data/gold/geo_patient_analysis/_delta_log/00000000000000000001.json
+│   │   │   │   ├── ./data/gold/geo_patient_analysis/_delta_log/00000000000000000002.json
+│   │   │   │   └── ./data/gold/geo_patient_analysis/_delta_log/00000000000000000003.json
+│   │   │   ├── ./data/gold/geo_patient_analysis/part-00000-023e999d-3738-40cc-9572-e0be954e7d55-c000.snappy.parquet
+│   │   │   ├── ./data/gold/geo_patient_analysis/part-00000-6574643d-1187-4617-9caf-34fc562446be-c000.snappy.parquet
+│   │   │   ├── ./data/gold/geo_patient_analysis/part-00000-8cf8771e-5e82-494d-ab62-090a97cf7074-c000.snappy.parquet
+│   │   │   └── ./data/gold/geo_patient_analysis/part-00000-a0b4b948-1209-4ddf-8c3f-1b6eb41e992f-c000.snappy.parquet
+│   │   ├── ./data/gold/geo_provider_analysis
+│   │   │   ├── ./data/gold/geo_provider_analysis/.part-00000-36532570-5bac-4209-bd70-49435fadab3b-c000.snappy.parquet.crc
+│   │   │   ├── ./data/gold/geo_provider_analysis/.part-00000-4e8ef446-c0c7-4697-b354-5d549586a080-c000.snappy.parquet.crc
+│   │   │   ├── ./data/gold/geo_provider_analysis/.part-00000-bce49f65-33be-45c0-b219-d9a7c3a442fa-c000.snappy.parquet.crc
+│   │   │   ├── ./data/gold/geo_provider_analysis/.part-00000-e68494b2-31e8-4272-b6d2-3beb8fae28cb-c000.snappy.parquet.crc
+│   │   │   ├── ./data/gold/geo_provider_analysis/_delta_log
+│   │   │   │   ├── ./data/gold/geo_provider_analysis/_delta_log/.00000000000000000000.json.crc
+│   │   │   │   ├── ./data/gold/geo_provider_analysis/_delta_log/.00000000000000000001.json.crc
+│   │   │   │   ├── ./data/gold/geo_provider_analysis/_delta_log/.00000000000000000002.json.crc
+│   │   │   │   ├── ./data/gold/geo_provider_analysis/_delta_log/.00000000000000000003.json.crc
+│   │   │   │   ├── ./data/gold/geo_provider_analysis/_delta_log/00000000000000000000.json
+│   │   │   │   ├── ./data/gold/geo_provider_analysis/_delta_log/00000000000000000001.json
+│   │   │   │   ├── ./data/gold/geo_provider_analysis/_delta_log/00000000000000000002.json
+│   │   │   │   └── ./data/gold/geo_provider_analysis/_delta_log/00000000000000000003.json
+│   │   │   ├── ./data/gold/geo_provider_analysis/part-00000-36532570-5bac-4209-bd70-49435fadab3b-c000.snappy.parquet
+│   │   │   ├── ./data/gold/geo_provider_analysis/part-00000-4e8ef446-c0c7-4697-b354-5d549586a080-c000.snappy.parquet
+│   │   │   ├── ./data/gold/geo_provider_analysis/part-00000-bce49f65-33be-45c0-b219-d9a7c3a442fa-c000.snappy.parquet
+│   │   │   └── ./data/gold/geo_provider_analysis/part-00000-e68494b2-31e8-4272-b6d2-3beb8fae28cb-c000.snappy.parquet
+│   │   ├── ./data/gold/monthly_trends
+│   │   │   ├── ./data/gold/monthly_trends/.part-00000-212e8b9b-7e55-4e97-be72-b3f100d88f41-c000.snappy.parquet.crc
+│   │   │   ├── ./data/gold/monthly_trends/.part-00000-47c072fe-dc73-4fe5-8e7b-22e12ec425e9-c000.snappy.parquet.crc
+│   │   │   ├── ./data/gold/monthly_trends/.part-00000-5daac2b6-d133-4478-9258-05630e9d3778-c000.snappy.parquet.crc
+│   │   │   ├── ./data/gold/monthly_trends/.part-00000-a9163158-f236-43fb-9d07-2659976c1c1f-c000.snappy.parquet.crc
+│   │   │   ├── ./data/gold/monthly_trends/.part-00000-fb24e2e1-52aa-4d06-807d-05c5961dd9e0-c000.snappy.parquet.crc
+│   │   │   ├── ./data/gold/monthly_trends/_delta_log
+│   │   │   │   ├── ./data/gold/monthly_trends/_delta_log/.00000000000000000000.json.crc
+│   │   │   │   ├── ./data/gold/monthly_trends/_delta_log/.00000000000000000001.json.crc
+│   │   │   │   ├── ./data/gold/monthly_trends/_delta_log/.00000000000000000002.json.crc
+│   │   │   │   ├── ./data/gold/monthly_trends/_delta_log/.00000000000000000003.json.crc
+│   │   │   │   ├── ./data/gold/monthly_trends/_delta_log/.00000000000000000004.json.crc
+│   │   │   │   ├── ./data/gold/monthly_trends/_delta_log/00000000000000000000.json
+│   │   │   │   ├── ./data/gold/monthly_trends/_delta_log/00000000000000000001.json
+│   │   │   │   ├── ./data/gold/monthly_trends/_delta_log/00000000000000000002.json
+│   │   │   │   ├── ./data/gold/monthly_trends/_delta_log/00000000000000000003.json
+│   │   │   │   └── ./data/gold/monthly_trends/_delta_log/00000000000000000004.json
+│   │   │   ├── ./data/gold/monthly_trends/part-00000-212e8b9b-7e55-4e97-be72-b3f100d88f41-c000.snappy.parquet
+│   │   │   ├── ./data/gold/monthly_trends/part-00000-47c072fe-dc73-4fe5-8e7b-22e12ec425e9-c000.snappy.parquet
+│   │   │   ├── ./data/gold/monthly_trends/part-00000-5daac2b6-d133-4478-9258-05630e9d3778-c000.snappy.parquet
+│   │   │   ├── ./data/gold/monthly_trends/part-00000-a9163158-f236-43fb-9d07-2659976c1c1f-c000.snappy.parquet
+│   │   │   └── ./data/gold/monthly_trends/part-00000-fb24e2e1-52aa-4d06-807d-05c5961dd9e0-c000.snappy.parquet
+│   │   ├── ./data/gold/patient_risk
+│   │   │   ├── ./data/gold/patient_risk/.part-00000-3765212b-a160-4b7a-8fc0-b8647efe7e78-c000.snappy.parquet.crc
+│   │   │   ├── ./data/gold/patient_risk/.part-00000-884395c3-302f-4d72-9015-cbd79f780b0c-c000.snappy.parquet.crc
+│   │   │   ├── ./data/gold/patient_risk/.part-00000-88ab7ffa-0151-4752-b05b-42bce390915a-c000.snappy.parquet.crc
+│   │   │   ├── ./data/gold/patient_risk/.part-00000-cdede336-244f-4bbf-81f2-d5157287de56-c000.snappy.parquet.crc
+│   │   │   ├── ./data/gold/patient_risk/_delta_log
+│   │   │   │   ├── ./data/gold/patient_risk/_delta_log/.00000000000000000000.json.crc
+│   │   │   │   ├── ./data/gold/patient_risk/_delta_log/.00000000000000000001.json.crc
+│   │   │   │   ├── ./data/gold/patient_risk/_delta_log/.00000000000000000002.json.crc
+│   │   │   │   ├── ./data/gold/patient_risk/_delta_log/.00000000000000000003.json.crc
+│   │   │   │   ├── ./data/gold/patient_risk/_delta_log/00000000000000000000.json
+│   │   │   │   ├── ./data/gold/patient_risk/_delta_log/00000000000000000001.json
+│   │   │   │   ├── ./data/gold/patient_risk/_delta_log/00000000000000000002.json
+│   │   │   │   └── ./data/gold/patient_risk/_delta_log/00000000000000000003.json
+│   │   │   ├── ./data/gold/patient_risk/part-00000-3765212b-a160-4b7a-8fc0-b8647efe7e78-c000.snappy.parquet
+│   │   │   ├── ./data/gold/patient_risk/part-00000-884395c3-302f-4d72-9015-cbd79f780b0c-c000.snappy.parquet
+│   │   │   ├── ./data/gold/patient_risk/part-00000-88ab7ffa-0151-4752-b05b-42bce390915a-c000.snappy.parquet
+│   │   │   └── ./data/gold/patient_risk/part-00000-cdede336-244f-4bbf-81f2-d5157287de56-c000.snappy.parquet
+│   │   ├── ./data/gold/procedure_fraud
+│   │   │   ├── ./data/gold/procedure_fraud/.part-00000-59cd75f9-75a1-4217-ab84-66059ab372e4-c000.snappy.parquet.crc
+│   │   │   ├── ./data/gold/procedure_fraud/.part-00000-6f210718-99a2-4dad-b91f-6c74f298bd2e-c000.snappy.parquet.crc
+│   │   │   ├── ./data/gold/procedure_fraud/.part-00000-8b84f5ca-73a8-4db6-b4d4-40e469de0af8-c000.snappy.parquet.crc
+│   │   │   ├── ./data/gold/procedure_fraud/.part-00000-9255d7cd-4a9c-4f41-a125-17a7db5fe557-c000.snappy.parquet.crc
+│   │   │   ├── ./data/gold/procedure_fraud/_delta_log
+│   │   │   │   ├── ./data/gold/procedure_fraud/_delta_log/.00000000000000000000.json.crc
+│   │   │   │   ├── ./data/gold/procedure_fraud/_delta_log/.00000000000000000001.json.crc
+│   │   │   │   ├── ./data/gold/procedure_fraud/_delta_log/.00000000000000000002.json.crc
+│   │   │   │   ├── ./data/gold/procedure_fraud/_delta_log/.00000000000000000003.json.crc
+│   │   │   │   ├── ./data/gold/procedure_fraud/_delta_log/00000000000000000000.json
+│   │   │   │   ├── ./data/gold/procedure_fraud/_delta_log/00000000000000000001.json
+│   │   │   │   ├── ./data/gold/procedure_fraud/_delta_log/00000000000000000002.json
+│   │   │   │   └── ./data/gold/procedure_fraud/_delta_log/00000000000000000003.json
+│   │   │   ├── ./data/gold/procedure_fraud/part-00000-59cd75f9-75a1-4217-ab84-66059ab372e4-c000.snappy.parquet
+│   │   │   ├── ./data/gold/procedure_fraud/part-00000-6f210718-99a2-4dad-b91f-6c74f298bd2e-c000.snappy.parquet
+│   │   │   ├── ./data/gold/procedure_fraud/part-00000-8b84f5ca-73a8-4db6-b4d4-40e469de0af8-c000.snappy.parquet
+│   │   │   └── ./data/gold/procedure_fraud/part-00000-9255d7cd-4a9c-4f41-a125-17a7db5fe557-c000.snappy.parquet
+│   │   └── ./data/gold/provider_risk
+│   │       ├── ./data/gold/provider_risk/.part-00000-12b60629-a990-4b10-8806-940a2cf1aeab-c000.snappy.parquet.crc
+│   │       ├── ./data/gold/provider_risk/.part-00000-28d8fecb-d4f0-4853-9934-91167bdf7368-c000.snappy.parquet.crc
+│   │       ├── ./data/gold/provider_risk/.part-00000-6d06c851-61da-4c3b-ae88-cf3ea9738c18-c000.snappy.parquet.crc
+│   │       ├── ./data/gold/provider_risk/.part-00000-f5401c38-333b-46e8-b2af-6dd51c8370be-c000.snappy.parquet.crc
+│   │       ├── ./data/gold/provider_risk/.part-00000-fa219b45-2fa6-43f0-9d17-87e4d10a4558-c000.snappy.parquet.crc
+│   │       ├── ./data/gold/provider_risk/_delta_log
+│   │       │   ├── ./data/gold/provider_risk/_delta_log/.00000000000000000000.json.crc
+│   │       │   ├── ./data/gold/provider_risk/_delta_log/.00000000000000000001.json.crc
+│   │       │   ├── ./data/gold/provider_risk/_delta_log/.00000000000000000002.json.crc
+│   │       │   ├── ./data/gold/provider_risk/_delta_log/.00000000000000000003.json.crc
+│   │       │   ├── ./data/gold/provider_risk/_delta_log/.00000000000000000004.json.crc
+│   │       │   ├── ./data/gold/provider_risk/_delta_log/00000000000000000000.json
+│   │       │   ├── ./data/gold/provider_risk/_delta_log/00000000000000000001.json
+│   │       │   ├── ./data/gold/provider_risk/_delta_log/00000000000000000002.json
+│   │       │   ├── ./data/gold/provider_risk/_delta_log/00000000000000000003.json
+│   │       │   └── ./data/gold/provider_risk/_delta_log/00000000000000000004.json
+│   │       ├── ./data/gold/provider_risk/part-00000-12b60629-a990-4b10-8806-940a2cf1aeab-c000.snappy.parquet
+│   │       ├── ./data/gold/provider_risk/part-00000-28d8fecb-d4f0-4853-9934-91167bdf7368-c000.snappy.parquet
+│   │       ├── ./data/gold/provider_risk/part-00000-6d06c851-61da-4c3b-ae88-cf3ea9738c18-c000.snappy.parquet
+│   │       ├── ./data/gold/provider_risk/part-00000-f5401c38-333b-46e8-b2af-6dd51c8370be-c000.snappy.parquet
+│   │       └── ./data/gold/provider_risk/part-00000-fa219b45-2fa6-43f0-9d17-87e4d10a4558-c000.snappy.parquet
+│   ├── ./data/great_expectations
+│   │   └── ./data/great_expectations/checkpoints
+│   │       └── ./data/great_expectations/checkpoints/silver_claims_checkpoint.json
+│   └── ./data/silver
+│       ├── ./data/silver/claims
+│       │   ├── ./data/silver/claims/.part-00000-0ec4767e-81e2-4f0b-a095-69032eb69478-c000.snappy.parquet.crc
+│       │   ├── ./data/silver/claims/.part-00000-782919aa-36cf-4c59-a314-361ceabc4035-c000.snappy.parquet.crc
+│       │   ├── ./data/silver/claims/.part-00000-84ba196e-6dec-40c9-9ef9-cc40cd3d7e43-c000.snappy.parquet.crc
+│       │   ├── ./data/silver/claims/_delta_log
+│       │   │   ├── ./data/silver/claims/_delta_log/.00000000000000000000.json.crc
+│       │   │   ├── ./data/silver/claims/_delta_log/.00000000000000000001.json.crc
+│       │   │   ├── ./data/silver/claims/_delta_log/.00000000000000000002.json.crc
+│       │   │   ├── ./data/silver/claims/_delta_log/00000000000000000000.json
+│       │   │   ├── ./data/silver/claims/_delta_log/00000000000000000001.json
+│       │   │   └── ./data/silver/claims/_delta_log/00000000000000000002.json
+│       │   ├── ./data/silver/claims/part-00000-0ec4767e-81e2-4f0b-a095-69032eb69478-c000.snappy.parquet
+│       │   ├── ./data/silver/claims/part-00000-782919aa-36cf-4c59-a314-361ceabc4035-c000.snappy.parquet
+│       │   └── ./data/silver/claims/part-00000-84ba196e-6dec-40c9-9ef9-cc40cd3d7e43-c000.snappy.parquet
+│       ├── ./data/silver/diagnosis
+│       │   ├── ./data/silver/diagnosis/.part-00000-150f8ad1-fca3-4849-a4e7-4527a23adf1b-c000.snappy.parquet.crc
+│       │   ├── ./data/silver/diagnosis/.part-00000-dc70f475-443f-4832-a9f7-f281cdb00623-c000.snappy.parquet.crc
+│       │   ├── ./data/silver/diagnosis/.part-00000-fa05e908-54d8-4805-9e9d-9d7daa17ceed-c000.snappy.parquet.crc
+│       │   ├── ./data/silver/diagnosis/_delta_log
+│       │   │   ├── ./data/silver/diagnosis/_delta_log/.00000000000000000000.json.crc
+│       │   │   ├── ./data/silver/diagnosis/_delta_log/.00000000000000000001.json.crc
+│       │   │   ├── ./data/silver/diagnosis/_delta_log/.00000000000000000002.json.crc
+│       │   │   ├── ./data/silver/diagnosis/_delta_log/00000000000000000000.json
+│       │   │   ├── ./data/silver/diagnosis/_delta_log/00000000000000000001.json
+│       │   │   └── ./data/silver/diagnosis/_delta_log/00000000000000000002.json
+│       │   ├── ./data/silver/diagnosis/part-00000-150f8ad1-fca3-4849-a4e7-4527a23adf1b-c000.snappy.parquet
+│       │   ├── ./data/silver/diagnosis/part-00000-dc70f475-443f-4832-a9f7-f281cdb00623-c000.snappy.parquet
+│       │   └── ./data/silver/diagnosis/part-00000-fa05e908-54d8-4805-9e9d-9d7daa17ceed-c000.snappy.parquet
+│       ├── ./data/silver/master_claims
+│       │   ├── ./data/silver/master_claims/.part-00000-59d12fba-65e1-433d-a079-fa327006d0bb-c000.snappy.parquet.crc
+│       │   ├── ./data/silver/master_claims/_delta_log
+│       │   │   ├── ./data/silver/master_claims/_delta_log/.00000000000000000000.json.crc
+│       │   │   └── ./data/silver/master_claims/_delta_log/00000000000000000000.json
+│       │   └── ./data/silver/master_claims/part-00000-59d12fba-65e1-433d-a079-fa327006d0bb-c000.snappy.parquet
+│       ├── ./data/silver/patient
+│       │   ├── ./data/silver/patient/.part-00000-5a454eda-addb-45b7-9614-159d18d48bed-c000.snappy.parquet.crc
+│       │   ├── ./data/silver/patient/.part-00000-fa4e4fb5-3e42-4fab-b51e-d26a15c97853-c000.snappy.parquet.crc
+│       │   ├── ./data/silver/patient/.part-00000-fc834641-0c1a-405d-84a7-69116c80363a-c000.snappy.parquet.crc
+│       │   ├── ./data/silver/patient/_delta_log
+│       │   │   ├── ./data/silver/patient/_delta_log/.00000000000000000000.json.crc
+│       │   │   ├── ./data/silver/patient/_delta_log/.00000000000000000001.json.crc
+│       │   │   ├── ./data/silver/patient/_delta_log/.00000000000000000002.json.crc
+│       │   │   ├── ./data/silver/patient/_delta_log/00000000000000000000.json
+│       │   │   ├── ./data/silver/patient/_delta_log/00000000000000000001.json
+│       │   │   └── ./data/silver/patient/_delta_log/00000000000000000002.json
+│       │   ├── ./data/silver/patient/part-00000-5a454eda-addb-45b7-9614-159d18d48bed-c000.snappy.parquet
+│       │   ├── ./data/silver/patient/part-00000-fa4e4fb5-3e42-4fab-b51e-d26a15c97853-c000.snappy.parquet
+│       │   └── ./data/silver/patient/part-00000-fc834641-0c1a-405d-84a7-69116c80363a-c000.snappy.parquet
+│       ├── ./data/silver/policy
+│       │   ├── ./data/silver/policy/.part-00000-46241f7e-9176-44bc-b86d-f8232137a647-c000.snappy.parquet.crc
+│       │   ├── ./data/silver/policy/.part-00000-900fe7e6-9c00-40b3-8682-3e91f006b0bc-c000.snappy.parquet.crc
+│       │   ├── ./data/silver/policy/.part-00000-b72afc90-0e0e-4d55-b144-1de2b6164e8b-c000.snappy.parquet.crc
+│       │   ├── ./data/silver/policy/_delta_log
+│       │   │   ├── ./data/silver/policy/_delta_log/.00000000000000000000.json.crc
+│       │   │   ├── ./data/silver/policy/_delta_log/.00000000000000000001.json.crc
+│       │   │   ├── ./data/silver/policy/_delta_log/.00000000000000000002.json.crc
+│       │   │   ├── ./data/silver/policy/_delta_log/00000000000000000000.json
+│       │   │   ├── ./data/silver/policy/_delta_log/00000000000000000001.json
+│       │   │   └── ./data/silver/policy/_delta_log/00000000000000000002.json
+│       │   ├── ./data/silver/policy/part-00000-46241f7e-9176-44bc-b86d-f8232137a647-c000.snappy.parquet
+│       │   ├── ./data/silver/policy/part-00000-900fe7e6-9c00-40b3-8682-3e91f006b0bc-c000.snappy.parquet
+│       │   └── ./data/silver/policy/part-00000-b72afc90-0e0e-4d55-b144-1de2b6164e8b-c000.snappy.parquet
+│       ├── ./data/silver/procedure
+│       │   ├── ./data/silver/procedure/.part-00000-4ea74a0d-58e3-4ec1-879d-d579100a328e-c000.snappy.parquet.crc
+│       │   ├── ./data/silver/procedure/.part-00000-805459f9-0c0f-4e07-b619-939e1dedfba7-c000.snappy.parquet.crc
+│       │   ├── ./data/silver/procedure/.part-00000-b236f1e8-c20c-4ed1-9618-bdbaf2c39372-c000.snappy.parquet.crc
+│       │   ├── ./data/silver/procedure/_delta_log
+│       │   │   ├── ./data/silver/procedure/_delta_log/.00000000000000000000.json.crc
+│       │   │   ├── ./data/silver/procedure/_delta_log/.00000000000000000001.json.crc
+│       │   │   ├── ./data/silver/procedure/_delta_log/.00000000000000000002.json.crc
+│       │   │   ├── ./data/silver/procedure/_delta_log/00000000000000000000.json
+│       │   │   ├── ./data/silver/procedure/_delta_log/00000000000000000001.json
+│       │   │   └── ./data/silver/procedure/_delta_log/00000000000000000002.json
+│       │   ├── ./data/silver/procedure/part-00000-4ea74a0d-58e3-4ec1-879d-d579100a328e-c000.snappy.parquet
+│       │   ├── ./data/silver/procedure/part-00000-805459f9-0c0f-4e07-b619-939e1dedfba7-c000.snappy.parquet
+│       │   └── ./data/silver/procedure/part-00000-b236f1e8-c20c-4ed1-9618-bdbaf2c39372-c000.snappy.parquet
+│       ├── ./data/silver/provider
+│       │   ├── ./data/silver/provider/.part-00000-1b30545a-f525-4310-b547-cbc046b4aace-c000.snappy.parquet.crc
+│       │   ├── ./data/silver/provider/.part-00000-acd3c7b2-f6dd-47fe-b11d-7a3562c95d92-c000.snappy.parquet.crc
+│       │   ├── ./data/silver/provider/.part-00000-b6a841be-907b-42aa-a83f-8eb7a7380712-c000.snappy.parquet.crc
+│       │   ├── ./data/silver/provider/_delta_log
+│       │   │   ├── ./data/silver/provider/_delta_log/.00000000000000000000.json.crc
+│       │   │   ├── ./data/silver/provider/_delta_log/.00000000000000000001.json.crc
+│       │   │   ├── ./data/silver/provider/_delta_log/.00000000000000000002.json.crc
+│       │   │   ├── ./data/silver/provider/_delta_log/00000000000000000000.json
+│       │   │   ├── ./data/silver/provider/_delta_log/00000000000000000001.json
+│       │   │   └── ./data/silver/provider/_delta_log/00000000000000000002.json
+│       │   ├── ./data/silver/provider/part-00000-1b30545a-f525-4310-b547-cbc046b4aace-c000.snappy.parquet
+│       │   ├── ./data/silver/provider/part-00000-acd3c7b2-f6dd-47fe-b11d-7a3562c95d92-c000.snappy.parquet
+│       │   └── ./data/silver/provider/part-00000-b6a841be-907b-42aa-a83f-8eb7a7380712-c000.snappy.parquet
+│       └── ./data/silver/service
+│           ├── ./data/silver/service/.part-00000-556dc83e-f489-476a-8dcb-a9847a0e7aac-c000.snappy.parquet.crc
+│           ├── ./data/silver/service/.part-00000-67ee8866-81d9-4fe8-ba7f-8c1e424f5a84-c000.snappy.parquet.crc
+│           ├── ./data/silver/service/.part-00000-7c89adfb-b0f0-47bf-acc0-de822e4f6575-c000.snappy.parquet.crc
+│           ├── ./data/silver/service/_delta_log
+│           │   ├── ./data/silver/service/_delta_log/.00000000000000000000.json.crc
+│           │   ├── ./data/silver/service/_delta_log/.00000000000000000001.json.crc
+│           │   ├── ./data/silver/service/_delta_log/.00000000000000000002.json.crc
+│           │   ├── ./data/silver/service/_delta_log/00000000000000000000.json
+│           │   ├── ./data/silver/service/_delta_log/00000000000000000001.json
+│           │   └── ./data/silver/service/_delta_log/00000000000000000002.json
+│           ├── ./data/silver/service/part-00000-556dc83e-f489-476a-8dcb-a9847a0e7aac-c000.snappy.parquet
+│           ├── ./data/silver/service/part-00000-67ee8866-81d9-4fe8-ba7f-8c1e424f5a84-c000.snappy.parquet
+│           └── ./data/silver/service/part-00000-7c89adfb-b0f0-47bf-acc0-de822e4f6575-c000.snappy.parquet
+├── ./dbt
+│   ├── ./dbt/.user.yml
+│   ├── ./dbt/Dockerfile.dbt
+│   ├── ./dbt/dbt_project.yml
+│   ├── ./dbt/macros
+│   │   └── ./dbt/macros/macros.sql
+│   ├── ./dbt/models
+│   │   ├── ./dbt/models/marts
+│   │   │   └── ./dbt/models/marts/dashboard
+│   │   │       ├── ./dbt/models/marts/dashboard/dashboard_metrics.sql
+│   │   │       ├── ./dbt/models/marts/dashboard/fraud_summary.sql
+│   │   │       ├── ./dbt/models/marts/dashboard/monthly_trends.sql
+│   │   │       ├── ./dbt/models/marts/dashboard/provider_ranking.sql
+│   │   │       ├── ./dbt/models/marts/dashboard/provider_risk.sql
+│   │   │       └── ./dbt/models/marts/dashboard/risk_distribution.sql
+│   │   └── ./dbt/models/staging
+│   │       ├── ./dbt/models/staging/schema.yml
+│   │       └── ./dbt/models/staging/stg_claims.sql
+│   ├── ./dbt/profiles.yml
+│   └── ./dbt/requirements.dbt.txt
+├── ./docker-compose.yml
+├── ./frontend
+│   ├── ./frontend/.gitignore
+│   ├── ./frontend/BACKEND_SETUP.md
+│   ├── ./frontend/Dockerfile.frontend
+│   ├── ./frontend/README.md
+│   ├── ./frontend/dashboard.py
+│   ├── ./frontend/eslint.config.js
+│   ├── ./frontend/index.html
+│   ├── ./frontend/package-lock.json
+│   ├── ./frontend/package.json
+│   ├── ./frontend/postcss.config.js
+│   ├── ./frontend/public
+│   │   └── ./frontend/public/vite.svg
+│   ├── ./frontend/src
+│   │   ├── ./frontend/src/App.jsx
+│   │   ├── ./frontend/src/api.js
+│   │   ├── ./frontend/src/assets
+│   │   │   └── ./frontend/src/assets/react.svg
+│   │   ├── ./frontend/src/components
+│   │   │   ├── ./frontend/src/components/BulkActions.jsx
+│   │   │   ├── ./frontend/src/components/Layout.jsx
+│   │   │   ├── ./frontend/src/components/LoadingScreen.jsx
+│   │   │   ├── ./frontend/src/components/Modal.jsx
+│   │   │   ├── ./frontend/src/components/Pagination.jsx
+│   │   │   ├── ./frontend/src/components/RouteLoader.jsx
+│   │   │   ├── ./frontend/src/components/SelectWithAdd.jsx
+│   │   │   ├── ./frontend/src/components/Sidebar.jsx
+│   │   │   ├── ./frontend/src/components/Skeleton.jsx
+│   │   │   └── ./frontend/src/components/StatusBadge.jsx
+│   │   ├── ./frontend/src/constants.js
+│   │   ├── ./frontend/src/context
+│   │   │   └── ./frontend/src/context/AuthContext.jsx
+│   │   ├── ./frontend/src/index.css
+│   │   ├── ./frontend/src/main.jsx
+│   │   └── ./frontend/src/pages
+│   │       ├── ./frontend/src/pages/Login.jsx
+│   │       ├── ./frontend/src/pages/insurance
+│   │       │   ├── ./frontend/src/pages/insurance/CopayManagement.jsx
+│   │       │   ├── ./frontend/src/pages/insurance/FlaggedClaims.jsx
+│   │       │   ├── ./frontend/src/pages/insurance/InsuranceDashboard.jsx
+│   │       │   ├── ./frontend/src/pages/insurance/LabeledData.jsx
+│   │       │   ├── ./frontend/src/pages/insurance/ModelManagement.jsx
+│   │       │   ├── ./frontend/src/pages/insurance/PatientManagement.jsx
+│   │       │   ├── ./frontend/src/pages/insurance/ProviderManagement.jsx
+│   │       │   └── ./frontend/src/pages/insurance/ReviewClaims.jsx
+│   │       └── ./frontend/src/pages/provider
+│   │           ├── ./frontend/src/pages/provider/ProviderDashboard.jsx
+│   │           ├── ./frontend/src/pages/provider/SubmitClaim.jsx
+│   │           └── ./frontend/src/pages/provider/TrackClaims.jsx
+│   ├── ./frontend/tailwind.config.js
+│   └── ./frontend/vite.config.js
+├── ./get_schema.py
+├── ./kafka-consumer
+│   ├── ./kafka-consumer/Dockerfile.consumer
+│   ├── ./kafka-consumer/ML
+│   ├── ./kafka-consumer/core
+│   ├── ./kafka-consumer/kafka_consumer.py
+│   ├── ./kafka-consumer/requirements.consumer.txt
+│   └── ./kafka-consumer/services
+├── ./metabase
+│   ├── ./metabase/Dockerfile.metabase
+│   ├── ./metabase/dashboards.json
+│   ├── ./metabase/entrypoint.sh
+│   ├── ./metabase/init_metabase.py
+│   └── ./metabase/requirements.metabase.txt
+├── ./mssql-jdbc-13.4.0.jre11.jar
+├── ./requirements.txt
+├── ./run-docker.sh
+├── ./scripts
+│   └── ./scripts/init_kafka_topics.py
+├── ./services
+│   ├── ./services/__init__.py
+│   └── ./services/azure_db.py
+├── ./setup_azure_sql.py
+├── ./spark
+│   └── ./spark/jars
+│       ├── ./spark/jars/commons-pool2-2.11.1.jar
+│       ├── ./spark/jars/kafka-clients-3.4.0.jar
+│       ├── ./spark/jars/mssql-jdbc-13.4.0.jre11.jar
+│       ├── ./spark/jars/spark-sql-kafka-0-10_2.12-3.4.0.jar
+│       └── ./spark/jars/spark-token-provider-kafka-0-10_2.12-3.4.3.jar
+├── ./structure.txt
+├── ./test_connect.py
+├── ./test_prediction.py
+├── ./tests
+│   └── ./tests/test_claim_fallback.py
+└── ./update_db.py
+
+100 directories, 419 files
