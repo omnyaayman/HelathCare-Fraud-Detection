@@ -1,5 +1,5 @@
 function getBaseUrl() {
-  const configured = import.meta.env?.VITE_API_URL?.trim();
+  const configured = import.meta.env.VITE_API_URL || 'https://fraud-backend.salmonforest-f64ff0e9.uaenorth.azurecontainerapps.io';
   if (configured) return configured.replace(/\/$/, '');
 
   if (typeof window === 'undefined') {
