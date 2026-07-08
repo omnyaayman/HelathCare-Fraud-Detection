@@ -15,8 +15,8 @@ class Settings:
     TABLE_PROVIDER = os.getenv("TABLE_PROVIDER", "Provider")
     TABLE_PATIENT = os.getenv("TABLE_PATIENT", "Patient")
     TABLE_POLICY = os.getenv("TABLE_POLICY", "Policy")
-
-    KAFKA_BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:29092")
+    KAFKA_BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS")
+    EVENTHUB_CONNECTION_STRING = os.getenv("EVENTHUB_CONNECTION_STRING")
     TOPIC_CLAIMS_RAW = os.getenv("TOPIC_CLAIMS_RAW", "raw_claims")
     TOPIC_CLAIMS_EVALUATED = os.getenv("TOPIC_CLAIMS_EVALUATED", "evaluated_claims")
 

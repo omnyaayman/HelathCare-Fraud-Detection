@@ -12,3 +12,4 @@ pandas
 xgboost
 scikit-learn
 azure-eventhub
+confluent-kafka

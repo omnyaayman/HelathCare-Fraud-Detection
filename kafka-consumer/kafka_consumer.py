@@ -5,14 +5,21 @@ import os
 import sys
 from confluent_kafka import Consumer, Producer, KafkaError
 
-sys.path.append("/app")
-from core.config import settings
+from app.core.config import settings
 from ML.predictor import predictor
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
-producer = Producer({"bootstrap.servers": settings.KAFKA_BOOTSTRAP_SERVERS})
+producer = Producer({
+    "bootstrap.servers": settings.KAFKA_BOOTSTRAP_SERVERS,
+
+    "security.protocol": "SASL_SSL",
+    "sasl.mechanisms": "PLAIN",
+    "sasl.username": "$ConnectionString",
+    "sasl.password": settings.EVENTHUB_CONNECTION_STRING
+})
+
 
 def delivery_report(err, msg):
     if err:
@@ -77,7 +84,12 @@ def run_consumer():
         "bootstrap.servers": settings.KAFKA_BOOTSTRAP_SERVERS,
         "group.id": "fraud-detection-group",
         "auto.offset.reset": "earliest",
-        "enable.auto.commit": True
+        "enable.auto.commit": True,
+
+        "security.protocol": "SASL_SSL",
+        "sasl.mechanisms": "PLAIN",
+        "sasl.username": "$ConnectionString",
+        "sasl.password": settings.EVENTHUB_CONNECTION_STRING
     })
     consumer.subscribe([settings.TOPIC_CLAIMS_RAW])
     logger.info("Fraud Consumer started")

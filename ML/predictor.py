@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 BASE_DIR_ENV = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 load_dotenv(os.path.join(BASE_DIR_ENV, ".env"))
 
-from core.constants import (
+from app.core.constants import (
     MODEL_PATH,
     ENCODERS_PATH,
     XGB_FEATURES,
