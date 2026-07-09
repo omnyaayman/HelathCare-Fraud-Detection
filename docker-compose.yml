@@ -1,0 +1,100 @@
+services:
+  
+
+  # ==========================================
+  # Zookeeper 
+  # ==========================================
+   zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+
+  # ==========================================
+  # Kafka Broker
+  # ==========================================
+   kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: kafka
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+
+  # ==========================================
+  # Airflow
+  # ==========================================
+   airflow:
+    image: apache/airflow:2.7.0
+    container_name: airflow
+    depends_on:
+      - kafka
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./logs:/opt/airflow/logs
+      - ./data:/opt/airflow/data
+      - ./model:/opt/airflow/model
+      - ./reports:/opt/airflow/reports
+    environment:
+      AIRFLOWCORELOAD_EXAMPLES: "False"
+      AIRFLOWCOREEXECUTOR: SequentialExecutor
+      AIRFLOWDATABASESQL_ALCHEMY_CONN: sqlite:////opt/airflow/airflow.db
+    command: >
+      bash -c "
+      airflow db init &&
+      airflow users create
+      --username admin
+      --password admin
+      --firstname admin
+      --lastname admin
+      --role Admin
+      --email admin@example.com || true &&
+      airflow scheduler &
+      exec airflow webserver
+      "
+
+
+   airflow:
+
+    image: apache/airflow:2.7.0
+
+    container_name: airflow
+
+    ports:
+      - "8080:8080"
+
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./logs:/opt/airflow/logs
+      - ./data:/opt/airflow/data
+      - ./model:/opt/airflow/model
+      - ./reports:/opt/airflow/reports
+
+    environment:
+      AIRFLOW__CORE__LOAD_EXAMPLES: "False"
+      AIRFLOW__CORE__EXECUTOR: SequentialExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: sqlite:////opt/airflow/airflow.db
+
+    command: >
+      bash -c "
+      airflow db init &&
+      airflow users create
+      --username admin
+      --password admin
+      --firstname admin
+      --lastname admin
+      --role Admin
+      --email admin@example.com || true &&
+      airflow scheduler & 
+      exec airflow webserver
+      "
+
