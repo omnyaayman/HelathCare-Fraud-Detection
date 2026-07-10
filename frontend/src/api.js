@@ -52,7 +52,10 @@ async function request(method, path, body = null, params = null) {
     
     if (!res.ok) {
       const errBody = await res.json().catch(() => ({}));
-      throw new Error(errBody.detail || `Server Error ${res.status}`);
+
+      console.log("Validation Error:", errBody);
+
+      throw errBody;
     }
     
     return await res.json();
