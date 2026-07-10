@@ -221,11 +221,15 @@ async def process_claim(claim: ClaimCreate, db: Session = Depends(get_db)):
             "source": "fallback"
         })
 
-    if state.KAFKA_PRODUCER:
+    if state.PRODUCER:
         try:
-            await state.KAFKA_PRODUCER.send_and_wait(settings.TOPIC_CLAIMS_RAW, payload)
+            state.PRODUCER.send_claim(
+                settings.TOPIC_CLAIMS_RAW,
+                payload
+            )
+            print(f"Sent claim {claim_id} to Event Hub")
         except Exception as e:
-            print(f"Kafka error: {e}")
+            print(f"Event Hub error: {e}")
 
     return {
         "claim_id": claim_id,

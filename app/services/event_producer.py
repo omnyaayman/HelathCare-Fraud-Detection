@@ -20,6 +20,8 @@ class EventProducer:
             print(f"Delivered to {msg.topic()}")
 
     def send_claim(self, topic, payload):
+        print(f"Publishing to {topic}: {payload}")
+        
         self.producer.produce(
             topic,
             json.dumps(payload).encode("utf-8"),
