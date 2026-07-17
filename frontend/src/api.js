@@ -58,6 +58,7 @@ const api = {
   getStats: () => request('GET', '/api/stats'),
   getMetrics: () => request('GET', '/api/stats'), // Alias for compatibility
   getClaims: (params) => request('GET', '/api/claims', null, params),
+  submitClaim: (data) => request('POST', '/api/claims', data),
   updateClaimStatus: (id, status) => request('PATCH', `/api/claims/${id}/status`, { status }),
   
   getPatients: () => request('GET', '/api/patients'),

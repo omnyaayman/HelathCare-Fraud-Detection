@@ -34,7 +34,6 @@ const roleConfigs = {
       { to: '/insurance/audit-logs', label: 'Audit Logs', icon: Activity },
       { to: '/insurance/notifications', label: 'Notifications', icon: AlertCircle },
       { to: '/insurance/system-monitoring', label: 'System Monitoring', icon: MonitorCog },
-      { to: '/insurance/users', label: 'User Management', icon: UserCog },
       { to: '/insurance/settings', label: 'Settings', icon: Settings },
     ],
   },

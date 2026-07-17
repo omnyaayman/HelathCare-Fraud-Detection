@@ -9,6 +9,7 @@ from core.config import settings
 import datetime
 import decimal
 import random
+from ML.predictor import predictor
 
 router = APIRouter()
 security = HTTPBasic()
@@ -40,9 +41,16 @@ def get_current_user(credentials: HTTPBasicCredentials = Depends(security), db: 
         return {"role": "insurance", "provider_id": None, "username": credentials.username}
     
     try:
-        result = db.execute(text("SELECT Provider_ID FROM Provider WHERE Name = :u"), {"u": credentials.username}).fetchone()
+        # Resolve by ID, Name, or 'provider_ID'
+        result = db.execute(text("""
+            SELECT Provider_ID, Name 
+            FROM Provider 
+            WHERE Provider_ID = :u 
+               OR Name = :u 
+               OR 'provider_' || Provider_ID = :u
+        """), {"u": credentials.username}).fetchone()
         if result:
-            return {"role": "provider", "provider_id": result[0], "username": credentials.username}
+            return {"role": "provider", "provider_id": result[0], "username": result[1]}
     except SQLAlchemyError:
         pass
     
@@ -1088,3 +1096,195 @@ async def delete_labeled_data(id: int, db: Session = Depends(get_db), user: dict
         db.rollback()
         print(f"Delete labeled data error: {e}")
         raise HTTPException(status_code=500, detail="Failed to delete labeled data")
+
+@router.post("/claims")
+async def submit_claim(data: dict, db: Session = Depends(get_db), user: dict = Depends(get_current_user)):
+    ensure_sample_data(db)
+    policy_number = data.get("policy_number")
+    if not policy_number:
+        raise HTTPException(status_code=400, detail="Policy number is required")
+        
+    # Check if this is just a policy verification check
+    if data.get("check_only"):
+        try:
+            policy = db.execute(text("""
+                SELECT po.Policy_End_Date, pt.Name
+                FROM Policy po
+                JOIN Patient pt ON po.Patient_ID = pt.Patient_ID
+                WHERE po.Policy_ID = :p_id
+            """), {"p_id": policy_number}).fetchone()
+            
+            if not policy:
+                raise HTTPException(status_code=404, detail="Policy not found")
+                
+            today = datetime.date.today().isoformat()
+            status = "Active" if policy[0] >= today else "Expired"
+            
+            return {
+                "patient_name": policy[1],
+                "policy_status": status
+            }
+        except SQLAlchemyError as e:
+            print(f"Policy lookup error: {e}")
+            raise HTTPException(status_code=500, detail="Database lookup failed")
+        
+    # Otherwise, process the claim submission
+    try:
+        # Retrieve Patient_ID and Policy details
+        policy = db.execute(text("""
+            SELECT Patient_ID, Annual_Deductible, CoPay_Amount
+            FROM Policy WHERE Policy_ID = :p_id
+        """), {"p_id": policy_number}).fetchone()
+        
+        if not policy:
+            raise HTTPException(status_code=404, detail="Policy not found")
+            
+        patient_id = policy[0]
+        deductible_amount = policy[1]
+        copay_amount = policy[2]
+        
+        # Resolve provider
+        provider_id = user.get("provider_id")
+        if not provider_id:
+            # Fallback/default provider if none is associated with user (e.g. admin testing)
+            provider_id = db.execute(text("SELECT Provider_ID FROM Provider LIMIT 1")).scalar() or 1
+            
+        # Get provider details for ML prediction engineering
+        provider = db.execute(text("SELECT Type, Specialty, City, State FROM Provider WHERE Provider_ID = :prov_id"), {"prov_id": provider_id}).fetchone()
+        
+        # Get patient details
+        patient = db.execute(text("SELECT Age, Gender, City, State, Total_Claims FROM Patient WHERE Patient_ID = :pat_id"), {"pat_id": patient_id}).fetchone()
+        
+        # Build features dict for XGBoost prediction
+        claim_amount = float(data.get("claim_amount", 500))
+        service_type = data.get("service_type", "General")
+        diagnosis_code = data.get("diagnosis_code", "Unknown")
+        procedure_code = data.get("procedure_code", "Unknown")
+        admission_type = data.get("admission_type", "Emergency")
+        discharge_type = data.get("discharge_type", "Home")
+        
+        # Fetch service ID
+        service_id = db.execute(text("SELECT Service_ID FROM Service WHERE Name = :s_name"), {"s_name": service_type}).scalar()
+        if not service_id:
+            # Fallback service
+            service_id = db.execute(text("SELECT Service_ID FROM Service LIMIT 1")).scalar()
+            
+        # Calculate current patient and provider historical claims count
+        prev_claims_patient = patient[4] if patient else 0
+        
+        prev_claims_provider = db.execute(text("SELECT COUNT(*) FROM Claims WHERE Provider_ID = :prov_id"), {"prov_id": provider_id}).scalar() or 0
+        
+        # Predict using ML model
+        claim_date = datetime.date.today().isoformat()
+        service_date = data.get("service_date", claim_date)
+        
+        raw_features = {
+            "Claim_Amount": claim_amount,
+            "Patient_Age": patient[0] if patient else 40,
+            "Patient_Gender": patient[1] if patient else "Unknown",
+            "Provider_Type": provider[0] if provider else "Clinic",
+            "Provider_Specialty": provider[1] if provider else "General Practice",
+            "Diagnosis_Code": diagnosis_code,
+            "Number_of_Procedures": 1,
+            "Admission_Type": admission_type,
+            "Discharge_Type": discharge_type,
+            "Length_of_Stay_Days": 0,
+            "Service_Type": service_type,
+            "Deductible_Amount": deductible_amount,
+            "CoPay_Amount": copay_amount,
+            "Number_of_Previous_Claims_Patient": prev_claims_patient,
+            "Number_of_Previous_Claims_Provider": prev_claims_provider,
+            "Provider_Patient_Distance_Miles": 10.0,  # Default
+            "Claim_Submitted_Late": 0,
+            "Claim_Date": claim_date,
+            "Service_Date": service_date,
+            "Policy_Expiration_Date": claim_date  # Default
+        }
+        
+        pred_res = predictor.predict(raw_features)
+        fraud_score = float(pred_res.get("fraud_score", 0.5))
+        prediction = pred_res.get("prediction", "Normal")
+        
+        is_fraudulent = 1 if prediction == "Fraud" else 0
+        status = "Submitted" if is_fraudulent else "Approved"
+        
+        # Insert claim record
+        result = db.execute(text("""
+            INSERT INTO Claims (
+                Patient_ID, Provider_ID, Policy_ID, Service_ID, Diagnosis_Code, Procedure_Code,
+                Number_of_Procedures, Admission_Type, Discharge_Type, Length_of_Stay_Days,
+                Claim_Amount, Deductible_Amount, CoPay_Amount, Number_of_Previous_Claims_Patient,
+                Number_of_Previous_Claims_Provider, Provider_Patient_Distance_Miles, Claim_Submitted_Late,
+                Is_Fraudulent, Fraud_Score, Status, Claim_Date, Service_Date
+            ) VALUES (
+                :patient_id, :provider_id, :policy_id, :service_id, :diagnosis_code, :procedure_code,
+                1, :admission_type, :discharge_type, 0,
+                :claim_amount, :deductible_amount, :copay_amount, :prev_claims_patient,
+                :prev_claims_provider, 10.0, 0,
+                :is_fraudulent, :fraud_score, :status, :claim_date, :service_date
+            )
+        """), {
+            "patient_id": patient_id,
+            "provider_id": provider_id,
+            "policy_id": policy_number,
+            "service_id": service_id,
+            "diagnosis_code": diagnosis_code,
+            "procedure_code": procedure_code,
+            "admission_type": admission_type,
+            "discharge_type": discharge_type,
+            "claim_amount": claim_amount,
+            "deductible_amount": deductible_amount,
+            "copay_amount": copay_amount,
+            "prev_claims_patient": prev_claims_patient,
+            "prev_claims_provider": prev_claims_provider,
+            "is_fraudulent": is_fraudulent,
+            "fraud_score": fraud_score,
+            "status": status,
+            "claim_date": claim_date,
+            "service_date": service_date
+        })
+        
+        # Get last inserted row ID
+        claim_id = db.execute(text("SELECT last_insert_rowid()")).scalar()
+        
+        # Update provider stats
+        db.execute(text("""
+            UPDATE Provider
+            SET 
+                Total_Claims = Total_Claims + 1,
+                Fraud_Claims = Fraud_Claims + :is_fraud,
+                Avg_Fraud_Score = (SELECT AVG(Fraud_Score) FROM Claims WHERE Provider_ID = :prov_id)
+            WHERE Provider_ID = :prov_id
+        """), {"is_fraud": is_fraudulent, "prov_id": provider_id})
+        
+        # Update patient stats
+        db.execute(text("""
+            UPDATE Patient
+            SET Total_Claims = Total_Claims + 1
+            WHERE Patient_ID = :pat_id
+        """), {"pat_id": patient_id})
+        
+        # If fraudulent, create a system notification!
+        if is_fraudulent:
+            db.execute(text("""
+                INSERT INTO Notifications (title, message, type, created_at)
+                VALUES (:title, :message, :type, :created_at)
+            """), {
+                "title": "High Risk Claim Detected",
+                "message": f"Claim #{claim_id} from {provider[1] if provider else 'provider'} has a high fraud probability score of {fraud_score * 100:.1f}%.",
+                "type": "fraud",
+                "created_at": datetime.datetime.now().isoformat()
+            })
+            
+        db.commit()
+        log_audit(db, user, "SUBMIT_CLAIM", f"Claim {claim_id} processed by AI, score: {fraud_score}")
+        
+        return {
+            "prediction": prediction,
+            "fraud_score": fraud_score
+        }
+        
+    except Exception as e:
+        db.rollback()
+        print(f"Claim submission processing error: {e}")
+        raise HTTPException(status_code=500, detail=f"Claim processing failed: {str(e)}")

@@ -27,8 +27,6 @@ import NotificationCenter from './pages/NotificationCenter';
 import SystemMonitoring from './pages/insurance/SystemMonitoring';
 import AIInsights from './pages/insurance/AIInsights';
 import FraudHeatmap from './pages/insurance/FraudHeatmap';
-import UserManagement from './pages/insurance/UserManagement';
-
 // مكوّن حماية المسارات (Guard)
 const ProtectedRoute = ({ children, allowedRole }) => {
   const { user } = useAuth();
@@ -91,7 +89,6 @@ function AppRoutes() {
           <Route path="/insurance/audit-logs" element={<AuditLogs />} />
           <Route path="/insurance/notifications" element={<NotificationCenter />} />
           <Route path="/insurance/system-monitoring" element={<SystemMonitoring />} />
-          <Route path="/insurance/users" element={<UserManagement />} />
           <Route path="/insurance/settings" element={<Settings />} />
         </Route>
 
