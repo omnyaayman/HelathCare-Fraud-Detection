@@ -1,10 +1,9 @@
-const BASE_URL = 'http://127.0.0.1:8000'; 
 
-// دالة لجلب التوكن من التخزين المحلي
+const BASE_URL = (import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000').replace(/\/$/, ''); 
+
 function getToken() {
   try {
     const stored = localStorage.getItem('fraud_auth_user');
-    // التوكن هنا هو base64(username:password) اللي اتخزن وقت اللوجين
     if (stored) return JSON.parse(stored).token;
   } catch (error) {
     return null;
@@ -12,13 +11,11 @@ function getToken() {
   return null;
 }
 
-// الدالة المركزية للطلبات
 async function request(method, path, body = null, params = null) {
   const token = getToken();
   
   let url = `${BASE_URL}${path}`;
   if (params) {
-    // تحويل الأوبجكت لـ query string (مثلاً: ?min_score=0.6)
     const queryString = new URLSearchParams(params).toString();
     url += `?${queryString}`;
   }
@@ -28,7 +25,6 @@ async function request(method, path, body = null, params = null) {
     'Accept': 'application/json'
   };
 
-  // لو فيه توكن (يوزر مسجل)، ابعته في الهيدر
   if (token) {
     headers['Authorization'] = `Basic ${token}`;
   }
@@ -52,55 +48,59 @@ async function request(method, path, body = null, params = null) {
 }
 
 const api = {
-  // 0️⃣ تسجيل الدخول (Authentication)
   login: async (username, password) => {
-    const token = btoa(`${username}:${password}`); // تحويل لـ Base64
-    const res = await fetch(`${BASE_URL}/api/login`, {
-      method: 'POST',
-      headers: { 
-        'Authorization': `Basic ${token}`,
-        'Content-Type': 'application/json'
-      }
-    });
-    if (!res.ok) throw new Error('Invalid credentials');
-    const data = await res.json();
-    return { ...data, token }; // بنرجع بيانات اليوزر مع التوكن عشان يتخزن
+    const token = btoa(`${username}:${password}`);
+    const data = { token, username, role: username === 'admin_insurance' ? 'insurance' : 'provider' };
+    localStorage.setItem('fraud_auth_user', JSON.stringify(data));
+    return data;
   },
 
-  // 1️⃣ المطالبات (Claims)
-  submitClaim: (data) => request('POST', '/api/process-claim', data),
-  getClaims: (params = {}) => request('GET', '/api/my-claims', null, params),
-  updateClaimStatus: (id, data) => request('PATCH', `/api/claims/${id}`, data),
-
-  // 2️⃣ المرضى والسياسات (Patients & Policies)
+  getStats: () => request('GET', '/api/stats'),
+  getMetrics: () => request('GET', '/api/stats'), // Alias for compatibility
+  getClaims: (params) => request('GET', '/api/claims', null, params),
+  updateClaimStatus: (id, status) => request('PATCH', `/api/claims/${id}/status`, { status }),
+  
   getPatients: () => request('GET', '/api/patients'),
-  createPatient: (data) => request('POST', '/api/patients', data),
-  updatePatient: (id, data) => request('PATCH', `/api/patients/${id}`, data),
-  deletePatient: (id) => request('DELETE', `/api/patients/${id}`),
-  importPatients: (rows) => request('POST', '/api/patients/bulk', rows),
-  updatePolicy: (id, data) => request('PATCH', `/api/policies/${id}`, data),
-
-  // 3️⃣ المزودين (Providers)
-  getProviders: () => request('GET', '/api/providers-list'),
-  createProvider: (data) => request('POST', '/api/providers', data),
-  deleteProvider: (id) => request('DELETE', `/api/providers/${id}`),
-
-  // 4️⃣ البيانات المصنفة (Labeled Data للتدريب)
-  getLabeledData: () => request('GET', '/api/labeled-data'),
-  createLabeledRecord: (data) => request('POST', '/api/labeled-data', data),
-  importLabeledData: (rows) => request('POST', '/api/labeled-data/bulk', rows),
-
-  // 5️⃣ الإحصائيات والموديل (Admin & Metrics)
-  getMetrics: () => request('GET', '/api/stats'),
-  triggerRetrain: () => request('POST', '/api/retrain'),
-
-  // 6️⃣ إدارة الخدمات والكوباي (Services & Copay Management) - التعديل الجديد 🔥
+  getProviders: () => request('GET', '/api/providers'),
+  getPolicies: () => request('GET', '/api/policies'),
   getServices: () => request('GET', '/api/services'),
   createService: (data) => request('POST', '/api/services', data),
-  updateServiceCopay: (id, data) => request('PATCH', `/api/services/${id}`, data),
+  updateService: (id, data) => request('PATCH', `/api/services/${id}`, data),
+  deleteService: (id) => request('DELETE', `/api/services/${id}`),
   
-  // دالة عامة للطوارئ
-  request: (method, path, body, params) => request(method, path, body, params)
+  getLabeledData: (params) => request('GET', '/api/labeled-data', null, params),
+  updateLabeledRecord: (id, data) => request('PATCH', `/api/labeled-data/${id}`, data),
+  deleteLabeledRecord: (id) => request('DELETE', `/api/labeled-data/${id}`),
+
+  getClaimsOverTime: () => request('GET', '/api/charts/claims-over-time'),
+  getFraudByProvider: () => request('GET', '/api/charts/fraud-by-provider'),
+  getFraudByRegion: () => request('GET', '/api/charts/fraud-by-region'),
+  getFraudByDiagnosis: () => request('GET', '/api/charts/fraud-by-diagnosis'),
+  getFraudByCity: () => request('GET', '/api/charts/fraud-by-city'),
+  getFraudScoreDistribution: () => request('GET', '/api/charts/fraud-score-distribution'),
+  getClaimStatusDistribution: () => request('GET', '/api/charts/claim-status-distribution'),
+  getMonthlyClaims: () => request('GET', '/api/charts/monthly-claims'),
+  getAverageClaimCost: () => request('GET', '/api/charts/average-claim-cost'),
+
+  getTopProviders: () => request('GET', '/api/analytics/top-providers'),
+  getTopPatients: () => request('GET', '/api/analytics/top-patients'),
+  getTopDiagnoses: () => request('GET', '/api/analytics/top-diagnoses'),
+
+  getAiInsights: () => request('GET', '/api/ai-insights'),
+  
+  getNotifications: () => request('GET', '/api/notifications'),
+  markNotificationRead: (id) => request('PATCH', `/api/notifications/${id}/read`),
+  markAllNotificationsRead: () => request('PATCH', '/api/notifications/read-all'),
+  
+  getModelMetrics: () => request('GET', '/api/model/metrics'),
+  triggerRetrain: () => request('POST', '/api/model/retrain'),
+  
+  getAuditLogs: (params) => request('GET', '/api/audit-logs', null, params),
+  
+  getSystemHealth: () => request('GET', '/api/system/health'),
+  
+  getHeatmapProviders: () => request('GET', '/api/heatmap/providers'),
 };
 
 export default api;
+

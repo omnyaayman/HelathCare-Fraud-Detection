@@ -16,4 +16,4 @@ claims_per_patient.to_csv("data/gold/claims_per_patient.csv", index=False)
 avg_cost.to_csv("data/gold/avg_cost.csv", index=False)
 fraud_cases.to_csv("data/gold/fraud_cases.csv", index=False)
 
-print("Gold layer created ✅")
+print("Gold layer created")

@@ -1,17 +1,19 @@
 export default function StatusBadge({ status }) {
   const styles = {
-    Pending: 'bg-warning/15 text-warning',
-    Processing: 'bg-primary/15 text-primary',
-    Flagged: 'bg-accent/15 text-accent',
-    Cleared: 'bg-success/15 text-success',
-    'Fraud Confirmed': 'bg-danger/15 text-danger',
-    Real: 'bg-success/15 text-success',
-    Fraud: 'bg-danger/15 text-danger',
+    Pending: 'border-warning/25 bg-warning/10 text-warning',
+    Processing: 'border-primary/25 bg-primary/10 text-primary',
+    Flagged: 'border-accent/25 bg-accent/10 text-accent',
+    Cleared: 'border-success/25 bg-success/10 text-success',
+    Active: 'border-success/25 bg-success/10 text-success',
+    Expired: 'border-danger/25 bg-danger/10 text-danger',
+    'Fraud Confirmed': 'border-danger/25 bg-danger/10 text-danger',
+    Real: 'border-success/25 bg-success/10 text-success',
+    Fraud: 'border-danger/25 bg-danger/10 text-danger',
   };
 
   return (
-    <span className={`inline-block px-2 py-0.5 text-xs font-medium rounded ${styles[status] || 'bg-border/30 text-textSecondary'}`}>
-      {status}
+    <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[10px] font-black uppercase tracking-wide ${styles[status] || 'border-border bg-bg/70 text-textSecondary'}`}>
+      {status || 'Unknown'}
     </span>
   );
 }

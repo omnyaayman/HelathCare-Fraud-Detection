@@ -1,3 +1,4 @@
+
 import { createContext, useContext, useState, useEffect } from 'react';
 import api from '../api';
 
@@ -7,7 +8,6 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // 1. التحقق من وجود جلسة دخول مسجلة عند فتح التطبيق
   useEffect(() => {
     const stored = localStorage.getItem('fraud_auth_user');
     if (stored) {
@@ -20,37 +20,28 @@ export function AuthProvider({ children }) {
     setLoading(false);
   }, []);
 
-  // 2. دالة تسجيل الدخول الحقيقية المرتبطة بـ FastAPI (POST /api/login)
   const login = async (username, password) => {
     try {
-      // api.login يستدعي /api/login الحقيقي، واللي بيتحقق فعلياً من
-      // اسم المستخدم وكلمة المرور في قاعدة البيانات (أو حساب الأدمن الثابت)
-      // ويرجّع الـ role الصحيح من السيرفر بدل ما نخمنه من اسم اليوزر
-      const data = await api.login(username, password);
-
-      const userData = {
+      const userData = await api.login(username, password);
+      const userObj = {
         id: username,
-        username: data.username,
-        role: data.role,
-        name: data.role === 'insurance' ? 'Insurance Management' : `Hospital Provider #${data.username}`,
-        token: data.token, // Basic-auth token، هنحتاجه لإرسال الطلبات لاحقاً
+        username: userData.username,
+        role: userData.role,
+        name: userData.role === 'insurance' ? 'Insurance Management' : `Provider ${username}`,
+        token: userData.token,
       };
-
-      setUser(userData);
-      localStorage.setItem('fraud_auth_user', JSON.stringify(userData));
-      return { success: true, user: userData };
+      setUser(userObj);
+      localStorage.setItem('fraud_auth_user', JSON.stringify(userObj));
+      return { success: true, user: userObj };
     } catch (error) {
       console.error('Login Error:', error);
       return {
         success: false,
-        error: error.message === 'Invalid credentials'
-          ? 'خطأ في اسم المستخدم أو كلمة المرور'
-          : 'تعذر الاتصال بالسيرفر. تأكد من تشغيل FastAPI',
+        error: 'Invalid credentials. Please try again.',
       };
     }
   };
 
-  // 3. دالة تسجيل الخروج
   const logout = () => {
     setUser(null);
     localStorage.removeItem('fraud_auth_user');
@@ -68,3 +59,4 @@ export function useAuth() {
   if (!ctx) throw new Error('useAuth must be inside AuthProvider');
   return ctx;
 }
+

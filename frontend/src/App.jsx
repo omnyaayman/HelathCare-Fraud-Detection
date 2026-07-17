@@ -5,11 +5,12 @@ import RouteLoader from './components/RouteLoader';
 import Login from './pages/Login';
 import LoadingScreen from './components/LoadingScreen';
 
-// Pages Import (نفس اللي عندك)
+// Pages Import
 import ProviderDashboard from './pages/provider/ProviderDashboard';
 import SubmitClaim from './pages/provider/SubmitClaim';
 import TrackClaims from './pages/provider/TrackClaims';
 import InsuranceDashboard from './pages/insurance/InsuranceDashboard';
+import ExecutiveDashboard from './pages/insurance/ExecutiveDashboard';
 import ProviderManagement from './pages/insurance/ProviderManagement';
 import PatientManagement from './pages/insurance/PatientManagement';
 import ReviewClaims from './pages/insurance/ReviewClaims';
@@ -17,6 +18,16 @@ import FlaggedClaims from './pages/insurance/FlaggedClaims';
 import LabeledData from './pages/insurance/LabeledData';
 import CopayManagement from './pages/insurance/CopayManagement';
 import ModelManagement from './pages/insurance/ModelManagement';
+import Analytics from './pages/insurance/Analytics';
+import Reports from './pages/insurance/Reports';
+import Policies from './pages/insurance/Policies';
+import Settings from './pages/insurance/Settings';
+import AuditLogs from './pages/insurance/AuditLogs';
+import NotificationCenter from './pages/NotificationCenter';
+import SystemMonitoring from './pages/insurance/SystemMonitoring';
+import AIInsights from './pages/insurance/AIInsights';
+import FraudHeatmap from './pages/insurance/FraudHeatmap';
+import UserManagement from './pages/insurance/UserManagement';
 
 // مكوّن حماية المسارات (Guard)
 const ProtectedRoute = ({ children, allowedRole }) => {
@@ -64,13 +75,24 @@ function AppRoutes() {
           </ProtectedRoute>
         }>
           <Route path="/insurance/dashboard" element={<InsuranceDashboard />} />
+          <Route path="/insurance/executive" element={<ExecutiveDashboard />} />
           <Route path="/insurance/providers" element={<ProviderManagement />} />
           <Route path="/insurance/patients" element={<PatientManagement />} />
+          <Route path="/insurance/policies" element={<Policies />} />
           <Route path="/insurance/review" element={<ReviewClaims />} />
           <Route path="/insurance/flagged" element={<FlaggedClaims />} />
+          <Route path="/insurance/reports" element={<Reports />} />
+          <Route path="/insurance/analytics" element={<Analytics />} />
+          <Route path="/insurance/ai-insights" element={<AIInsights />} />
+          <Route path="/insurance/fraud-heatmap" element={<FraudHeatmap />} />
           <Route path="/insurance/labeled" element={<LabeledData />} />
           <Route path="/insurance/copay" element={<CopayManagement />} />
           <Route path="/insurance/model" element={<ModelManagement />} />
+          <Route path="/insurance/audit-logs" element={<AuditLogs />} />
+          <Route path="/insurance/notifications" element={<NotificationCenter />} />
+          <Route path="/insurance/system-monitoring" element={<SystemMonitoring />} />
+          <Route path="/insurance/users" element={<UserManagement />} />
+          <Route path="/insurance/settings" element={<Settings />} />
         </Route>
 
         {/* أي مسار غير معروف يرجع للـ Login */}

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { Menu, X, FileText, Search, Settings, Shield, Building2, LogOut, BarChart3, Users, Flag, Database, DollarSign, Brain, UserPlus } from 'lucide-react';
+import { Menu, X, FileText, Search, Settings, Shield, Building2, LogOut, BarChart3, Users, Flag, Database, DollarSign, Brain, UserPlus, HeartPulse, Activity, AlertCircle, MonitorCog, TrendingUp, Map, UserCog } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 const roleConfigs = {
@@ -18,13 +18,24 @@ const roleConfigs = {
     icon: Shield,
     links: [
       { to: '/insurance/dashboard', label: 'Dashboard', icon: BarChart3 },
+      { to: '/insurance/executive', label: 'Executive Dashboard', icon: TrendingUp },
       { to: '/insurance/providers', label: 'Providers', icon: Building2 },
       { to: '/insurance/patients', label: 'Patients', icon: UserPlus },
+      { to: '/insurance/policies', label: 'Policies', icon: Database },
       { to: '/insurance/review', label: 'Review Claims', icon: Search },
       { to: '/insurance/flagged', label: 'Flagged Claims', icon: Flag },
+      { to: '/insurance/reports', label: 'Reports', icon: FileText },
+      { to: '/insurance/analytics', label: 'Analytics', icon: BarChart3 },
+      { to: '/insurance/ai-insights', label: 'AI Insights', icon: Brain },
+      { to: '/insurance/fraud-heatmap', label: 'Fraud Heatmap', icon: Map },
       { to: '/insurance/labeled', label: 'Labeled Data', icon: Database },
       { to: '/insurance/copay', label: 'Copay Management', icon: DollarSign },
       { to: '/insurance/model', label: 'Model Management', icon: Brain },
+      { to: '/insurance/audit-logs', label: 'Audit Logs', icon: Activity },
+      { to: '/insurance/notifications', label: 'Notifications', icon: AlertCircle },
+      { to: '/insurance/system-monitoring', label: 'System Monitoring', icon: MonitorCog },
+      { to: '/insurance/users', label: 'User Management', icon: UserCog },
+      { to: '/insurance/settings', label: 'Settings', icon: Settings },
     ],
   },
 };
@@ -37,14 +48,14 @@ export default function Sidebar({ role }) {
   const RoleIcon = config.icon;
 
   const linkClass = ({ isActive }) =>
-    `flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors duration-150 ${
+    `flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition-all duration-200 ${
       isActive
-        ? 'bg-[#1f2937] text-primary'
-        : 'text-textSecondary hover:text-textPrimary hover:bg-[#1c2128]'
+        ? 'bg-primary text-white shadow-lg shadow-primary/20'
+        : 'text-textSecondary hover:bg-primary/10 hover:text-primary'
     }`;
 
   const nav = (
-    <nav className="flex flex-col gap-1 mt-4">
+    <nav className="mt-4 flex flex-col gap-1.5">
       {config.links.map((link) => {
         const Icon = link.icon;
         return (
@@ -66,39 +77,50 @@ export default function Sidebar({ role }) {
   return (
     <>
       <button
-        className="fixed top-3 left-3 z-50 p-2 rounded-md bg-surface border border-border text-textSecondary md:hidden"
+        className="fixed left-3 top-3 z-50 rounded-xl border border-border bg-surface p-2 text-textSecondary shadow-lg md:hidden"
         onClick={() => setOpen(!open)}
       >
         {open ? <X size={18} /> : <Menu size={18} />}
       </button>
 
       {open && (
-        <div className="fixed inset-0 bg-black/50 z-30 md:hidden" onClick={() => setOpen(false)} />
+        <div className="fixed inset-0 z-30 bg-slate-950/50 backdrop-blur-sm md:hidden" onClick={() => setOpen(false)} />
       )}
 
       <aside
-        className={`fixed top-0 left-0 z-40 h-full w-[248px] bg-surface border-r border-border flex flex-col transition-transform duration-200 md:translate-x-0 ${
+        className={`fixed left-0 top-0 z-40 flex h-full w-[280px] flex-col border-r border-border bg-surface/95 shadow-2xl shadow-slate-900/10 backdrop-blur-xl transition-transform duration-200 md:static md:z-auto md:translate-x-0 ${
           open ? 'translate-x-0' : '-translate-x-full'
-        } md:static md:z-auto`}
+        }`}
       >
-        <div className="px-4 py-4 border-b border-border">
-          <div className="flex items-center gap-2 text-textPrimary text-sm font-medium">
-            <RoleIcon size={16} />
-            {config.label}
+        <div className="border-b border-border px-5 py-5">
+          <div className="flex items-center gap-3">
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-primary text-white shadow-lg shadow-primary/20">
+              <HeartPulse size={22} />
+            </div>
+            <div className="min-w-0">
+              <div className="truncate text-sm font-black text-textPrimary">MediSure AI</div>
+              <div className="mt-0.5 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-textSecondary">
+                <RoleIcon size={12} />
+                {config.label}
+              </div>
+            </div>
           </div>
           {user && (
-            <div className="text-xs text-textSecondary mt-1 truncate">{user.name}</div>
+            <div className="mt-4 rounded-xl border border-border bg-bg/70 px-3 py-2">
+              <div className="truncate text-xs font-bold text-textPrimary">{user.name || 'Signed in user'}</div>
+              <div className="text-[10px] text-textSecondary">Live fraud analytics workspace</div>
+            </div>
           )}
         </div>
 
-        <div className="flex-1 px-3 py-2 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto px-3 py-3">
           {nav}
         </div>
 
-        <div className="px-3 py-3 border-t border-border">
+        <div className="border-t border-border px-3 py-3">
           <button
             onClick={handleLogout}
-            className="flex items-center gap-3 px-3 py-2 rounded-md text-sm text-textSecondary hover:text-textPrimary hover:bg-[#1c2128] w-full transition-colors duration-150"
+            className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold text-textSecondary hover:bg-danger/10 hover:text-danger"
           >
             <LogOut size={16} />
             Sign out

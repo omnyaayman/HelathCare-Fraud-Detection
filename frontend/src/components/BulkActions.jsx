@@ -27,9 +27,16 @@ export default function BulkActions({ data, columns, onImport, filename = 'expor
       flash('error', 'No data to export');
       return;
     }
-    const header = columns.map((c) => c.label).join(',');
+    const resolvedColumns = columns?.length
+      ? columns
+      : Object.keys(data[0] || {}).map((key) => ({
+          key,
+          label: key.replace(/_/g, ' ').replace(/\b\w/g, (m) => m.toUpperCase()),
+        }));
+
+    const header = resolvedColumns.map((c) => c.label).join(',');
     const rows = data.map((row) =>
-      columns.map((c) => {
+      resolvedColumns.map((c) => {
         const val = row[c.key];
         if (val == null) return '';
         const str = String(val);
@@ -69,10 +76,13 @@ export default function BulkActions({ data, columns, onImport, filename = 'expor
         }
         const headerLine = lines[0];
         const headers = parseCSVLine(headerLine);
+        const resolvedColumns = columns?.length
+          ? columns
+          : headers.map((h) => ({ key: h.trim(), label: h.trim() }));
 
         // Map CSV headers to column keys (case-insensitive, trimmed)
         const keyMap = headers.map((h) => {
-          const match = columns.find(
+          const match = resolvedColumns.find(
             (c) => c.label.toLowerCase().trim() === h.toLowerCase().trim() || c.key.toLowerCase().trim() === h.toLowerCase().trim()
           );
           return match ? match.key : null;
@@ -105,7 +115,7 @@ export default function BulkActions({ data, columns, onImport, filename = 'expor
             <input ref={fileRef} type="file" accept=".csv" className="hidden" onChange={handleFile} />
             <button
               onClick={() => fileRef.current?.click()}
-              className="flex items-center gap-2 px-3 py-1.5 text-xs bg-primary/10 border border-primary/25 rounded-md text-primary hover:bg-primary/20 transition-colors duration-150"
+              className="inline-flex items-center justify-center gap-2 rounded-lg border border-primary/25 bg-primary/10 px-3 py-2 text-xs font-bold text-primary hover:bg-primary/15"
             >
               <Upload size={13} />
               {importLabel || 'Import CSV'}
@@ -114,7 +124,7 @@ export default function BulkActions({ data, columns, onImport, filename = 'expor
         )}
         <button
           onClick={handleExport}
-          className="flex items-center gap-2 px-3 py-1.5 text-xs bg-surface border border-border rounded-md text-textSecondary hover:text-textPrimary hover:border-textSecondary transition-colors duration-150"
+          className="inline-flex items-center justify-center gap-2 rounded-lg border border-border bg-surface px-3 py-2 text-xs font-bold text-textSecondary hover:border-primary/40 hover:text-primary"
         >
           <Download size={13} />
           {exportLabel || 'Export CSV'}
@@ -122,7 +132,7 @@ export default function BulkActions({ data, columns, onImport, filename = 'expor
       </div>
 
       {message && (
-        <div className={`flex items-center gap-2 px-3 py-2 rounded-md text-xs ${message.type === 'success' ? 'bg-success/10 border border-success/20 text-success' : 'bg-danger/10 border border-danger/20 text-danger'}`}>
+        <div className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-xs shadow-sm ${message.type === 'success' ? 'bg-success/10 border-success/20 text-success' : 'bg-danger/10 border-danger/20 text-danger'}`}>
           {message.type === 'success' ? <CheckCircle size={12} /> : <AlertCircle size={12} />}
           {message.text}
           <button onClick={() => setMessage(null)} className="ml-auto"><X size={12} /></button>

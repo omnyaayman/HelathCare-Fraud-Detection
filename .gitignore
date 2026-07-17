@@ -1,0 +1,15 @@
+# Python virtual environment and cache
+venv/
+__pycache__/
+*.pyc
+healthcare_fraud.db
+.env
+.vscode/
+SQLQuery1.sql
+
+# Frontend dependencies and builds
+node_modules/
+**/node_modules/
+dist/
+**/dist/
+.eslintcache
