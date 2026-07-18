@@ -6,6 +6,7 @@ function getToken() {
     const stored = localStorage.getItem('fraud_auth_user');
     if (stored) return JSON.parse(stored).token;
   } catch (error) {
+    console.warn('Failed to read stored auth token:', error);
     return null;
   }
   return null;

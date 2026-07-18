@@ -1,7 +1,10 @@
 from confluent_kafka import Producer
 from core.config import settings
 import json
+import logging
 import uuid
+
+logger = logging.getLogger(__name__)
 
 
 producer_config = {
@@ -15,9 +18,9 @@ producer = Producer(producer_config)
 def delivery_report(err, msg):
 
     if err is not None:
-        print(f" Kafka Delivery Failed: {err}")
+        logger.error("Kafka delivery failed: %s", err)
     else:
-        print(f" Message delivered to [{msg.topic()}] partition [{msg.partition()}]")
+        logger.info("Message delivered to [%s] partition [%s]", msg.topic(), msg.partition())
 
 
 def send_claim_to_kafka(claim_data: dict) -> str:
@@ -41,9 +44,9 @@ def send_claim_to_kafka(claim_data: dict) -> str:
 
         producer.flush()
 
-        print(f" Claim [{claim_id}] sent to Kafka topic [{settings.KAFKA_TOPIC}]")
+        logger.info("Claim [%s] sent to Kafka topic [%s]", claim_id, settings.KAFKA_TOPIC)
         return claim_id
 
-    except Exception as e:
-        print(f" Kafka Producer Error: {e}")
+    except Exception:
+        logger.exception("Kafka producer error")
         raise

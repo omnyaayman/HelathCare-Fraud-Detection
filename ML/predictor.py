@@ -33,6 +33,7 @@ Notes on the other artifacts in ML/:
 """
 
 import datetime
+import logging
 import os
 
 import joblib
@@ -44,6 +45,8 @@ from core.constants import (
     FEATURES_LIST_PATH,
     FRAUD_THRESHOLD,
 )
+
+logger = logging.getLogger(__name__)
 
 # Categorical columns the model was trained on, and the encoder key each
 # one is stored under in label_encoders.pkl (same names, see notebook
@@ -155,12 +158,12 @@ class FraudPredictor:
     def _load(self, path):
         full_path = os.path.join(os.getcwd(), path) if not os.path.isabs(path) else path
         if not os.path.exists(full_path):
-            print(f"\u26a0\ufe0f Warning: File not found at {full_path}")
+            logger.warning("Model artifact not found at %s", full_path)
             return None
         try:
             return joblib.load(full_path)
-        except Exception as e:
-            print(f"\u274c Error loading {path}: {e}")
+        except Exception:
+            logger.exception("Failed to load model artifact %s", path)
             return None
 
     def _build_feature_row(self, raw_data):
@@ -213,6 +216,7 @@ class FraudPredictor:
 
     def predict(self, raw_data):
         if self.model is None:
+            logger.error("Prediction requested but model is not loaded; returning neutral score")
             return {
                 "fraud_score": 0.5,
                 "prediction": "Normal",
@@ -231,6 +235,7 @@ class FraudPredictor:
                 "prediction": "Fraud" if score > FRAUD_THRESHOLD else "Normal",
             }
         except Exception as e:
+            logger.exception("Fraud prediction failed; returning neutral fallback score")
             return {"error": str(e), "fraud_score": 0.5, "prediction": "Normal"}
 
 

@@ -1,7 +1,11 @@
+import logging
+
 from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from core.config import settings
+
+logger = logging.getLogger(__name__)
 
 # إعدادات المحرك (Engine) مع الربط القوي بـ Azure
 # أضفنا pool_size و pool_recycle لمنع سقوط الاتصال بعد فترة خمول
@@ -29,8 +33,8 @@ def get_db():
         # اختبار سريع للاتصال قبل إرسال الجلسة للراوتس
         # db.execute("SELECT 1") 
         yield db
-    except Exception as e:
-        print(f"❌ Database Session Error: {e}")
+    except Exception:
+        logger.exception("Database session error")
         raise
     finally:
         db.close()
