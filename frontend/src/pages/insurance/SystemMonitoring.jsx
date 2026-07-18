@@ -1,20 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Bar, Line } from 'react-chartjs-2';
-import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  BarElement,
-  PointElement,
-  LineElement,
-  Tooltip,
-  Legend,
-} from 'chart.js';
 import { MonitorCog, Cpu, HardDrive, Activity, Server, Database, CheckCircle, AlertCircle, XCircle } from 'lucide-react';
 import api from '../../api';
 import Skeleton from '../../components/Skeleton';
-
-ChartJS.register(CategoryScale, LinearScale, BarElement, PointElement, LineElement, Tooltip, Legend);
+import PlotlyChart from '../../components/PlotlyChart';
 
 const statusConfig = {
   online: { icon: CheckCircle, text: 'text-green-500', bg: 'bg-green-500/10', border: 'border-green-500/20' },
@@ -60,27 +48,28 @@ export default function SystemMonitoring() {
     { name: 'Redis Cache', status: 'online' },
   ];
 
-  const chartData = {
-    labels: history.map(h => h.time),
-    datasets: [
-      {
-        label: 'CPU Usage (%)',
-        data: history.map(h => h.cpu),
-        borderColor: '#2563eb',
-        backgroundColor: 'rgba(37, 99, 235, 0.15)',
-        fill: true,
-        tension: 0.4,
-      },
-      {
-        label: 'Memory Usage (%)',
-        data: history.map(h => h.memory),
-        borderColor: '#0d9488',
-        backgroundColor: 'rgba(13, 148, 136, 0.15)',
-        fill: true,
-        tension: 0.4,
-      },
-    ],
-  };
+  const plotlyPerformanceData = [
+    {
+      x: history.map(h => h.time),
+      y: history.map(h => h.cpu),
+      type: 'scatter',
+      mode: 'lines',
+      name: 'CPU Usage (%)',
+      line: { color: '#4f46e5', width: 3, shape: 'spline' },
+      fill: 'tozeroy',
+      fillcolor: 'rgba(79, 70, 229, 0.06)'
+    },
+    {
+      x: history.map(h => h.time),
+      y: history.map(h => h.memory),
+      type: 'scatter',
+      mode: 'lines',
+      name: 'Memory Usage (%)',
+      line: { color: '#0d9488', width: 3, shape: 'spline' },
+      fill: 'tozeroy',
+      fillcolor: 'rgba(13, 148, 136, 0.06)'
+    }
+  ];
 
   if (loading) {
     return <Skeleton rows={8} />;
@@ -89,11 +78,11 @@ export default function SystemMonitoring() {
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-4">
-        <div className="inline-flex items-center gap-2 rounded-full border border-border bg-primary/10 px-4 py-2 text-xs font-black uppercase tracking-widest text-primary">
+        <div className="inline-flex items-center gap-2 rounded-full border border-border bg-primary/10 px-4 py-2 text-xs font-black uppercase tracking-widest text-primary w-fit">
           <MonitorCog size={14} />
           System Health
         </div>
-        <h1 className="text-2xl font-bold text-textPrimary">System Monitoring</h1>
+        <h1 className="text-2xl font-black text-textPrimary">System Monitoring</h1>
         <p className="text-sm text-textSecondary">Real-time monitoring of system performance and health</p>
       </div>
 
@@ -147,8 +136,16 @@ export default function SystemMonitoring() {
             <Activity size={16} className="text-primary" />
             Performance Metrics
           </h3>
-          <div className="mt-6 h-64">
-            <Line data={chartData} options={{ responsive: true, maintainAspectRatio: false, plugins: { legend: { display: true } } }} />
+          <div className="mt-6 h-64 bg-surface p-2">
+            <PlotlyChart
+              data={plotlyPerformanceData}
+              layout={{
+                margin: { t: 10, r: 10, l: 30, b: 30 },
+                xaxis: { showgrid: false },
+                yaxis: { gridcolor: 'rgba(148, 163, 184, 0.16)', range: [0, 100] },
+                legend: { orientation: 'h', y: -0.15 }
+              }}
+            />
           </div>
         </div>
 

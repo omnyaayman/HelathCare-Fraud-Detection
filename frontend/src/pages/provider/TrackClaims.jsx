@@ -127,11 +127,11 @@ export default function TrackClaims() {
             <tbody className="divide-y divide-border">
               {paginated.map((c) => (
                 <tr 
-                  key={c.id} 
+                  key={c.claim_id} 
                   onClick={() => setSelected(c)} 
                   className="hover:bg-primary/5 cursor-pointer transition-colors group"
                 >
-                  <td className="px-6 py-4 font-mono text-xs text-primary font-bold">{c.id}</td>
+                  <td className="px-6 py-4 font-mono text-xs text-primary font-bold">#{c.claim_id}</td>
                   <td className="px-6 py-4">
                     <div className="text-sm font-medium text-textPrimary">{c.patient_name || 'N/A'}</div>
                     <div className="text-[10px] text-textSecondary flex items-center gap-1 mt-1">
@@ -139,11 +139,11 @@ export default function TrackClaims() {
                     </div>
                   </td>
                   <td className="px-6 py-4 text-center">
-                    <div className="text-xs text-textPrimary">{c.service_label || 'Medical Service'}</div>
+                    <div className="text-xs text-textPrimary">{c.service_name || 'Medical Service'}</div>
                     <div className="text-[10px] text-textSecondary">ICD-10: {c.diagnosis_code || '—'}</div>
                   </td>
                   <td className="px-6 py-4 text-center font-mono text-textPrimary">
-                    ${(c.amount || 0).toLocaleString()}
+                    ${(c.claim_amount || 0).toLocaleString()}
                   </td>
                   <td className="px-6 py-4 text-center">
                     <div className="flex flex-col items-center gap-1">
@@ -179,7 +179,7 @@ export default function TrackClaims() {
       <Pagination currentPage={page} totalPages={totalPages} onPageChange={setPage} />
 
       {/* Detail Modal */}
-      <Modal open={!!selected} onClose={() => setSelected(null)} title={`Claim Audit Details: ${selected?.id}`} wide>
+      <Modal open={!!selected} onClose={() => setSelected(null)} title={`Claim Audit Details: #${selected?.claim_id}`} wide>
         {selected && (
           <div className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -187,7 +187,7 @@ export default function TrackClaims() {
                 <h4 className="text-[10px] font-bold text-textSecondary uppercase tracking-widest mb-2">Patient & Service</h4>
                 {[
                   ['Full Name', selected.patient_name],
-                  ['Service Type', selected.service_label],
+                  ['Service Type', selected.service_name],
                   ['Date of Service', selected.service_date],
                   ['Diagnosis Code', selected.diagnosis_code],
                   ['Procedure Code', selected.procedure_code],
@@ -204,8 +204,8 @@ export default function TrackClaims() {
                 {[
                   ['Fraud Probability', `${((selected.fraud_score || 0) * 100).toFixed(2)}%`],
                   ['Current Status', selected.status],
-                  ['Total Amount', `$${(selected.amount || 0).toLocaleString()}`],
-                  ['Submission Date', selected.submitted_at ? new Date(selected.submitted_at).toLocaleString() : 'N/A'],
+                  ['Total Amount', `$${(selected.claim_amount || 0).toLocaleString()}`],
+                  ['Submission Date', selected.claim_date ? new Date(selected.claim_date).toLocaleDateString() : 'N/A'],
                 ].map(([label, value]) => (
                   <div key={label} className="flex justify-between items-center text-xs">
                     <span className="text-textSecondary">{label}</span>

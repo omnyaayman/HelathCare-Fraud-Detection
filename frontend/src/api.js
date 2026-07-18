@@ -51,7 +51,13 @@ async function request(method, path, body = null, params = null) {
 const api = {
   login: async (username, password) => {
     const token = btoa(`${username}:${password}`);
-    const data = { token, username, role: username === 'admin_insurance' ? 'insurance' : 'provider' };
+    const isInsurance = ['admin_insurance', 'auditor_insurance', 'manager_insurance'].includes(username);
+    const role = isInsurance ? 'insurance' : 'provider';
+    let subrole = 'admin';
+    if (username === 'auditor_insurance') subrole = 'auditor';
+    if (username === 'manager_insurance') subrole = 'manager';
+    if (!isInsurance) subrole = 'doctor';
+    const data = { token, username, role, subrole };
     localStorage.setItem('fraud_auth_user', JSON.stringify(data));
     return data;
   },
@@ -71,6 +77,7 @@ const api = {
   deleteService: (id) => request('DELETE', `/api/services/${id}`),
   
   getLabeledData: (params) => request('GET', '/api/labeled-data', null, params),
+  createLabeledRecord: (data) => request('POST', '/api/labeled-data', data),
   updateLabeledRecord: (id, data) => request('PATCH', `/api/labeled-data/${id}`, data),
   deleteLabeledRecord: (id) => request('DELETE', `/api/labeled-data/${id}`),
 
@@ -102,6 +109,12 @@ const api = {
   getSystemHealth: () => request('GET', '/api/system/health'),
   
   getHeatmapProviders: () => request('GET', '/api/heatmap/providers'),
+  
+  // NEW ENDPOINTS
+  getStatsTrends: () => request('GET', '/api/stats/trends'),
+  generateNotifications: () => request('POST', '/api/notifications/generate'),
+  getReportData: (params) => request('GET', '/api/reports/data', null, params),
+  exportReports: (params) => request('GET', '/api/reports/export', null, params),
 };
 
 export default api;

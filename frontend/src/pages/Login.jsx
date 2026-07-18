@@ -10,7 +10,9 @@ const rolePaths = {
 
 const demoUsers = [
   { label: 'Insurance Admin', user: 'admin_insurance', pass: 'password123', icon: ShieldCheck },
-  { label: 'Hospital Provider', user: '1', pass: 'password123', icon: Building2 },
+  { label: 'Claims Auditor', user: 'auditor_insurance', pass: 'password123', icon: ShieldCheck },
+  { label: 'Risk Manager', user: 'manager_insurance', pass: 'password123', icon: ShieldCheck },
+  { label: 'Medical Doctor', user: 'doctor_provider', pass: 'password123', icon: Building2 },
 ];
 
 export default function Login() {
