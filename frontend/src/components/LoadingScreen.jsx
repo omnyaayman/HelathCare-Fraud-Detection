@@ -6,6 +6,11 @@ export default function LoadingScreen() {
       </div>
       <div className="text-sm font-bold text-textPrimary">Loading healthcare workspace</div>
       <div className="mt-1 text-xs text-textSecondary">Preparing secure analytics...</div>
+      <div className="mt-6 flex gap-1">
+        <div className="h-1.5 w-1.5 rounded-full bg-primary/40 animate-bounce" style={{ animationDelay: '0ms' }} />
+        <div className="h-1.5 w-1.5 rounded-full bg-primary/60 animate-bounce" style={{ animationDelay: '150ms' }} />
+        <div className="h-1.5 w-1.5 rounded-full bg-primary/80 animate-bounce" style={{ animationDelay: '300ms' }} />
+      </div>
     </div>
   );
 }
