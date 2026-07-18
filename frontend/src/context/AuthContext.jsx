@@ -23,11 +23,17 @@ export function AuthProvider({ children }) {
   const login = async (username, password) => {
     try {
       const userData = await api.login(username, password);
+      let name = 'Insurance Admin';
+      if (username === 'auditor_insurance') name = 'Claims Auditor';
+      if (username === 'manager_insurance') name = 'Risk Manager';
+      if (userData.role === 'provider') name = username === 'doctor_provider' ? 'Dr. Provider' : `Provider ${username}`;
+      
       const userObj = {
         id: username,
         username: userData.username,
         role: userData.role,
-        name: userData.role === 'insurance' ? 'Insurance Management' : `Provider ${username}`,
+        subrole: userData.subrole,
+        name: name,
         token: userData.token,
       };
       setUser(userObj);
