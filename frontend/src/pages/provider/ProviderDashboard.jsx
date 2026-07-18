@@ -1,40 +1,12 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Bar, Doughnut, Line } from 'react-chartjs-2';
-import {
-  Chart as ChartJS, CategoryScale, LinearScale, BarElement, ArcElement, PointElement, LineElement, Tooltip, Filler, Legend
-} from 'chart.js';
 import { Activity, AlertCircle, BrainCircuit, CheckCircle, Clock, CreditCard, DollarSign, FileText, ShieldCheck, TrendingUp } from 'lucide-react';
 import api from '../../api';
 import Skeleton from '../../components/Skeleton';
 import StatusBadge from '../../components/StatusBadge';
-
-ChartJS.register(CategoryScale, LinearScale, BarElement, ArcElement, PointElement, LineElement, Tooltip, Filler, Legend);
+import PlotlyChart from '../../components/PlotlyChart';
 
 const currency = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
 const compactCurrency = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', notation: 'compact', maximumFractionDigits: 1 });
-
-const chartOpts = {
-  responsive: true,
-  maintainAspectRatio: false,
-  animation: { duration: 650 },
-  interaction: { mode: 'index', intersect: false },
-  plugins: {
-    legend: { display: false },
-    tooltip: {
-      backgroundColor: '#0f172a',
-      borderColor: 'rgba(148, 163, 184, 0.25)',
-      borderWidth: 1,
-      titleColor: '#e2e8f0',
-      bodyColor: '#cbd5e1',
-      padding: 10,
-      displayColors: false,
-    },
-  },
-  scales: {
-    x: { grid: { display: false }, ticks: { color: '#64748b', font: { size: 11 } } },
-    y: { beginAtZero: true, grid: { color: 'rgba(148, 163, 184, 0.18)' }, ticks: { color: '#64748b', font: { size: 11 }, precision: 0 } },
-  },
-};
 
 function toNumber(value) {
   const n = Number(value);
@@ -131,27 +103,30 @@ export default function ProviderDashboard() {
 
   const analytics = useMemo(() => {
     const total = claims.length;
-    const pending = claims.filter((c) => statusOf(c).toLowerCase().includes('pending')).length;
+    const pending = claims.filter((c) => {
+      const status = statusOf(c).toLowerCase();
+      return status.includes('pending') || status.includes('submitted') || status.includes('review');
+    }).length;
     const flagged = claims.filter((c) => {
       const status = statusOf(c).toLowerCase();
-      return status.includes('flagged') || status.includes('fraud') || clampScore(c.fraud_score) >= 0.7;
+      return status.includes('flagged') || status.includes('fraud') || status.includes('reject') || clampScore(c.fraud_score) >= 0.7;
     }).length;
     const approved = claims.filter((c) => {
       const status = statusOf(c).toLowerCase();
-      return status.includes('cleared') || status.includes('approved');
+      return status.includes('cleared') || status.includes('approved') || status.includes('close');
     }).length;
-    const amount = claims.reduce((sum, c) => sum + toNumber(c.amount), 0);
+    const amount = claims.reduce((sum, c) => sum + toNumber(c.claim_amount), 0);
     const avgRisk = total ? claims.reduce((sum, c) => sum + clampScore(c.fraud_score), 0) / total : 0;
 
     const byDay = Object.entries(claims.reduce((acc, c) => {
-      const key = dateKey(c.submitted_at || c.claim_date || c.service_date);
+      const key = dateKey(c.claim_date || c.service_date);
       acc[key] = (acc[key] || 0) + 1;
       return acc;
     }, {})).sort(([a], [b]) => a.localeCompare(b)).slice(-12);
 
     const amountsByDay = Object.entries(claims.reduce((acc, c) => {
-      const key = dateKey(c.submitted_at || c.claim_date || c.service_date);
-      acc[key] = (acc[key] || 0) + toNumber(c.amount);
+      const key = dateKey(c.claim_date || c.service_date);
+      acc[key] = (acc[key] || 0) + toNumber(c.claim_amount);
       return acc;
     }, {})).sort(([a], [b]) => a.localeCompare(b)).slice(-12);
 
@@ -169,11 +144,60 @@ export default function ProviderDashboard() {
     }, { Low: 0, Medium: 0, High: 0 });
 
     const recent = [...claims]
-      .sort((a, b) => new Date(b.submitted_at || b.claim_date || 0) - new Date(a.submitted_at || a.claim_date || 0))
+      .sort((a, b) => new Date(b.claim_date || 0) - new Date(a.claim_date || 0))
       .slice(0, 6);
 
     return { total, pending, flagged, approved, amount, avgRisk, byDay, amountsByDay, statusMix, riskBuckets, recent };
   }, [claims]);
+
+  const byDayPlotlyData = [
+    {
+      x: analytics.byDay.map(([label]) => label),
+      y: analytics.byDay.map(([, value]) => value),
+      type: 'scatter',
+      mode: 'lines',
+      name: 'Claims Count',
+      line: { color: '#1e5fb7', width: 3, shape: 'spline' },
+      fill: 'tozeroy',
+      fillcolor: 'rgba(30, 95, 183, 0.08)'
+    }
+  ];
+
+  const statusMixPlotlyData = [
+    {
+      labels: analytics.statusMix.map(([label]) => label),
+      values: analytics.statusMix.map(([, value]) => value),
+      type: 'pie',
+      hole: 0.6,
+      marker: {
+        colors: ['#16a34a', '#dc2626', '#ea7c23', '#0891b2', '#1e5fb7', '#64748b']
+      },
+      textinfo: 'percent',
+      textposition: 'inside'
+    }
+  ];
+
+  const amountsByDayPlotlyData = [
+    {
+      x: analytics.amountsByDay.map(([label]) => label),
+      y: analytics.amountsByDay.map(([, value]) => value),
+      type: 'bar',
+      name: 'Billed Amount',
+      marker: { color: '#0891b2' }
+    }
+  ];
+
+  const riskBucketsPlotlyData = [
+    {
+      x: Object.keys(analytics.riskBuckets),
+      y: Object.values(analytics.riskBuckets),
+      type: 'bar',
+      name: 'Claims Count',
+      marker: {
+        color: ['#16a34a', '#ea7c23', '#dc2626']
+      }
+    }
+  ];
 
   if (loading) return <div className="enterprise-card p-8"><Skeleton rows={12} /></div>;
 
@@ -219,55 +243,48 @@ export default function ProviderDashboard() {
       <section className="grid grid-cols-1 gap-6 xl:grid-cols-3">
         <div className="xl:col-span-2">
           <ChartCard title="Claim Submission Trend" subtitle="Daily claim count aggregated from backend timestamps" empty={!analytics.byDay.length}>
-            <Line
-              data={{
-                labels: analytics.byDay.map(([label]) => label),
-                datasets: [{
-                  data: analytics.byDay.map(([, value]) => value),
-                  borderColor: '#1e5fb7',
-                  backgroundColor: 'rgba(30, 95, 183, 0.12)',
-                  fill: true,
-                  tension: 0.35,
-                  pointRadius: 3,
-                }],
+            <PlotlyChart
+              data={byDayPlotlyData}
+              layout={{
+                margin: { t: 10, r: 10, l: 30, b: 30 },
+                xaxis: { showgrid: false },
+                yaxis: { gridcolor: 'rgba(148, 163, 184, 0.18)' },
+                legend: { display: false }
               }}
-              options={chartOpts}
             />
           </ChartCard>
         </div>
         <ChartCard title="Current Status Mix" subtitle="Claim statuses returned by the API" empty={!hasClaims}>
-          <Doughnut
-            data={{
-              labels: analytics.statusMix.map(([label]) => label),
-              datasets: [{
-                data: analytics.statusMix.map(([, value]) => value),
-                backgroundColor: ['#16a34a', '#dc2626', '#ea7c23', '#0891b2', '#1e5fb7', '#64748b'],
-                borderWidth: 0,
-                cutout: '68%',
-              }],
+          <PlotlyChart
+            data={statusMixPlotlyData}
+            layout={{
+              margin: { t: 10, b: 10, l: 10, r: 10 },
+              height: 240,
+              legend: { orientation: 'h', y: -0.15 }
             }}
-            options={{ ...chartOpts, scales: {}, plugins: { ...chartOpts.plugins, legend: { display: true, position: 'bottom', labels: { color: '#64748b', boxWidth: 10, font: { size: 11 } } } } }}
           />
         </ChartCard>
       </section>
 
       <section className="grid grid-cols-1 gap-6 xl:grid-cols-2">
         <ChartCard title="Claim Amount Trend" subtitle="Daily billed amount from real claim totals" empty={!analytics.amountsByDay.length}>
-          <Bar
-            data={{
-              labels: analytics.amountsByDay.map(([label]) => label),
-              datasets: [{ data: analytics.amountsByDay.map(([, value]) => value), backgroundColor: '#0891b2', borderRadius: 8, maxBarThickness: 38 }],
+          <PlotlyChart
+            data={amountsByDayPlotlyData}
+            layout={{
+              margin: { t: 10, r: 10, l: 40, b: 30 },
+              xaxis: { showgrid: false },
+              yaxis: { gridcolor: 'rgba(148, 163, 184, 0.18)' }
             }}
-            options={chartOpts}
           />
         </ChartCard>
         <ChartCard title="Risk Distribution" subtitle="Low, medium, and high buckets from fraud scores" empty={!hasClaims}>
-          <Bar
-            data={{
-              labels: Object.keys(analytics.riskBuckets),
-              datasets: [{ data: Object.values(analytics.riskBuckets), backgroundColor: ['#16a34a', '#ea7c23', '#dc2626'], borderRadius: 8, maxBarThickness: 52 }],
+          <PlotlyChart
+            data={riskBucketsPlotlyData}
+            layout={{
+              margin: { t: 10, r: 10, l: 30, b: 30 },
+              xaxis: { showgrid: false },
+              yaxis: { gridcolor: 'rgba(148, 163, 184, 0.18)' }
             }}
-            options={chartOpts}
           />
         </ChartCard>
       </section>
@@ -297,11 +314,11 @@ export default function ProviderDashboard() {
                 {analytics.recent.map((claim) => {
                   const score = clampScore(claim.fraud_score);
                   return (
-                    <tr key={claim.id || `${claim.patient_name}-${claim.submitted_at}`}>
-                      <td className="font-mono text-xs font-black text-primary">{claim.id || 'N/A'}</td>
+                    <tr key={claim.claim_id || `${claim.patient_name}-${claim.claim_date}`}>
+                      <td className="font-mono text-xs font-black text-primary">#{claim.claim_id || 'N/A'}</td>
                       <td className="font-bold text-textPrimary">{claim.patient_name || 'Unknown patient'}</td>
-                      <td className="text-xs text-textSecondary">{claim.service_label || claim.service_type || 'Medical service'}</td>
-                      <td className="text-right font-mono text-textPrimary">{currency.format(toNumber(claim.amount))}</td>
+                      <td className="text-xs text-textSecondary">{claim.service_name || 'Medical service'}</td>
+                      <td className="text-right font-mono text-textPrimary">{currency.format(toNumber(claim.claim_amount))}</td>
                       <td className={`text-right font-mono font-black ${score >= 0.7 ? 'text-danger' : score >= 0.4 ? 'text-warning' : 'text-success'}`}>{(score * 100).toFixed(1)}%</td>
                       <td><StatusBadge status={statusOf(claim)} /></td>
                     </tr>

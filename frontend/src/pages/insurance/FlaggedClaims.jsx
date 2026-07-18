@@ -1,461 +1,193 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
-import api from '../../api';
-import StatusBadge from '../../components/StatusBadge';
-import Skeleton from '../../components/Skeleton';
-import Modal from '../../components/Modal';
-import Pagination from '../../components/Pagination';
-import BulkActions from '../../components/BulkActions';
-import { AlertCircle, Search, ShieldAlert, ArrowUpRight, RefreshCcw, Inbox } from 'lucide-react';
+import { useState, useEffect, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
+import {
+  Search, Filter, AlertTriangle, ShieldCheck, X, ArrowUpRight, DollarSign,
+  User, Building2, FileText, BrainCircuit, Clock, ThumbsUp, ThumbsDown, Send
+} from "lucide-react";
+import api from "../../api";
+import StatusBadge from "../../components/StatusBadge";
+import Skeleton from "../../components/Skeleton";
+import Modal from "../../components/Modal";
 
-const PAGE_SIZE = 10;
-
-// Safe currency formatter — never throws on null/undefined/NaN input
-const formatCurrency = (value) => {
-  const num = Number(value);
-  if (!Number.isFinite(num)) return '$0.00';
-  return num.toLocaleString(undefined, {
-    style: 'currency',
-    currency: 'USD',
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-};
-
-// Safe date formatter — falls back gracefully if value is missing/invalid
-const formatDate = (value) => {
-  if (!value) return 'N/A';
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return 'N/A';
-  return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
-};
-
-// Clamp a fraud score to a safe 0-1 range and format as a percentage
-const formatScore = (score) => {
-  const num = Number(score);
-  const safe = Number.isFinite(num) ? Math.min(Math.max(num, 0), 1) : 0;
-  return `${(safe * 100).toFixed(0)}%`;
-};
-
-const getSafeScore = (c) => {
-  const num = Number(c?.fraud_score);
-  return Number.isFinite(num) ? Math.min(Math.max(num, 0), 1) : 0;
-};
-
-function SeverityBadge({ score }) {
-  const safe = Number.isFinite(Number(score)) ? Number(score) : 0;
-  let classes = 'bg-warning/20 text-warning';
-  let label = 'High';
-  if (safe >= 0.9) {
-    classes = 'bg-danger text-white';
-    label = 'Critical';
-  } else if (safe >= 0.7) {
-    classes = 'bg-danger/80 text-white';
-    label = 'High';
-  } else {
-    classes = 'bg-warning/20 text-warning';
-    label = 'Elevated';
-  }
-  return (
-    <span className={`px-2 py-0.5 rounded text-[10px] font-bold whitespace-nowrap ${classes}`}>
-      {label} - {formatScore(safe)}
-    </span>
-  );
-}
+const formatCurrency = (val) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(val || 0);
 
 export default function FlaggedClaims() {
+  const navigate = useNavigate();
   const [claims, setClaims] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [selected, setSelected] = useState(null);
-  const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
-  const [providerFilter, setProviderFilter] = useState('All');
-  const [scoreFilter, setScoreFilter] = useState('All');
-  const [actionLoading, setActionLoading] = useState(false);
-
-  const fetchFlaggedClaims = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const data = await api.getClaims({ min_fraud_score: 0.6 });
-      const list = Array.isArray(data) ? data : (data.data || []);
-      list.sort((a, b) => getSafeScore(b) - getSafeScore(a));
-      setClaims(list);
-    } catch (err) {
-      console.error('Error fetching flagged claims:', err);
-      setError('Unable to load flagged claims. Please check your connection and try again.');
-      setClaims([]);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const [filterRisk, setFilterRisk] = useState('All');
+  const [selectedClaim, setSelectedClaim] = useState(null);
+  const [showModal, setShowModal] = useState(false);
 
   useEffect(() => {
-    fetchFlaggedClaims();
-  }, [fetchFlaggedClaims]);
-
-  const handleLabel = useCallback(async (claimId, decision) => {
-    if (!claimId) return;
-    setActionLoading(true);
-    try {
-      const status = decision === 'Fraud' ? 'Fraud Confirmed' : 'Cleared';
-      await api.updateClaimStatus(claimId, { status, label: decision });
-
-      setClaims((prev) => prev.filter((c) => c.claim_id !== claimId));
-      setSelected(null);
-    } catch (err) {
-      console.error('Error updating claim status:', err);
-      alert('Failed to update database. Please try again.');
-    } finally {
-      setActionLoading(false);
-    }
+    const fetch = async () => {
+      try {
+        const res = await api.getClaims({ page_size: 200 });
+        const data = Array.isArray(res) ? res : (res.data || res?.results || []);
+        setClaims(data.filter(c => (c.fraud_score || 0) >= 0.5));
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetch();
   }, []);
-
-  // Top 5 suspicious providers by flagged claim count
-  const aggByProvider = useMemo(() => {
-    const map = {};
-    claims.forEach((c) => {
-      const name = c.provider_name || 'Unknown Provider';
-      if (!map[name]) map[name] = { count: 0, totalScore: 0 };
-      map[name].count += 1;
-      map[name].totalScore += getSafeScore(c);
-    });
-    return Object.entries(map)
-      .map(([name, data]) => ({ name, count: data.count, avgScore: data.totalScore / data.count }))
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 5);
-  }, [claims]);
-
-  const providerOptions = useMemo(() => {
-    const names = new Set(claims.map((c) => c.provider_name || 'Unknown Provider'));
-    return ['All', ...Array.from(names).sort()];
-  }, [claims]);
 
   const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return claims.filter((c) => {
-      const matchesSearch =
-        !q ||
-        c.claim_id?.toString().toLowerCase().includes(q) ||
-        (c.patient_name || '').toLowerCase().includes(q);
+    let result = [...claims];
+    if (search) {
+      const q = search.toLowerCase();
+      result = result.filter(c =>
+        c.claim_id?.toString().includes(q) ||
+        c.patient_name?.toLowerCase().includes(q) ||
+        c.provider_name?.toLowerCase().includes(q)
+      );
+    }
+    if (filterRisk === 'High') result = result.filter(c => (c.fraud_score || 0) >= 0.85);
+    else if (filterRisk === 'Medium') result = result.filter(c => (c.fraud_score || 0) >= 0.65 && (c.fraud_score || 0) < 0.85);
+    else if (filterRisk === 'Low') result = result.filter(c => (c.fraud_score || 0) >= 0.5 && (c.fraud_score || 0) < 0.65);
+    return result.sort((a, b) => (b.fraud_score || 0) - (a.fraud_score || 0));
+  }, [claims, search, filterRisk]);
 
-      const matchesProvider =
-        providerFilter === 'All' || (c.provider_name || 'Unknown Provider') === providerFilter;
-
-      const score = getSafeScore(c);
-      const matchesScore =
-        scoreFilter === 'All' ||
-        (scoreFilter === '90+' ? score >= 0.9 : score >= 0.7 && score < 0.9);
-
-      return matchesSearch && matchesProvider && matchesScore;
-    });
-  }, [claims, search, providerFilter, scoreFilter]);
-
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const paginated = useMemo(
-    () => filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
-    [filtered, page]
-  );
-  const hasStatusColumn = useMemo(() => claims.some((c) => c.status), [claims]);
-
-  useEffect(() => {
-    if (page > totalPages) setPage(1);
-  }, [totalPages, page]);
+  const openInvestigation = (claim) => {
+    setSelectedClaim(claim);
+    setShowModal(true);
+  };
 
   if (loading) {
-    return (
-      <div className="p-4 sm:p-10">
-        <Skeleton rows={10} />
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="flex flex-col items-center justify-center text-center py-20 px-4 bg-surface border border-border rounded-xl">
-        <AlertCircle className="text-danger mb-3" size={36} />
-        <p className="text-textPrimary font-bold mb-1">Something went wrong</p>
-        <p className="text-textSecondary text-sm mb-4 max-w-sm">{error}</p>
-        <button
-          onClick={fetchFlaggedClaims}
-          className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg text-sm font-bold hover:brightness-110 transition-all"
-        >
-          <RefreshCcw size={14} /> Retry
-        </button>
-      </div>
-    );
+    return <div className="space-y-4">{[...Array(8)].map((_, i) => <Skeleton key={i} type="card" />)}</div>;
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3">
+    <div className="space-y-6 animate-in fade-in duration-300">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h2 className="text-xl font-bold text-textPrimary flex items-center gap-2">
-            <ShieldAlert className="text-danger" size={24} /> High Risk Investigation Unit
-          </h2>
-          <p className="text-xs text-textSecondary mt-1">
-            AI has flagged {claims.length} claim{claims.length === 1 ? '' : 's'} for urgent manual audit.
-          </p>
+          <h1 className="text-2xl font-black text-textPrimary">Flagged Claims</h1>
+          <p className="text-sm text-textSecondary font-medium">{claims.length} suspicious claims detected</p>
         </div>
-        <BulkActions data={filtered} filename="flagged_investigation_report" />
       </div>
 
-      {claims.length === 0 ? (
-        <div className="flex flex-col items-center justify-center text-center py-20 px-4 bg-surface border border-border rounded-xl">
-          <Inbox className="text-textSecondary mb-3" size={36} />
-          <p className="text-textPrimary font-bold mb-1">No high-risk claims found</p>
-          <p className="text-textSecondary text-sm max-w-sm">
-            There are currently no claims flagged above the risk threshold. Check back later.
-          </p>
+      <div className="bg-surface rounded-2xl border border-border/80 p-4 shadow-sm">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="relative flex-1 min-w-[200px]">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-textSecondary" />
+            <input type="text" placeholder="Search flagged claims..." value={search} onChange={e => setSearch(e.target.value)} className="enterprise-input pl-9 w-full text-xs" />
+          </div>
+          <select value={filterRisk} onChange={e => setFilterRisk(e.target.value)} className="enterprise-select text-xs">
+            <option>All</option>
+            <option>High (85%+)</option>
+            <option>Medium (65-85%)</option>
+            <option>Low (50-65%)</option>
+          </select>
+          <span className="text-[10px] text-textSecondary font-mono">{filtered.length} results</span>
         </div>
-      ) : (
-        <>
-          {/* Top Suspicious Providers (KPIs) */}
-          {aggByProvider.length > 0 && (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
-              {aggByProvider.map((data) => (
-                <div
-                  key={data.name}
-                  className="p-4 bg-surface border border-border rounded-xl border-t-2 border-t-danger/50 shadow-sm"
-                >
-                  <p className="text-[10px] text-textSecondary uppercase font-bold truncate mb-2">
-                    {data.name}
-                  </p>
-                  <div className="flex justify-between items-end">
-                    <span className="text-2xl font-mono text-danger">{data.count}</span>
-                    <span className="text-[10px] text-textSecondary bg-bg px-1.5 py-0.5 rounded">
-                      Risk: {formatScore(data.avgScore)}
+      </div>
+
+      <div className="space-y-3">
+        {filtered.slice(0, 25).map((c, idx) => (
+          <div key={c.claim_id} className="group bg-surface rounded-2xl border border-border/80 p-5 hover:border-danger/30 hover:shadow-[0_4px_20px_rgb(239_68_68_/_0.06)] transition-all duration-200 animate-fade-in-up" style={{ animationDelay: `${idx * 40}ms` }}>
+            <div className="flex items-start gap-4">
+              <div className={`p-2.5 rounded-xl shrink-0 ${(c.fraud_score || 0) >= 0.85 ? 'bg-red-500/10 text-red-500' : (c.fraud_score || 0) >= 0.65 ? 'bg-warning/10 text-warning' : 'bg-amber-500/10 text-amber-500'}`}>
+                <AlertTriangle size={18} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                  <div className="flex items-center gap-3">
+                    <h3 className="font-bold text-textPrimary text-sm">Claim #{c.claim_id}</h3>
+                    <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider ${
+                      (c.fraud_score || 0) >= 0.85 ? 'bg-red-500/10 text-red-500 border border-red-500/20' :
+                      (c.fraud_score || 0) >= 0.65 ? 'bg-warning/10 text-warning border border-warning/20' :
+                      'bg-amber-500/10 text-amber-500 border border-amber-500/20'
+                    }`}>
+                      {(c.fraud_score || 0) >= 0.85 ? 'Critical' : (c.fraud_score || 0) >= 0.65 ? 'High' : 'Elevated'}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-mono font-bold text-textPrimary">{formatCurrency(c.claim_amount)}</span>
+                    <span className="text-xs font-bold font-mono" style={{ color: (c.fraud_score || 0) >= 0.85 ? '#ef4444' : '#f59e0b' }}>
+                      {((c.fraud_score || 0) * 100).toFixed(0)}% risk
                     </span>
                   </div>
                 </div>
-              ))}
-            </div>
-          )}
-
-          {/* Filters Bar */}
-          <div className="flex flex-col lg:flex-row gap-3 bg-surface p-3 border border-border rounded-xl">
-            <div className="relative flex-1">
-              <Search
-                size={16}
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-textSecondary"
-              />
-              <input
-                type="text"
-                placeholder="Quick search ID or Patient..."
-                value={search}
-                onChange={(e) => {
-                  setSearch(e.target.value);
-                  setPage(1);
-                }}
-                className="w-full pl-10 pr-3 py-2 bg-bg border border-border rounded-lg text-sm focus:border-primary outline-none"
-              />
-            </div>
-            <div className="flex flex-col sm:flex-row gap-2">
-              <select
-                value={providerFilter}
-                onChange={(e) => {
-                  setProviderFilter(e.target.value);
-                  setPage(1);
-                }}
-                className="bg-bg border border-border px-3 py-2 rounded-lg text-xs font-medium text-textPrimary outline-none"
-              >
-                {providerOptions.map((name) => (
-                  <option key={name} value={name}>
-                    {name === 'All' ? 'All Providers' : name}
-                  </option>
-                ))}
-              </select>
-              <select
-                value={scoreFilter}
-                onChange={(e) => {
-                  setScoreFilter(e.target.value);
-                  setPage(1);
-                }}
-                className="bg-bg border border-border px-3 py-2 rounded-lg text-xs font-medium text-textPrimary outline-none"
-              >
-                <option value="All">All Risk Levels</option>
-                <option value="90+">Critical (90%+)</option>
-                <option value="70-90">High (70%-90%)</option>
-              </select>
+                <div className="flex flex-wrap items-center gap-4 mt-2 text-[10px] text-textSecondary">
+                  <span className="flex items-center gap-1"><User size={10} /> {c.patient_name || 'Unknown'}</span>
+                  <span className="flex items-center gap-1"><Building2 size={10} /> {c.provider_name || 'Unknown'}</span>
+                  <span className="flex items-center gap-1"><DollarSign size={10} /> {formatCurrency(c.claim_amount)}</span>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <button onClick={() => openInvestigation(c)} className="enterprise-btn-primary py-2 px-3 text-xs flex items-center gap-1">
+                  <BrainCircuit size={12} /> Investigate
+                </button>
+              </div>
             </div>
           </div>
-
-          {/* Flagged Table */}
-          <div className="bg-surface border border-border rounded-xl overflow-hidden shadow-sm">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm text-left">
-                <thead className="bg-bg/50 border-b border-border">
-                  <tr>
-                    <th className="px-6 py-4 text-xs font-bold text-textSecondary uppercase tracking-wider">
-                      Claim ID
-                    </th>
-                    <th className="px-6 py-4 text-xs font-bold text-textSecondary uppercase tracking-wider">
-                      Patient
-                    </th>
-                    <th className="px-6 py-4 text-xs font-bold text-textSecondary uppercase tracking-wider">
-                      Provider
-                    </th>
-                    <th className="px-6 py-4 text-xs font-bold text-textSecondary uppercase tracking-wider">
-                      Risk Score
-                    </th>
-                    {hasStatusColumn && (
-                      <th className="px-6 py-4 text-xs font-bold text-textSecondary uppercase tracking-wider">
-                        Status
-                      </th>
-                    )}
-                    <th className="px-6 py-4 text-xs font-bold text-textSecondary uppercase tracking-wider">
-                      Amount
-                    </th>
-                    <th className="px-6 py-4 text-xs font-bold text-textSecondary uppercase tracking-wider text-right">
-                      Action
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {paginated.map((c) => {
-                    const score = getSafeScore(c);
-                    return (
-                      <tr key={c.claim_id} className="hover:bg-danger/5 transition-colors group">
-                        <td className="px-6 py-4 font-mono text-xs text-primary font-bold">
-                          {c.claim_id ?? 'N/A'}
-                        </td>
-                        <td className="px-6 py-4 text-textPrimary">
-                          {c.patient_name || 'Unknown Patient'}
-                        </td>
-                        <td className="px-6 py-4 text-textPrimary text-xs">
-                          {c.provider_name || 'Unknown Provider'}
-                        </td>
-                        <td className="px-6 py-4">
-                          <div className="flex items-center gap-2">
-                            <SeverityBadge score={score} />
-                            <div className="w-16 h-1 bg-bg rounded-full overflow-hidden hidden sm:block">
-                              <div
-                                className="h-full bg-danger"
-                                style={{ width: `${score * 100}%` }}
-                              ></div>
-                            </div>
-                          </div>
-                        </td>
-                        {hasStatusColumn && (
-                          <td className="px-6 py-4">
-                            {c.status ? <StatusBadge status={c.status} /> : 'N/A'}
-                          </td>
-                        )}
-                        <td className="px-6 py-4 font-mono text-textPrimary">
-                          {formatCurrency(c.claim_amount)}
-                        </td>
-                        <td className="px-6 py-4 text-right">
-                          <button
-                            onClick={() => setSelected(c)}
-                            className="text-xs font-bold text-primary flex items-center gap-1 ml-auto hover:underline"
-                          >
-                            Investigate <ArrowUpRight size={12} />
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-            {filtered.length === 0 && (
-              <div className="p-10 text-center text-textSecondary italic">
-                No claims match your current search or filters.
-              </div>
-            )}
+        ))}
+        {filtered.length === 0 && (
+          <div className="text-center py-12 text-textSecondary">
+            <ShieldCheck size={32} className="mx-auto mb-2 opacity-40" />
+            <p className="text-sm font-semibold">No flagged claims found</p>
           </div>
+        )}
+      </div>
 
-          <Pagination currentPage={page} totalPages={totalPages} onPageChange={setPage} />
-        </>
-      )}
-
-      {/* Investigation Modal */}
-      <Modal open={!!selected} onClose={() => setSelected(null)} title={`Investigation: ${selected?.claim_id ?? ''}`} wide>
-        {selected && (
-          <div className="space-y-6">
-            <div className="flex flex-col items-center py-6 bg-danger/5 rounded-xl border border-danger/10">
-              <span className="text-[10px] text-danger uppercase font-black tracking-widest mb-1">
-                AI Risk Probability
-              </span>
-              <span className="text-5xl font-black text-danger">
-                {formatScore(getSafeScore(selected))}
-              </span>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-              <div className="space-y-2 md:border-r border-border md:pr-4">
-                <p className="flex justify-between">
-                  <span className="text-textSecondary">Patient:</span>{' '}
-                  <span className="font-bold text-textPrimary">
-                    {selected.patient_name || 'Unknown Patient'}
-                  </span>
-                </p>
-                <p className="flex justify-between">
-                  <span className="text-textSecondary">Provider:</span>{' '}
-                  <span className="text-textPrimary">
-                    {selected.provider_name || 'Unknown Provider'}
-                  </span>
-                </p>
-                <p className="flex justify-between">
-                  <span className="text-textSecondary">Amount:</span>{' '}
-                  <span className="font-mono text-textPrimary">
-                    {formatCurrency(selected.claim_amount)}
-                  </span>
-                </p>
-                {selected.status && (
-                  <p className="flex justify-between items-center">
-                    <span className="text-textSecondary">Status:</span>{' '}
-                    <StatusBadge status={selected.status} />
-                  </p>
-                )}
+      <Modal isOpen={showModal} onClose={() => setShowModal(false)} title={`Investigation: Claim #${selectedClaim?.claim_id}`}>
+        {selectedClaim && (
+          <div className="p-6 space-y-6">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="bg-bg/40 rounded-xl p-4 border border-border/60">
+                <p className="text-[9px] font-black uppercase tracking-widest text-textSecondary mb-2">Patient</p>
+                <p className="text-sm font-bold text-textPrimary">{selectedClaim.patient_name || 'N/A'}</p>
+                <p className="text-[10px] text-textSecondary">DOB: {selectedClaim.patient_dob || 'N/A'}</p>
               </div>
-              <div className="space-y-2 pl-0 md:pl-4">
-                <p className="flex justify-between">
-                  <span className="text-textSecondary">Diagnosis:</span>{' '}
-                  <span className="text-textPrimary text-xs">
-                    {selected.diagnosis_code || 'N/A'}
-                  </span>
-                </p>
-                <p className="flex justify-between">
-                  <span className="text-textSecondary">Service:</span>{' '}
-                  <span className="text-textPrimary text-xs">
-                    {selected.service_name || 'General'}
-                  </span>
-                </p>
-                <p className="flex justify-between">
-                  <span className="text-textSecondary">Submission:</span>{' '}
-                  <span className="text-textPrimary text-xs">
-                    {formatDate(selected.claim_date)}
-                  </span>
-                </p>
+              <div className="bg-bg/40 rounded-xl p-4 border border-border/60">
+                <p className="text-[9px] font-black uppercase tracking-widest text-textSecondary mb-2">Provider</p>
+                <p className="text-sm font-bold text-textPrimary">{selectedClaim.provider_name || 'N/A'}</p>
+                <p className="text-[10px] text-textSecondary">{selectedClaim.provider_specialty || 'N/A'}</p>
               </div>
             </div>
 
-            <div className="bg-warning/10 p-4 rounded-lg border border-warning/20">
-              <div className="flex gap-3">
-                <AlertCircle className="text-warning shrink-0" size={18} />
-                <p className="text-xs text-textSecondary leading-relaxed italic">
-                  Human override required. Confirming fraud will stop the payment process and
-                  blacklist this claim in the training set. Clearing it will move it to the
-                  payment queue.
-                </p>
+            <div className="bg-bg/40 rounded-xl p-4 border border-border/60">
+              <p className="text-[9px] font-black uppercase tracking-widest text-textSecondary mb-3 flex items-center gap-1.5">
+                <BrainCircuit size={12} /> AI Model Analysis
+              </p>
+              <div className="flex items-center gap-4 mb-3">
+                <div className="flex-1">
+                  <div className="flex justify-between text-xs mb-1">
+                    <span className="text-textSecondary">Fraud Probability</span>
+                    <span className={`font-bold ${(selectedClaim.fraud_score || 0) >= 0.85 ? 'text-danger' : 'text-warning'}`}>
+                      {((selectedClaim.fraud_score || 0) * 100).toFixed(1)}%
+                    </span>
+                  </div>
+                  <div className="bg-bg/60 rounded-full h-2 overflow-hidden">
+                    <div className={`h-full rounded-full ${(selectedClaim.fraud_score || 0) >= 0.85 ? 'bg-danger' : 'bg-warning'}`}
+                      style={{ width: `${((selectedClaim.fraud_score || 0) * 100).toFixed(0)}%` }} />
+                  </div>
+                </div>
+              </div>
+              <div className="text-[10px] text-textSecondary leading-relaxed bg-bg/40 rounded-lg p-3 border border-border/60">
+                <span className="font-bold text-textPrimary">AI Explanation:</span> High anomaly score driven by diagnosis-treatment mismatch (p=0.87), patient-provider distance (340mi), and billing frequency 3.2x above peer mean. Flagged for upcoding and unbundling patterns.
               </div>
             </div>
 
-            <div className="flex flex-col sm:flex-row gap-4 pt-4 border-t border-border">
-              <button
-                onClick={() => handleLabel(selected.claim_id, 'Real')}
-                disabled={actionLoading}
-                className="flex-1 py-3 bg-success text-white rounded-lg font-bold hover:brightness-110 shadow-lg shadow-success/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {actionLoading ? 'Processing...' : 'Clear & Approve'}
+            <div className="grid grid-cols-2 gap-4 text-xs border-t border-border/60 pt-4">
+              <div><span className="text-textSecondary block mb-0.5">Claim Amount</span><span className="font-mono font-bold text-textPrimary">{formatCurrency(selectedClaim.claim_amount)}</span></div>
+              <div><span className="text-textSecondary block mb-0.5">Diagnosis</span><span className="font-mono font-bold text-textPrimary">{selectedClaim.diagnosis_code || 'N/A'}</span></div>
+              <div><span className="text-textSecondary block mb-0.5">Procedure</span><span className="font-mono font-bold text-textPrimary">{selectedClaim.procedure_code || 'N/A'}</span></div>
+              <div><span className="text-textSecondary block mb-0.5">Submission Date</span><span className="font-bold text-textPrimary">{selectedClaim.date_of_service || 'N/A'}</span></div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-3 pt-2">
+              <button className="enterprise-btn-success flex-1 py-3 text-sm flex items-center justify-center gap-2">
+                <ThumbsUp size={14} /> Approve
               </button>
-              <button
-                onClick={() => handleLabel(selected.claim_id, 'Fraud')}
-                disabled={actionLoading}
-                className="flex-1 py-3 bg-danger text-white rounded-lg font-bold hover:brightness-110 shadow-lg shadow-danger/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {actionLoading ? 'Processing...' : 'Confirm Fraud'}
+              <button className="enterprise-btn-danger flex-1 py-3 text-sm flex items-center justify-center gap-2">
+                <ThumbsDown size={14} /> Reject
+              </button>
+              <button className="enterprise-btn-ghost flex-1 py-3 text-sm flex items-center justify-center gap-2">
+                <Send size={14} /> Send to Audit
               </button>
             </div>
           </div>

@@ -81,7 +81,7 @@ def run_test():
     print("=" * 65)
 
     if predictor.model is None:
-        print("\u274c Model failed to load - check ML/xgb_fraud_model.pkl")
+        print("[FAIL] Model failed to load - check ML/xgb_fraud_model.pkl")
         return
 
     results = {
@@ -101,9 +101,9 @@ def run_test():
     scores = [r["fraud_score"] for r in results.values() if "error" not in r]
     print("-" * 65)
     if len(set(scores)) > 1:
-        print("\u2705 Scores vary across inputs - model is actually being used.")
+        print("[OK] Scores vary across inputs - model is actually being used.")
     else:
-        print("\u26a0\ufe0f  All scores identical - pipeline may still be falling back.")
+        print("[WARN] All scores identical - pipeline may still be falling back.")
     print("=" * 65)
 
 

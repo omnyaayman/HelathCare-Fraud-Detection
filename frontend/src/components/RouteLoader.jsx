@@ -14,8 +14,8 @@ export default function RouteLoader() {
   if (!loading) return null;
 
   return (
-    <div className="fixed top-0 left-0 right-0 z-[60] h-0.5">
-      <div className="h-full bg-primary animate-pulse" style={{ animation: 'routeLoad 300ms ease-out forwards' }} />
+    <div className="fixed top-0 left-0 right-0 z-[60] h-1">
+      <div className="h-full bg-gradient-to-r from-primary via-accent to-primary animate-pulse" style={{ animation: 'routeLoad 400ms ease-out forwards' }} />
       <style>{`
         @keyframes routeLoad {
           0% { width: 0%; }

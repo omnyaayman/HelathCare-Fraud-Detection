@@ -37,8 +37,13 @@ def format_row(row):
     return formatted
 
 def get_current_user(credentials: HTTPBasicCredentials = Depends(security), db: Session = Depends(get_db)):
-    if credentials.username == "admin_insurance" and credentials.password == "password123":
-        return {"role": "insurance", "provider_id": None, "username": credentials.username}
+    username = credentials.username
+    password = credentials.password
+    
+    if username in ["admin_insurance", "auditor_insurance", "manager_insurance"] and password == "password123":
+        return {"role": "insurance", "provider_id": None, "username": username}
+    
+    query_user = "1" if username == "doctor_provider" else username
     
     try:
         # Resolve by ID, Name, or 'provider_ID'
@@ -48,7 +53,7 @@ def get_current_user(credentials: HTTPBasicCredentials = Depends(security), db: 
             WHERE Provider_ID = :u 
                OR Name = :u 
                OR 'provider_' || Provider_ID = :u
-        """), {"u": credentials.username}).fetchone()
+        """), {"u": query_user}).fetchone()
         if result:
             return {"role": "provider", "provider_id": result[0], "username": result[1]}
     except SQLAlchemyError:
@@ -87,7 +92,8 @@ async def get_stats(db: Session = Depends(get_db), user: dict = Depends(get_curr
     response = {}
     
     try:
-        model_metrics = db.execute(text("SELECT * FROM ModelMetrics ORDER BY id DESC LIMIT 1")).fetchone()
+        model_metrics_row = db.execute(text("SELECT * FROM ModelMetrics ORDER BY id DESC LIMIT 1")).fetchone()
+        model_metrics = format_row(model_metrics_row) if model_metrics_row else {}
         
         stats_query = text("""
             SELECT
@@ -148,14 +154,14 @@ async def get_stats(db: Session = Depends(get_db), user: dict = Depends(get_curr
             "total_policies": total_policies,
             "total_premium": round(float(total_premium or 0), 2),
             "total_copay": round(float(total_copay or 0), 2),
-            "model_accuracy": float(model_metrics.accuracy or 0.92),
-            "model_precision": float(model_metrics.precision or 0.88),
-            "model_recall": float(model_metrics.recall or 0.85),
-            "model_f1": float(model_metrics.f1_score or 0.86),
-            "model_roc_auc": float(model_metrics.roc_auc or 0.94),
-            "last_retrain": model_metrics.last_training_date or (datetime.datetime.now() - datetime.timedelta(days=7)).isoformat(),
-            "dataset_size": int(model_metrics.training_samples or 250),
-            "model_version": model_metrics.model_version or "1.0.0"
+            "model_accuracy": float(model_metrics.get("accuracy") or 0.92),
+            "model_precision": float(model_metrics.get("precision") or 0.88),
+            "model_recall": float(model_metrics.get("recall") or 0.85),
+            "model_f1": float(model_metrics.get("f1_score") or 0.86),
+            "model_roc_auc": float(model_metrics.get("roc_auc") or 0.94),
+            "last_retrain": model_metrics.get("last_training_date") or (datetime.datetime.now() - datetime.timedelta(days=7)).isoformat(),
+            "dataset_size": int(model_metrics.get("training_samples") or 250),
+            "model_version": model_metrics.get("model_version") or "1.0.0"
         }
         
     except Exception as e:
@@ -453,6 +459,143 @@ async def get_claims(
         print(f"Claims query error: {e}")
         return {"data": [], "total": 0, "page": page, "page_size": page_size, "total_pages": 1}
 
+@router.get("/claims/{claim_id}")
+async def get_claim_details(claim_id: int, db: Session = Depends(get_db), user: dict = Depends(get_current_user)):
+    ensure_sample_data(db)
+    try:
+        # Query detailed claim records joining patient, provider, policy and service
+        query = text("""
+            SELECT
+                c.Claim_ID,
+                c.Patient_ID,
+                pt.Name as patient_name,
+                pt.Age as patient_age,
+                pt.Gender as patient_gender,
+                pt.City as patient_city,
+                pt.State as patient_state,
+                c.Provider_ID,
+                p.Name as provider_name,
+                p.Type as provider_type,
+                p.Specialty as provider_specialty,
+                p.City as provider_city,
+                p.State as provider_state,
+                p.Latitude as provider_latitude,
+                p.Longitude as provider_longitude,
+                p.Total_Claims as provider_total_claims,
+                p.Fraud_Claims as provider_fraud_claims,
+                p.Avg_Fraud_Score as provider_avg_fraud_score,
+                c.Policy_ID,
+                po.Policy_Start_Date,
+                po.Policy_End_Date,
+                po.Annual_Deductible,
+                po.CoPay_Amount,
+                c.Service_ID,
+                s.Name as service_name,
+                c.Diagnosis_Code,
+                c.Procedure_Code,
+                c.Number_of_Procedures,
+                c.Admission_Type,
+                c.Discharge_Type,
+                c.Length_of_Stay_Days,
+                c.Claim_Amount,
+                c.Deductible_Amount,
+                c.CoPay_Amount as claim_copay,
+                c.Number_of_Previous_Claims_Patient,
+                c.Number_of_Previous_Claims_Provider,
+                c.Provider_Patient_Distance_Miles,
+                c.Claim_Submitted_Late,
+                c.Is_Fraudulent,
+                c.Fraud_Score,
+                c.Status,
+                c.Claim_Date,
+                c.Service_Date
+            FROM Claims c
+            JOIN Patient pt ON c.Patient_ID = pt.Patient_ID
+            JOIN Provider p ON c.Provider_ID = p.Provider_ID
+            LEFT JOIN Policy po ON c.Policy_ID = po.Policy_ID
+            LEFT JOIN Service s ON c.Service_ID = s.Service_ID
+            WHERE c.Claim_ID = :claim_id
+        """)
+        row = db.execute(query, {"claim_id": claim_id}).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Claim not found")
+            
+        claim_details = format_row(row)
+        
+        # Query patient's medical history (previous claims)
+        history_query = text("""
+            SELECT Claim_ID, Service_Date, Claim_Amount, Diagnosis_Code, Status, Is_Fraudulent, Fraud_Score
+            FROM Claims
+            WHERE Patient_ID = :patient_id AND Claim_ID != :claim_id
+            ORDER BY Service_Date DESC
+            LIMIT 10
+        """)
+        history_rows = db.execute(history_query, {
+            "patient_id": claim_details["patient_id"],
+            "claim_id": claim_id
+        }).fetchall()
+        patient_history = [format_row(r) for r in history_rows]
+        
+        # Calculate real SHAP feature contributions using the loaded XGBoost model
+        shap_contributions = []
+        base_value = 0.0
+        if predictor.model is not None:
+            try:
+                raw_features = {
+                    "claim_amount": claim_details["claim_amount"],
+                    "annual_deductible": claim_details.get("annual_deductible", 0.0),
+                    "copay_amount": claim_details.get("claim_copay", 0.0),
+                    "age": claim_details["patient_age"],
+                    "gender": claim_details["patient_gender"],
+                    "previous_claims_patient": claim_details["number_of_previous_claims_patient"],
+                    "provider_type": claim_details["provider_type"],
+                    "provider_specialty": claim_details["provider_specialty"],
+                    "previous_claims_provider": claim_details["number_of_previous_claims_provider"],
+                    "diagnosis_code": claim_details["diagnosis_code"],
+                    "num_procedures": claim_details["number_of_procedures"],
+                    "admission_type": claim_details["admission_type"],
+                    "discharge_type": claim_details["discharge_type"],
+                    "length_of_stay": claim_details["length_of_stay_days"],
+                    "service_type": claim_details["service_name"],
+                    "distance_miles": claim_details["provider_patient_distance_miles"],
+                    "claim_date": claim_details["claim_date"],
+                    "service_date": claim_details["service_date"],
+                    "policy_expiration_date": claim_details.get("policy_end_date", claim_details["claim_date"]),
+                    "claim_submitted_late": claim_details["claim_submitted_late"]
+                }
+                
+                features = predictor._build_feature_row(raw_features)
+                column_order = predictor.feature_order or list(features.keys())
+                
+                import pandas as pd
+                import xgboost as xgb
+                df = pd.DataFrame([features])[column_order]
+                
+                booster = predictor.model.get_booster()
+                dmatrix = xgb.DMatrix(df)
+                contribs = booster.predict(dmatrix, pred_contribs=True)[0]
+                
+                for i, name in enumerate(column_order):
+                    shap_contributions.append({
+                        "feature": name,
+                        "contribution": float(contribs[i]),
+                        "value": features[name]
+                    })
+                base_value = float(contribs[-1])
+            except Exception as e:
+                print(f"SHAP explanation computation failure: {e}")
+                
+        log_audit(db, user, "VIEW_CLAIM_DETAILS", f"Claim details #{claim_id}")
+        return {
+            "claim": claim_details,
+            "patient_history": patient_history,
+            "shap_contributions": shap_contributions,
+            "base_value": base_value
+        }
+    except SQLAlchemyError as e:
+        print(f"Claim Details database error: {e}")
+        raise HTTPException(status_code=500, detail="Database failure while loading claim details")
+
 @router.get("/patients")
 async def get_patients(db: Session = Depends(get_db), user: dict = Depends(get_current_user)):
     ensure_sample_data(db)
@@ -534,6 +677,7 @@ async def get_policies(db: Session = Depends(get_db), user: dict = Depends(get_c
                 po.Annual_Deductible,
                 po.CoPay_Amount,
                 COUNT(c.Claim_ID) as claim_count,
+                SUM(c.Claim_Amount) as total_billed,
                 SUM(CASE WHEN c.Is_Fraudulent = 1 THEN 1 ELSE 0 END) as fraud_count,
                 CASE WHEN po.Policy_End_Date >= :today THEN 'Active' ELSE 'Expired' END as policy_status
             FROM Policy po
@@ -688,15 +832,15 @@ async def get_heatmap_providers(db: Session = Depends(get_db), user: dict = Depe
     try:
         query = text("""
             SELECT
-                p.Provider_ID,
-                p.Name,
-                p.City,
-                p.State,
-                p.Latitude,
-                p.Longitude,
-                COUNT(c.Claim_ID) as total_claims,
-                SUM(CASE WHEN c.Is_Fraudulent = 1 THEN 1 ELSE 0 END) as fraud_claims,
-                AVG(c.Fraud_Score) as avg_fraud_score
+                p.Provider_ID as provider_id,
+                p.Name as provider_name,
+                p.City as city,
+                p.State as state,
+                p.Latitude as latitude,
+                p.Longitude as longitude,
+                COUNT(c.Claim_ID) as total_claims_count,
+                SUM(CASE WHEN c.Is_Fraudulent = 1 THEN 1 ELSE 0 END) as fraud_claims_count,
+                COALESCE(AVG(c.Fraud_Score), 0.0) * 100.0 as average_risk_score
             FROM Provider p
             LEFT JOIN Claims c ON p.Provider_ID = c.Provider_ID
             WHERE p.Latitude IS NOT NULL AND p.Longitude IS NOT NULL
@@ -713,10 +857,27 @@ async def get_heatmap_providers(db: Session = Depends(get_db), user: dict = Depe
 async def get_model_metrics(db: Session = Depends(get_db), user: dict = Depends(get_current_user)):
     ensure_sample_data(db)
     try:
-        query = text("SELECT * FROM ModelMetrics ORDER BY id DESC LIMIT 1")
-        result = db.execute(query).fetchone()
-        log_audit(db, user, "VIEW_MODEL_METRICS", "Model metrics")
-        return format_row(result) if result else None
+        # Query all records to construct history
+        history_query = text("SELECT * FROM ModelMetrics ORDER BY id ASC")
+        history_result = db.execute(history_query).fetchall()
+        history_data = [format_row(r) for r in history_result]
+        
+        log_audit(db, user, "VIEW_MODEL_METRICS", "Model metrics and history")
+        
+        if history_data:
+            active = history_data[-1]
+            response = dict(active)
+            response["model_history"] = [
+                {
+                    "version": h.get("model_version") or "v1.0.0",
+                    "accuracy": h.get("accuracy") or 0.92,
+                    "precision": h.get("precision") or 0.88,
+                    "recall": h.get("recall") or 0.85,
+                    "f1_score": h.get("f1_score") or 0.86
+                } for h in history_data
+            ]
+            return response
+        return None
     except SQLAlchemyError as e:
         print(f"Model metrics error: {e}")
         return None
@@ -733,10 +894,11 @@ async def retrain_model(db: Session = Depends(get_db), user: dict = Depends(get_
             "roc_auc": 0.94 + random.uniform(-0.01, 0.01)
         }
         
-        current = db.execute(text("SELECT * FROM ModelMetrics ORDER BY id DESC LIMIT 1")).fetchone()
+        current_row = db.execute(text("SELECT * FROM ModelMetrics ORDER BY id DESC LIMIT 1")).fetchone()
+        current = format_row(current_row) if current_row else None
         version = "1.0.1"
-        if current and current.model_version:
-            parts = current.model_version.split(".")
+        if current and current.get("model_version"):
+            parts = current.get("model_version").split(".")
             version = f"{parts[0]}.{parts[1]}.{int(parts[2]) + 1}"
         
         total_claims = db.execute(text("SELECT COUNT(*) FROM Claims")).scalar() or 0
@@ -1288,3 +1450,103 @@ async def submit_claim(data: dict, db: Session = Depends(get_db), user: dict = D
         db.rollback()
         print(f"Claim submission processing error: {e}")
         raise HTTPException(status_code=500, detail=f"Claim processing failed: {str(e)}")
+
+# ---------------------------------------------------------------------------
+# NEW ENDPOINTS: Dashboard trends, notifications generation, reports, export
+# ---------------------------------------------------------------------------
+
+@router.get("/stats/trends")
+async def get_stats_trends(db: Session = Depends(get_db), user: dict = Depends(get_current_user)):
+    ensure_sample_data(db)
+    try:
+        thirty = (datetime.date.today() - datetime.timedelta(days=30)).isoformat()
+        sixty = (datetime.date.today() - datetime.timedelta(days=60)).isoformat()
+        cur = db.execute(text("""SELECT COUNT(*) as tc, SUM(CASE WHEN Is_Fraudulent=1 THEN 1 ELSE 0 END) as tf,
+            SUM(CASE WHEN Is_Fraudulent=1 AND Status IN ('Rejected','Fraud Confirmed','Closed') THEN Claim_Amount ELSE 0 END) as ms,
+            COUNT(DISTINCT Provider_ID) as ap FROM Claims WHERE Claim_Date >= :s"""), {"s": thirty}).fetchone()
+        prev = db.execute(text("""SELECT COUNT(*) as tc, SUM(CASE WHEN Is_Fraudulent=1 THEN 1 ELSE 0 END) as tf,
+            SUM(CASE WHEN Is_Fraudulent=1 AND Status IN ('Rejected','Fraud Confirmed','Closed') THEN Claim_Amount ELSE 0 END) as ms
+            FROM Claims WHERE Claim_Date >= :s AND Claim_Date < :e"""), {"s": sixty, "e": thirty}).fetchone()
+        def tr(c, p): return round(((c/p)-1)*100, 1) if (p and p > 0) else 0
+        return {"claims_trend": tr(cur.tc or 0, prev.tc or 0), "fraud_trend": tr(cur.tf or 0, prev.tf or 0),
+                "money_saved_trend": tr(cur.ms or 0, prev.ms or 0), "suspicious_providers_active": int(cur.ap or 0)}
+    except Exception as e:
+        print(f"Trends error: {e}")
+        return {"claims_trend": 0, "fraud_trend": 0, "money_saved_trend": 0, "suspicious_providers_active": 0}
+
+@router.post("/notifications/generate")
+async def generate_notifications(db: Session = Depends(get_db), user: dict = Depends(get_current_user)):
+    try:
+        db.execute(text("DELETE FROM Notifications WHERE id NOT IN (SELECT id FROM Notifications ORDER BY created_at DESC LIMIT 20)"))
+        now = datetime.datetime.now().isoformat(); td = datetime.date.today().isoformat()
+        rf = db.execute(text("SELECT COUNT(*) FROM Claims WHERE Is_Fraudulent=1 AND Claim_Date=:t AND Status IN ('Submitted','Under Review')"), {"t": td}).scalar() or 0
+        if rf > 0: db.execute(text("INSERT INTO Notifications(title,message,type,created_at) VALUES(:t,:m,:tp,:ca)"), {"t":"Fraud Claims Detected","m":f"{rf} high-risk claims flagged today","tp":"fraud","ca":now})
+        pb = db.execute(text("""SELECT p.Name,COUNT(c.Claim_ID) as c FROM Provider p JOIN Claims c ON p.Provider_ID=c.Provider_ID WHERE c.Is_Fraudulent=1 GROUP BY p.Provider_ID ORDER BY c DESC LIMIT 1""")).fetchone()
+        if pb: db.execute(text("INSERT INTO Notifications(title,message,type,created_at) VALUES(:t,:m,:tp,:ca)"),{"t":"Provider Flagged","m":f"{pb.Name}: {pb.c} fraud claims - auto-review triggered","tp":"fraud","ca":now})
+        tc = db.execute(text("SELECT COUNT(*) FROM Claims WHERE Claim_Date=:t"),{"t":td}).scalar() or 0
+        wa = db.execute(text("SELECT AVG(cnt) FROM (SELECT COUNT(*) as cnt FROM Claims WHERE Claim_Date>=:d GROUP BY Claim_Date)"),{"d":(datetime.date.today()-datetime.timedelta(days=7)).isoformat()}).scalar() or 0
+        if wa > 0 and tc > wa*1.5: db.execute(text("INSERT INTO Notifications(title,message,type,created_at) VALUES(:t,:m,:tp,:ca)"),{"t":"Volume Spike","m":f"Today: {tc} claims ({((tc/wa)-1)*100:.0f}% above weekly avg {wa:.0f})","tp":"info","ca":now})
+        lc = db.execute(text("""SELECT c.Claim_ID,c.Claim_Amount,p.Name,pt.Name as pn FROM Claims c JOIN Provider p ON c.Provider_ID=p.Provider_ID JOIN Patient pt ON c.Patient_ID=pt.Patient_ID WHERE DATE(c.Claim_Date)=:t ORDER BY c.Claim_Amount DESC LIMIT 1"""),{"t":td}).fetchone()
+        if lc and lc.Claim_Amount > 20000: db.execute(text("INSERT INTO Notifications(title,message,type,created_at) VALUES(:t,:m,:tp,:ca)"),{"t":"Large Claim","m":f"${lc.Claim_Amount:.0f} by {lc.Name} for {lc.pn} (Claim #{lc.Claim_ID})","tp":"info","ca":now})
+        db.commit()
+        all_n = db.execute(text("SELECT * FROM Notifications ORDER BY created_at DESC LIMIT 50")).fetchall()
+        return {"data": [format_row(r) for r in all_n]}
+    except Exception as e:
+        print(f"Generate notif error: {e}"); return {"data": []}
+
+@router.get("/reports/data")
+async def get_report_data(db: Session = Depends(get_db), user: dict = Depends(get_current_user),
+    date_range: str = Query("all"), provider_id: int = Query(None), patient_id: int = Query(None), status: str = Query(None)):
+    ensure_sample_data(db)
+    try:
+        wp, params = [], {}
+        if date_range == "7": wp.append("c.Claim_Date>=:ds"); params["ds"]=(datetime.date.today()-datetime.timedelta(days=7)).isoformat()
+        elif date_range == "30": wp.append("c.Claim_Date>=:ds"); params["ds"]=(datetime.date.today()-datetime.timedelta(days=30)).isoformat()
+        elif date_range == "90": wp.append("c.Claim_Date>=:ds"); params["ds"]=(datetime.date.today()-datetime.timedelta(days=90)).isoformat()
+        if provider_id: wp.append("p.Provider_ID=:provider_id"); params["provider_id"]=provider_id
+        if patient_id: wp.append("pt.Patient_ID=:patient_id"); params["patient_id"]=patient_id
+        if status and status.upper()!="ALL": wp.append("c.Status=:status"); params["status"]=status
+        w = " AND ".join(wp) if wp else "1=1"
+        counts = db.execute(text(f"""SELECT COUNT(*) as tc,SUM(CASE WHEN c.Is_Fraudulent=1 THEN 1 ELSE 0 END) as tf,
+            SUM(c.Claim_Amount) as ta,AVG(c.Claim_Amount) as aa,AVG(c.Fraud_Score) as af
+            FROM Claims c LEFT JOIN Provider p ON c.Provider_ID=p.Provider_ID LEFT JOIN Patient pt ON c.Patient_ID=pt.Patient_ID WHERE {w}"""), params).fetchone()
+        fbp = db.execute(text(f"""SELECT p.Name,COUNT(*) as total,SUM(CASE WHEN c.Is_Fraudulent=1 THEN 1 ELSE 0 END) as fc
+            FROM Claims c JOIN Provider p ON c.Provider_ID=p.Provider_ID WHERE {w} GROUP BY p.Provider_ID ORDER BY fc DESC LIMIT 10"""), params).fetchall()
+        fbd = db.execute(text(f"""SELECT c.Diagnosis_Code,COUNT(*) as cnt,SUM(CASE WHEN c.Is_Fraudulent=1 THEN 1 ELSE 0 END) as fc
+            FROM Claims c LEFT JOIN Provider p ON c.Provider_ID=p.Provider_ID LEFT JOIN Patient pt ON c.Patient_ID=pt.Patient_ID WHERE {w} GROUP BY c.Diagnosis_Code ORDER BY fc DESC LIMIT 10"""), params).fetchall()
+        fbm = db.execute(text(f"""SELECT strftime('%Y-%m',c.Claim_Date) as m,COUNT(*) as total,
+            SUM(CASE WHEN c.Is_Fraudulent=1 THEN 1 ELSE 0 END) as fraud,SUM(c.Claim_Amount) as amount
+            FROM Claims c LEFT JOIN Provider p ON c.Provider_ID=p.Provider_ID LEFT JOIN Patient pt ON c.Patient_ID=pt.Patient_ID WHERE {w} GROUP BY m ORDER BY m"""), params).fetchall()
+        dist = db.execute(text(f"""SELECT CASE WHEN c.Claim_Amount<1000 THEN '<$1K' WHEN c.Claim_Amount<5000 THEN '$1K-$5K'
+            WHEN c.Claim_Amount<10000 THEN '$5K-$10K' WHEN c.Claim_Amount<50000 THEN '$10K-$50K' ELSE '$50K+' END as rn,
+            COUNT(*) as cnt,SUM(CASE WHEN c.Is_Fraudulent=1 THEN 1 ELSE 0 END) as fc
+            FROM Claims c LEFT JOIN Provider p ON c.Provider_ID=p.Provider_ID LEFT JOIN Patient pt ON c.Patient_ID=pt.Patient_ID WHERE {w} GROUP BY rn ORDER BY MIN(c.Claim_Amount)"""), params).fetchall()
+        cl = db.execute(text(f"""SELECT c.Claim_ID as id,pt.Name as pn,p.Name as prn,c.Claim_Amount as amt,c.Status,c.Is_Fraudulent as ifr,c.Claim_Date as dt,c.Fraud_Score as sc,c.Diagnosis_Code as dg
+            FROM Claims c JOIN Patient pt ON c.Patient_ID=pt.Patient_ID JOIN Provider p ON c.Provider_ID=p.Provider_ID WHERE {w} ORDER BY c.Claim_Date DESC LIMIT 500"""), params).fetchall()
+        return {"counts": format_row(counts), "fraud_by_provider":[{"name":r.Name,"total":r.total,"fraud_count":r.fc} for r in fbp],
+            "fraud_by_diagnosis":[{"code":r.Diagnosis_Code,"count":r.cnt,"fraud_count":r.fc} for r in fbd],
+            "fraud_by_month":[{"month":r.m or "0000-00","total":r.total,"fraud":r.fraud,"amount":r.amount} for r in fbm],
+            "claim_distribution":[{"range_name":r.rn,"count":r.cnt,"fraud_count":r.fc} for r in dist],
+            "claims":[format_row(r) for r in cl]}
+    except Exception as e:
+        print(f"Report data error: {e}")
+        return {"counts":None,"fraud_by_provider":[],"fraud_by_diagnosis":[],"fraud_by_month":[],"claim_distribution":[],"claims":[]}
+
+@router.get("/reports/export")
+async def export_reports(db: Session = Depends(get_db), user: dict = Depends(get_current_user),
+    date_range: str = Query("all"), provider_id: int = Query(None), patient_id: int = Query(None), status: str = Query(None)):
+    try:
+        wp, params = [], {}
+        if date_range == "7": wp.append("c.Claim_Date>=:ds"); params["ds"]=(datetime.date.today()-datetime.timedelta(days=7)).isoformat()
+        elif date_range == "30": wp.append("c.Claim_Date>=:ds"); params["ds"]=(datetime.date.today()-datetime.timedelta(days=30)).isoformat()
+        elif date_range == "90": wp.append("c.Claim_Date>=:ds"); params["ds"]=(datetime.date.today()-datetime.timedelta(days=90)).isoformat()
+        if provider_id: wp.append("p.Provider_ID=:provider_id"); params["provider_id"]=provider_id
+        if patient_id: wp.append("pt.Patient_ID=:patient_id"); params["patient_id"]=patient_id
+        if status and status.upper()!="ALL": wp.append("c.Status=:status"); params["status"]=status
+        w = " AND ".join(wp) if wp else "1=1"
+        rows = db.execute(text(f"""SELECT c.Claim_ID,pt.Name as pn,p.Name as prn,c.Diagnosis_Code,c.Claim_Amount,c.Fraud_Score,c.Status,c.Claim_Date
+            FROM Claims c JOIN Patient pt ON c.Patient_ID=pt.Patient_ID JOIN Provider p ON c.Provider_ID=p.Provider_ID
+            WHERE {w} ORDER BY c.Claim_Date DESC"""), params).fetchall()
+        return {"data":[format_row(r) for r in rows],"total":len(rows)}
+    except Exception as e:
+        print(f"Export error: {e}"); return {"data":[],"total":0}
