@@ -1,5 +1,7 @@
 import { useState, useRef } from 'react';
 import { Upload, Download, AlertCircle, CheckCircle, X } from 'lucide-react';
+import { buildCsv, downloadFile, parseCsv } from '../utils/csv';
+import { toISODate } from '../utils/format';
 
 /**
  * Reusable bulk import/export bar.
@@ -27,32 +29,7 @@ export default function BulkActions({ data, columns, onImport, filename = 'expor
       flash('error', 'No data to export');
       return;
     }
-    const resolvedColumns = columns?.length
-      ? columns
-      : Object.keys(data[0] || {}).map((key) => ({
-          key,
-          label: key.replace(/_/g, ' ').replace(/\b\w/g, (m) => m.toUpperCase()),
-        }));
-
-    const header = resolvedColumns.map((c) => c.label).join(',');
-    const rows = data.map((row) =>
-      resolvedColumns.map((c) => {
-        const val = row[c.key];
-        if (val == null) return '';
-        const str = String(val);
-        return str.includes(',') || str.includes('"') || str.includes('\n')
-          ? `"${str.replace(/"/g, '""')}"`
-          : str;
-      }).join(',')
-    );
-    const csv = [header, ...rows].join('\n');
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${filename}_${new Date().toISOString().slice(0, 10)}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+    downloadFile(buildCsv(data, columns), `${filename}_${toISODate()}.csv`);
     flash('success', `Exported ${data.length} rows`);
   };
 
@@ -68,34 +45,10 @@ export default function BulkActions({ data, columns, onImport, filename = 'expor
     const reader = new FileReader();
     reader.onload = (ev) => {
       try {
-        const text = ev.target.result;
-        const lines = text.split(/\r?\n/).filter((l) => l.trim());
-        if (lines.length < 2) {
+        const rows = parseCsv(ev.target.result, columns);
+        if (rows.length === 0) {
           flash('error', 'CSV file is empty or has no data rows');
           return;
-        }
-        const headerLine = lines[0];
-        const headers = parseCSVLine(headerLine);
-        const resolvedColumns = columns?.length
-          ? columns
-          : headers.map((h) => ({ key: h.trim(), label: h.trim() }));
-
-        // Map CSV headers to column keys (case-insensitive, trimmed)
-        const keyMap = headers.map((h) => {
-          const match = resolvedColumns.find(
-            (c) => c.label.toLowerCase().trim() === h.toLowerCase().trim() || c.key.toLowerCase().trim() === h.toLowerCase().trim()
-          );
-          return match ? match.key : null;
-        });
-
-        const rows = [];
-        for (let i = 1; i < lines.length; i++) {
-          const vals = parseCSVLine(lines[i]);
-          const obj = {};
-          keyMap.forEach((key, idx) => {
-            if (key) obj[key] = vals[idx]?.trim() || '';
-          });
-          if (Object.keys(obj).length > 0) rows.push(obj);
         }
         onImport(rows);
         flash('success', `Imported ${rows.length} rows from CSV`);
@@ -140,35 +93,4 @@ export default function BulkActions({ data, columns, onImport, filename = 'expor
       )}
     </div>
   );
-}
-
-/** Parse a single CSV line handling quoted fields */
-function parseCSVLine(line) {
-  const result = [];
-  let current = '';
-  let inQuotes = false;
-  for (let i = 0; i < line.length; i++) {
-    const ch = line[i];
-    if (inQuotes) {
-      if (ch === '"' && line[i + 1] === '"') {
-        current += '"';
-        i++;
-      } else if (ch === '"') {
-        inQuotes = false;
-      } else {
-        current += ch;
-      }
-    } else {
-      if (ch === '"') {
-        inQuotes = true;
-      } else if (ch === ',') {
-        result.push(current);
-        current = '';
-      } else {
-        current += ch;
-      }
-    }
-  }
-  result.push(current);
-  return result;
 }

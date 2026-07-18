@@ -4,13 +4,7 @@ import api from '../../api';
 import BulkActions from '../../components/BulkActions';
 import Skeleton from '../../components/Skeleton';
 import StatusBadge from '../../components/StatusBadge';
-
-const money = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
-
-function n(value) {
-  const numeric = Number(value);
-  return Number.isFinite(numeric) ? numeric : 0;
-}
+import { toNumber as n, formatCurrency } from '../../utils/format';
 
 function risk(score) {
   const value = n(score);
@@ -97,7 +91,7 @@ export default function Reports() {
 
       <section className="grid gap-4 md:grid-cols-4">
         <div className="enterprise-card p-4"><p className="text-[10px] font-black uppercase text-textSecondary">Report Rows</p><p className="mt-2 text-2xl font-black">{rows.length}</p></div>
-        <div className="enterprise-card p-4"><p className="text-[10px] font-black uppercase text-textSecondary">Claim Value</p><p className="mt-2 text-2xl font-black">{money.format(summary.value)}</p></div>
+        <div className="enterprise-card p-4"><p className="text-[10px] font-black uppercase text-textSecondary">Claim Value</p><p className="mt-2 text-2xl font-black">{formatCurrency(summary.value)}</p></div>
         <div className="enterprise-card p-4"><p className="text-[10px] font-black uppercase text-textSecondary">High Risk</p><p className="mt-2 text-2xl font-black text-danger">{summary.high}</p></div>
         <div className="enterprise-card p-4"><p className="text-[10px] font-black uppercase text-textSecondary">Backend Total</p><p className="mt-2 text-2xl font-black">{metrics?.total_claims ?? claims.length}</p></div>
       </section>
@@ -125,7 +119,7 @@ export default function Reports() {
                   <td>{claim.patient_name || claim.patient_id}</td>
                   <td>{claim.provider_name || claim.provider_id}</td>
                   <td>{claim.service_name || 'Unspecified'}</td>
-                  <td className="font-mono font-bold">{money.format(claim.amount_value)}</td>
+                  <td className="font-mono font-bold">{formatCurrency(claim.amount_value)}</td>
                   <td className="font-mono">{((n(claim.fraud_score) > 1 ? n(claim.fraud_score) / 100 : n(claim.fraud_score)) * 100).toFixed(1)}%</td>
                   <td><StatusBadge status={claim.status || 'Pending'} /></td>
                   <td>{claim.claim_date ? new Date(claim.claim_date).toLocaleDateString() : 'N/A'}</td>

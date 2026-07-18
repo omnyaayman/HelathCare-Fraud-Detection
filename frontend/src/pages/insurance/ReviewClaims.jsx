@@ -2,6 +2,8 @@
 import { useState, useEffect } from 'react';
 import { Search, Filter, Download, Eye, CheckCircle, XCircle, Clock } from 'lucide-react';
 import api from '../../api';
+import { buildCsv, downloadFile } from '../../utils/csv';
+import { formatScore, toISODate } from '../../utils/format';
 
 const statusColors = {
   'Submitted': 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
@@ -24,32 +26,17 @@ export default function ReviewClaims() {
 
   const exportToCSV = () => {
     if (!filteredClaims.length) return;
-    
-    const headers = ['Claim ID', 'Patient', 'Provider', 'Service', 'Amount', 'Fraud Score', 'Status'];
-    const rows = filteredClaims.map(claim => [
-      claim.claim_id,
-      claim.patient_name,
-      claim.provider_name,
-      claim.service_name,
-      claim.claim_amount,
-      (claim.fraud_score * 100).toFixed(0) + '%',
-      claim.status
-    ]);
-    
-    const csvContent = [
-      headers.join(','),
-      ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
-    ].join('\n');
-    
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.setAttribute('href', url);
-    link.setAttribute('download', `claims_export_${new Date().toISOString().split('T')[0]}.csv`);
-    link.style.visibility = 'hidden';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+
+    const columns = [
+      { key: 'claim_id', label: 'Claim ID' },
+      { key: 'patient_name', label: 'Patient' },
+      { key: 'provider_name', label: 'Provider' },
+      { key: 'service_name', label: 'Service' },
+      { key: 'claim_amount', label: 'Amount' },
+      { key: 'fraud_score', label: 'Fraud Score', value: (c) => formatScore(c.fraud_score, 0) },
+      { key: 'status', label: 'Status' },
+    ];
+    downloadFile(buildCsv(filteredClaims, columns), `claims_export_${toISODate()}.csv`);
   };
 
   useEffect(() => {

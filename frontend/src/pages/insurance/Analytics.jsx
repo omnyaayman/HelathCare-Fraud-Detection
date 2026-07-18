@@ -15,22 +15,11 @@ import {
 } from 'chart.js';
 import api from '../../api';
 import Skeleton from '../../components/Skeleton';
+import { toNumber as n, formatNumber, formatCurrency } from '../../utils/format';
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, ArcElement, PointElement, LineElement, Tooltip, Legend, Filler);
 
 const palette = ['#2563eb', '#0891b2', '#16a34a', '#f97316', '#dc2626', '#7c3aed'];
-const fmt = new Intl.NumberFormat('en-US');
-const money = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
-
-function n(value) {
-  const numeric = Number(value);
-  return Number.isFinite(numeric) ? numeric : 0;
-}
-
-function score(value) {
-  const numeric = n(value);
-  return numeric > 1 ? Math.min(numeric / 100, 1) : Math.max(0, Math.min(numeric, 1));
-}
 
 function keyDate(raw) {
   const d = raw ? new Date(raw) : null;
@@ -188,9 +177,9 @@ export default function Analytics() {
       {error && <div className="rounded-xl border border-danger/20 bg-danger/10 p-4 text-sm font-bold text-danger">{error}</div>}
 
       <section className="grid gap-4 md:grid-cols-4">
-        <div className="enterprise-card p-4"><p className="text-[10px] font-black uppercase text-textSecondary">Claims</p><p className="mt-2 text-2xl font-black">{fmt.format(analytics.total)}</p></div>
-        <div className="enterprise-card p-4"><p className="text-[10px] font-black uppercase text-textSecondary">Fraud Signals</p><p className="mt-2 text-2xl font-black text-danger">{fmt.format(analytics.fraud)}</p></div>
-        <div className="enterprise-card p-4"><p className="text-[10px] font-black uppercase text-textSecondary">Claim Value</p><p className="mt-2 text-2xl font-black">{money.format(analytics.amount)}</p></div>
+        <div className="enterprise-card p-4"><p className="text-[10px] font-black uppercase text-textSecondary">Claims</p><p className="mt-2 text-2xl font-black">{formatNumber(analytics.total)}</p></div>
+        <div className="enterprise-card p-4"><p className="text-[10px] font-black uppercase text-textSecondary">Fraud Signals</p><p className="mt-2 text-2xl font-black text-danger">{formatNumber(analytics.fraud)}</p></div>
+        <div className="enterprise-card p-4"><p className="text-[10px] font-black uppercase text-textSecondary">Claim Value</p><p className="mt-2 text-2xl font-black">{formatCurrency(analytics.amount)}</p></div>
         <div className="enterprise-card p-4"><p className="text-[10px] font-black uppercase text-textSecondary">Avg Risk Score</p><p className="mt-2 text-2xl font-black text-warning">{(analytics.avgScore * 100).toFixed(1)}%</p></div>
       </section>
 

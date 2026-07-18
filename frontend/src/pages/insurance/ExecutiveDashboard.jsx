@@ -33,6 +33,7 @@ import {
 
 import api from '../../api';
 import Skeleton from '../../components/Skeleton';
+import { formatCurrency, formatCompactCurrency, formatNumber } from '../../utils/format';
 
 ChartJS.register(
   CategoryScale,
@@ -46,9 +47,6 @@ ChartJS.register(
   Filler
 );
 
-const currency = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
-const compactCurrency = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', notation: 'compact', maximumFractionDigits: 1 });
-const numberFormat = new Intl.NumberFormat('en-US');
 
 const palette = {
   blue: '#2563eb',
@@ -275,7 +273,7 @@ export default function ExecutiveDashboard() {
         <StatCard
           icon={FileText}
           label="Total Claims"
-          value={numberFormat.format(analytics.totalClaims)}
+          value={formatNumber(analytics.totalClaims)}
           trend="up"
           trendValue="+12.5%"
           tone="blue"
@@ -284,7 +282,7 @@ export default function ExecutiveDashboard() {
         <StatCard
           icon={AlertTriangle}
           label="Fraud Claims"
-          value={numberFormat.format(analytics.fraudCount)}
+          value={formatNumber(analytics.fraudCount)}
           trend="down"
           trendValue="-3.1%"
           tone="red"
@@ -293,7 +291,7 @@ export default function ExecutiveDashboard() {
         <StatCard
           icon={ShieldCheck}
           label="Normal Claims"
-          value={numberFormat.format(analytics.normalCount)}
+          value={formatNumber(analytics.normalCount)}
           trend="up"
           trendValue="+5.2%"
           tone="green"
@@ -302,7 +300,7 @@ export default function ExecutiveDashboard() {
         <StatCard
           icon={DollarSign}
           label="Total Claim Amount"
-          value={compactCurrency.format(analytics.totalAmount)}
+          value={formatCompactCurrency(analytics.totalAmount)}
           trend="up"
           trendValue="+8.2%"
           tone="violet"
@@ -339,21 +337,21 @@ export default function ExecutiveDashboard() {
         <StatCard
           icon={Users}
           label="Active Patients"
-          value={numberFormat.format(analytics.totalPatients)}
+          value={formatNumber(analytics.totalPatients)}
           tone="teal"
           helper="Registered patients"
         />
         <StatCard
           icon={Building2}
           label="Active Providers"
-          value={numberFormat.format(analytics.totalProviders)}
+          value={formatNumber(analytics.totalProviders)}
           tone="indigo"
           helper="Registered providers"
         />
         <StatCard
           icon={FileText}
           label="Active Policies"
-          value={numberFormat.format(analytics.totalPolicies)}
+          value={formatNumber(analytics.totalPolicies)}
           tone="slate"
           helper="Active policies"
         />
@@ -422,7 +420,7 @@ export default function ExecutiveDashboard() {
             <div className="rounded-xl border border-border bg-bg/50 p-4">
               <p className="text-[11px] font-black uppercase tracking-widest text-textSecondary">Avg. Claim Cost</p>
               <p className="mt-2 text-xl font-black text-textPrimary">
-                {currency.format(analytics.avgClaimAmount)}
+                {formatCurrency(analytics.avgClaimAmount)}
               </p>
             </div>
             <div className="rounded-xl border border-border bg-bg/50 p-4">
@@ -434,13 +432,13 @@ export default function ExecutiveDashboard() {
             <div className="rounded-xl border border-border bg-bg/50 p-4">
               <p className="text-[11px] font-black uppercase tracking-widest text-textSecondary">Total Premium</p>
               <p className="mt-2 text-xl font-black text-textPrimary">
-                {compactCurrency.format(analytics.totalPremium)}
+                {formatCompactCurrency(analytics.totalPremium)}
               </p>
             </div>
             <div className="rounded-xl border border-border bg-bg/50 p-4">
               <p className="text-[11px] font-black uppercase tracking-widest text-textSecondary">Total Copay</p>
               <p className="mt-2 text-xl font-black text-orange-500">
-                {compactCurrency.format(analytics.totalCopay)}
+                {formatCompactCurrency(analytics.totalCopay)}
               </p>
             </div>
           </div>

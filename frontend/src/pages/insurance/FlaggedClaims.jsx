@@ -6,40 +6,13 @@ import Modal from '../../components/Modal';
 import Pagination from '../../components/Pagination';
 import BulkActions from '../../components/BulkActions';
 import { AlertCircle, Search, ShieldAlert, ArrowUpRight, RefreshCcw, Inbox } from 'lucide-react';
+import { clampScore, formatCurrency as formatUsd, formatScore as formatPercent, formatDate } from '../../utils/format';
 
 const PAGE_SIZE = 10;
 
-// Safe currency formatter — never throws on null/undefined/NaN input
-const formatCurrency = (value) => {
-  const num = Number(value);
-  if (!Number.isFinite(num)) return '$0.00';
-  return num.toLocaleString(undefined, {
-    style: 'currency',
-    currency: 'USD',
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-};
-
-// Safe date formatter — falls back gracefully if value is missing/invalid
-const formatDate = (value) => {
-  if (!value) return 'N/A';
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return 'N/A';
-  return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
-};
-
-// Clamp a fraud score to a safe 0-1 range and format as a percentage
-const formatScore = (score) => {
-  const num = Number(score);
-  const safe = Number.isFinite(num) ? Math.min(Math.max(num, 0), 1) : 0;
-  return `${(safe * 100).toFixed(0)}%`;
-};
-
-const getSafeScore = (c) => {
-  const num = Number(c?.fraud_score);
-  return Number.isFinite(num) ? Math.min(Math.max(num, 0), 1) : 0;
-};
+const formatCurrency = (value) => formatUsd(value, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const formatScore = (score) => formatPercent(score, 0);
+const getSafeScore = (c) => clampScore(c?.fraud_score);
 
 function SeverityBadge({ score }) {
   const safe = Number.isFinite(Number(score)) ? Number(score) : 0;
