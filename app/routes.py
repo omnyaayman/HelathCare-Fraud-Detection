@@ -10,6 +10,9 @@ import datetime
 import decimal
 import random
 from ML.predictor import predictor
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 security = HTTPBasic()
@@ -57,7 +60,11 @@ def get_current_user(credentials: HTTPBasicCredentials = Depends(security), db: 
         if result:
             return {"role": "provider", "provider_id": result[0], "username": result[1]}
     except SQLAlchemyError:
-        pass
+        # A database failure here must not be masked as an authentication
+        # failure ("Unauthorized"), which would mislead callers and hide the
+        # real outage. Surface it as a 503 so it can be diagnosed.
+        logger.exception("Database error while authenticating user '%s'", credentials.username)
+        raise HTTPException(status_code=503, detail="Authentication service temporarily unavailable")
     
     raise HTTPException(status_code=401, detail="Unauthorized")
 
@@ -67,7 +74,7 @@ def ensure_sample_data(db: Session):
         if count > 0:
             return
     except SQLAlchemyError:
-        pass
+        logger.exception("Failed to check for existing sample data")
 
 def log_audit(db: Session, user: dict, action: str, affected_record: str, ip: str = "127.0.0.1"):
     try:
@@ -82,8 +89,8 @@ def log_audit(db: Session, user: dict, action: str, affected_record: str, ip: st
             "ip_address": ip
         })
         db.commit()
-    except Exception as e:
-        print(f"Failed to log audit: {e}")
+    except Exception:
+        logger.exception("Failed to log audit entry (action=%s, record=%s)", action, affected_record)
         db.rollback()
 
 @router.get("/stats")
@@ -164,11 +171,8 @@ async def get_stats(db: Session = Depends(get_db), user: dict = Depends(get_curr
             "model_version": model_metrics.get("model_version") or "1.0.0"
         }
         
-    except Exception as e:
-        print(f"Stats query error type: {type(e).__name__}")
-        print(f"Stats query error: {e}")
-        import traceback
-        print(f"Traceback: {traceback.format_exc()}")
+    except Exception:
+        logger.exception("Stats query failed; returning zeroed stats")
         response = {
             "total_claims": 0, "pending_review": 0, "total_fraud": 0, "normal_claims": 0,
             "fraud_rate": 0, "avg_claim_amount": 0, "total_claim_amount": 0,
@@ -194,8 +198,8 @@ async def get_claims_over_time(db: Session = Depends(get_db), user: dict = Depen
         """)
         result = db.execute(query).fetchall()
         return [format_row(r) for r in result]
-    except SQLAlchemyError as e:
-        print(f"Claims over time error: {e}")
+    except SQLAlchemyError:
+        logger.exception("Claims over time error")
         return []
 
 @router.get("/charts/fraud-by-provider")
@@ -215,8 +219,8 @@ async def get_fraud_by_provider(db: Session = Depends(get_db), user: dict = Depe
         """)
         result = db.execute(query).fetchall()
         return [format_row(r) for r in result]
-    except SQLAlchemyError as e:
-        print(f"Fraud by provider error: {e}")
+    except SQLAlchemyError:
+        logger.exception("Fraud by provider error")
         return []
 
 @router.get("/charts/fraud-by-region")
@@ -235,8 +239,8 @@ async def get_fraud_by_region(db: Session = Depends(get_db), user: dict = Depend
         """)
         result = db.execute(query).fetchall()
         return [format_row(r) for r in result]
-    except SQLAlchemyError as e:
-        print(f"Fraud by region error: {e}")
+    except SQLAlchemyError:
+        logger.exception("Fraud by region error")
         return []
 
 @router.get("/charts/fraud-by-diagnosis")
@@ -255,8 +259,8 @@ async def get_fraud_by_diagnosis(db: Session = Depends(get_db), user: dict = Dep
         """)
         result = db.execute(query).fetchall()
         return [format_row(r) for r in result]
-    except SQLAlchemyError as e:
-        print(f"Fraud by diagnosis error: {e}")
+    except SQLAlchemyError:
+        logger.exception("Fraud by diagnosis error")
         return []
 
 @router.get("/charts/fraud-by-city")
@@ -276,8 +280,8 @@ async def get_fraud_by_city(db: Session = Depends(get_db), user: dict = Depends(
         """)
         result = db.execute(query).fetchall()
         return [format_row(r) for r in result]
-    except SQLAlchemyError as e:
-        print(f"Fraud by city error: {e}")
+    except SQLAlchemyError:
+        logger.exception("Fraud by city error")
         return []
 
 @router.get("/charts/fraud-score-distribution")
@@ -300,8 +304,8 @@ async def get_fraud_score_distribution(db: Session = Depends(get_db), user: dict
         """)
         result = db.execute(query).fetchall()
         return [format_row(r) for r in result]
-    except SQLAlchemyError as e:
-        print(f"Fraud score distribution error: {e}")
+    except SQLAlchemyError:
+        logger.exception("Fraud score distribution error")
         return []
 
 @router.get("/charts/claim-status-distribution")
@@ -315,8 +319,8 @@ async def get_claim_status_distribution(db: Session = Depends(get_db), user: dic
         """)
         result = db.execute(query).fetchall()
         return [format_row(r) for r in result]
-    except SQLAlchemyError as e:
-        print(f"Status distribution error: {e}")
+    except SQLAlchemyError:
+        logger.exception("Status distribution error")
         return []
 
 @router.get("/charts/monthly-claims")
@@ -334,8 +338,8 @@ async def get_monthly_claims(db: Session = Depends(get_db), user: dict = Depends
         """)
         result = db.execute(query).fetchall()
         return [format_row(r) for r in result]
-    except SQLAlchemyError as e:
-        print(f"Monthly claims error: {e}")
+    except SQLAlchemyError:
+        logger.exception("Monthly claims error")
         return []
 
 @router.get("/charts/average-claim-cost")
@@ -354,8 +358,8 @@ async def get_average_claim_cost(db: Session = Depends(get_db), user: dict = Dep
         """)
         result = db.execute(query).fetchall()
         return [format_row(r) for r in result]
-    except SQLAlchemyError as e:
-        print(f"Average claim cost error: {e}")
+    except SQLAlchemyError:
+        logger.exception("Average claim cost error")
         return []
 
 @router.get("/claims")
@@ -455,8 +459,8 @@ async def get_claims(
             "page_size": page_size,
             "total_pages": (total + page_size - 1) // page_size if total > 0 else 1
         }
-    except SQLAlchemyError as e:
-        print(f"Claims query error: {e}")
+    except SQLAlchemyError:
+        logger.exception("Claims query error")
         return {"data": [], "total": 0, "page": page, "page_size": page_size, "total_pages": 1}
 
 @router.get("/claims/{claim_id}")
@@ -582,8 +586,8 @@ async def get_claim_details(claim_id: int, db: Session = Depends(get_db), user: 
                         "value": features[name]
                     })
                 base_value = float(contribs[-1])
-            except Exception as e:
-                print(f"SHAP explanation computation failure: {e}")
+            except Exception:
+                logger.exception("SHAP explanation computation failure")
                 
         log_audit(db, user, "VIEW_CLAIM_DETAILS", f"Claim details #{claim_id}")
         return {
@@ -592,8 +596,8 @@ async def get_claim_details(claim_id: int, db: Session = Depends(get_db), user: 
             "shap_contributions": shap_contributions,
             "base_value": base_value
         }
-    except SQLAlchemyError as e:
-        print(f"Claim Details database error: {e}")
+    except SQLAlchemyError:
+        logger.exception("Claim Details database error")
         raise HTTPException(status_code=500, detail="Database failure while loading claim details")
 
 @router.get("/patients")
@@ -626,8 +630,8 @@ async def get_patients(db: Session = Depends(get_db), user: dict = Depends(get_c
         result = db.execute(query).fetchall()
         log_audit(db, user, "VIEW_PATIENTS", "Patients list")
         return [format_row(r) for r in result]
-    except SQLAlchemyError as e:
-        print(f"Patients query error: {e}")
+    except SQLAlchemyError:
+        logger.exception("Patients query error")
         return []
 
 @router.get("/providers")
@@ -658,8 +662,8 @@ async def get_providers(db: Session = Depends(get_db), user: dict = Depends(get_
         result = db.execute(query).fetchall()
         log_audit(db, user, "VIEW_PROVIDERS", "Providers list")
         return [format_row(r) for r in result]
-    except SQLAlchemyError as e:
-        print(f"Providers query error: {e}")
+    except SQLAlchemyError:
+        logger.exception("Providers query error")
         return []
 
 @router.get("/policies")
@@ -689,8 +693,8 @@ async def get_policies(db: Session = Depends(get_db), user: dict = Depends(get_c
         result = db.execute(query, {"today": today}).fetchall()
         log_audit(db, user, "VIEW_POLICIES", "Policies list")
         return [format_row(r) for r in result]
-    except SQLAlchemyError as e:
-        print(f"Policies query error: {e}")
+    except SQLAlchemyError:
+        logger.exception("Policies query error")
         return []
 
 @router.get("/services")
@@ -701,8 +705,8 @@ async def get_services(db: Session = Depends(get_db), user: dict = Depends(get_c
         result = db.execute(query).fetchall()
         log_audit(db, user, "VIEW_SERVICES", "Services list")
         return [format_row(r) for r in result]
-    except SQLAlchemyError as e:
-        print(f"Services query error: {e}")
+    except SQLAlchemyError:
+        logger.exception("Services query error")
         return []
 
 @router.post("/services")
@@ -720,9 +724,9 @@ async def create_service(data: dict, db: Session = Depends(get_db), user: dict =
         db.commit()
         log_audit(db, user, "CREATE_SERVICE", f"Service {result.lastrowid}")
         return {"status": "success", "id": result.lastrowid}
-    except SQLAlchemyError as e:
+    except SQLAlchemyError:
         db.rollback()
-        print(f"Create service error: {e}")
+        logger.exception("Create service error")
         raise HTTPException(status_code=500, detail="Failed to create service")
 
 @router.patch("/services/{service_id}")
@@ -742,9 +746,9 @@ async def update_service(service_id: int, data: dict, db: Session = Depends(get_
         db.commit()
         log_audit(db, user, "UPDATE_SERVICE", f"Service {service_id}")
         return {"status": "success"}
-    except SQLAlchemyError as e:
+    except SQLAlchemyError:
         db.rollback()
-        print(f"Update service error: {e}")
+        logger.exception("Update service error")
         raise HTTPException(status_code=500, detail="Failed to update service")
 
 @router.delete("/services/{service_id}")
@@ -755,9 +759,9 @@ async def delete_service(service_id: int, db: Session = Depends(get_db), user: d
         db.commit()
         log_audit(db, user, "DELETE_SERVICE", f"Service {service_id}")
         return {"status": "success"}
-    except SQLAlchemyError as e:
+    except SQLAlchemyError:
         db.rollback()
-        print(f"Delete service error: {e}")
+        logger.exception("Delete service error")
         raise HTTPException(status_code=500, detail="Failed to delete service")
 
 @router.get("/analytics/top-providers")
@@ -779,8 +783,8 @@ async def get_top_providers(db: Session = Depends(get_db), user: dict = Depends(
         """)
         result = db.execute(query).fetchall()
         return [format_row(r) for r in result]
-    except SQLAlchemyError as e:
-        print(f"Top providers error: {e}")
+    except SQLAlchemyError:
+        logger.exception("Top providers error")
         return []
 
 @router.get("/analytics/top-patients")
@@ -802,8 +806,8 @@ async def get_top_patients(db: Session = Depends(get_db), user: dict = Depends(g
         """)
         result = db.execute(query).fetchall()
         return [format_row(r) for r in result]
-    except SQLAlchemyError as e:
-        print(f"Top patients error: {e}")
+    except SQLAlchemyError:
+        logger.exception("Top patients error")
         return []
 
 @router.get("/analytics/top-diagnoses")
@@ -822,8 +826,8 @@ async def get_top_diagnoses(db: Session = Depends(get_db), user: dict = Depends(
         """)
         result = db.execute(query).fetchall()
         return [format_row(r) for r in result]
-    except SQLAlchemyError as e:
-        print(f"Top diagnoses error: {e}")
+    except SQLAlchemyError:
+        logger.exception("Top diagnoses error")
         return []
 
 @router.get("/heatmap/providers")
@@ -849,8 +853,8 @@ async def get_heatmap_providers(db: Session = Depends(get_db), user: dict = Depe
         result = db.execute(query).fetchall()
         log_audit(db, user, "VIEW_HEATMAP", "Fraud heatmap")
         return [format_row(r) for r in result]
-    except SQLAlchemyError as e:
-        print(f"Heatmap providers error: {e}")
+    except SQLAlchemyError:
+        logger.exception("Heatmap providers error")
         return []
 
 @router.get("/model/metrics")
@@ -878,8 +882,8 @@ async def get_model_metrics(db: Session = Depends(get_db), user: dict = Depends(
             ]
             return response
         return None
-    except SQLAlchemyError as e:
-        print(f"Model metrics error: {e}")
+    except SQLAlchemyError:
+        logger.exception("Model metrics error")
         return None
 
 @router.post("/model/retrain")
@@ -928,9 +932,9 @@ async def retrain_model(db: Session = Depends(get_db), user: dict = Depends(get_
         db.commit()
         
         return {"status": "success", "version": version}
-    except SQLAlchemyError as e:
+    except SQLAlchemyError:
         db.rollback()
-        print(f"Retrain model error: {e}")
+        logger.exception("Retrain model error")
         raise HTTPException(status_code=500, detail="Failed to retrain model")
 
 @router.get("/ai-insights")
@@ -1010,8 +1014,8 @@ async def get_ai_insights(db: Session = Depends(get_db), user: dict = Depends(ge
         log_audit(db, user, "VIEW_AI_INSIGHTS", "AI insights")
         
         return insights
-    except SQLAlchemyError as e:
-        print(f"AI insights error: {e}")
+    except SQLAlchemyError:
+        logger.exception("AI insights error")
         return []
 
 @router.get("/notifications")
@@ -1022,8 +1026,8 @@ async def get_notifications(db: Session = Depends(get_db), user: dict = Depends(
         result = db.execute(query).fetchall()
         log_audit(db, user, "VIEW_NOTIFICATIONS", "Notifications list")
         return [format_row(r) for r in result]
-    except SQLAlchemyError as e:
-        print(f"Notifications error: {e}")
+    except SQLAlchemyError:
+        logger.exception("Notifications error")
         return []
 
 @router.patch("/notifications/{notif_id}/read")
@@ -1034,9 +1038,9 @@ async def mark_notification_read(notif_id: int, db: Session = Depends(get_db), u
         db.commit()
         log_audit(db, user, "MARK_NOTIF_READ", f"Notification {notif_id}")
         return {"status": "success"}
-    except SQLAlchemyError as e:
+    except SQLAlchemyError:
         db.rollback()
-        print(f"Mark notification read error: {e}")
+        logger.exception("Mark notification read error")
         raise HTTPException(status_code=500, detail="Failed to update notification")
 
 @router.patch("/notifications/read-all")
@@ -1047,9 +1051,9 @@ async def mark_all_notifications_read(db: Session = Depends(get_db), user: dict 
         db.commit()
         log_audit(db, user, "MARK_ALL_NOTIF_READ", "All notifications")
         return {"status": "success"}
-    except SQLAlchemyError as e:
+    except SQLAlchemyError:
         db.rollback()
-        print(f"Mark all notifications read error: {e}")
+        logger.exception("Mark all notifications read error")
         raise HTTPException(status_code=500, detail="Failed to update notifications")
 
 @router.get("/audit-logs")
@@ -1099,8 +1103,8 @@ async def get_audit_logs(
             "page_size": page_size,
             "total_pages": (total + page_size - 1) // page_size if total > 0 else 1
         }
-    except SQLAlchemyError as e:
-        print(f"Audit logs error: {e}")
+    except SQLAlchemyError:
+        logger.exception("Audit logs error")
         return {"data": [], "total": 0, "page": page, "page_size": page_size, "total_pages": 1}
 
 @router.get("/system/health")
@@ -1124,7 +1128,7 @@ async def get_system_health(db: Session = Depends(get_db), user: dict = Depends(
             "avg_response_time": round(avg_response_time, 0)
         }
     except Exception as e:
-        print(f"System health error: {e}")
+        logger.exception("System health error")
         return {
             "api_status": "unhealthy",
             "db_status": "disconnected",
@@ -1143,9 +1147,9 @@ async def update_claim_status(claim_id: int, status_data: dict, db: Session = De
         db.commit()
         log_audit(db, user, "UPDATE_CLAIM_STATUS", f"Claim {claim_id} to {new_status}")
         return {"status": "success"}
-    except SQLAlchemyError as e:
+    except SQLAlchemyError:
         db.rollback()
-        print(f"Update claim error: {e}")
+        logger.exception("Update claim error")
         raise HTTPException(status_code=500, detail="Failed to update claim status")
 
 @router.post("/labeled-data")
@@ -1171,9 +1175,9 @@ async def create_labeled_data(data: dict, db: Session = Depends(get_db), user: d
         db.commit()
         log_audit(db, user, "CREATE_LABELED_DATA", f"Labeled data {result.lastrowid}")
         return {"status": "success"}
-    except SQLAlchemyError as e:
+    except SQLAlchemyError:
         db.rollback()
-        print(f"Create labeled data error: {e}")
+        logger.exception("Create labeled data error")
         raise HTTPException(status_code=500, detail="Failed to create labeled data")
 
 @router.get("/labeled-data")
@@ -1218,8 +1222,8 @@ async def get_labeled_data(
             "page_size": page_size,
             "total_pages": (total + page_size - 1) // page_size if total > 0 else 1
         }
-    except SQLAlchemyError as e:
-        print(f"Labeled data query error: {e}")
+    except SQLAlchemyError:
+        logger.exception("Labeled data query error")
         return {"data": [], "total": 0, "page": page, "page_size": page_size, "total_pages": 1}
 
 @router.patch("/labeled-data/{id}")
@@ -1241,9 +1245,9 @@ async def update_labeled_data(id: int, data: dict, db: Session = Depends(get_db)
         db.commit()
         log_audit(db, user, "UPDATE_LABELED_DATA", f"Labeled data {id}")
         return {"status": "success"}
-    except SQLAlchemyError as e:
+    except SQLAlchemyError:
         db.rollback()
-        print(f"Update labeled data error: {e}")
+        logger.exception("Update labeled data error")
         raise HTTPException(status_code=500, detail="Failed to update labeled data")
 
 @router.delete("/labeled-data/{id}")
@@ -1254,9 +1258,9 @@ async def delete_labeled_data(id: int, db: Session = Depends(get_db), user: dict
         db.commit()
         log_audit(db, user, "DELETE_LABELED_DATA", f"Labeled data {id}")
         return {"status": "success"}
-    except SQLAlchemyError as e:
+    except SQLAlchemyError:
         db.rollback()
-        print(f"Delete labeled data error: {e}")
+        logger.exception("Delete labeled data error")
         raise HTTPException(status_code=500, detail="Failed to delete labeled data")
 
 @router.post("/claims")
@@ -1286,8 +1290,8 @@ async def submit_claim(data: dict, db: Session = Depends(get_db), user: dict = D
                 "patient_name": policy[1],
                 "policy_status": status
             }
-        except SQLAlchemyError as e:
-            print(f"Policy lookup error: {e}")
+        except SQLAlchemyError:
+            logger.exception("Policy lookup error")
             raise HTTPException(status_code=500, detail="Database lookup failed")
         
     # Otherwise, process the claim submission
@@ -1364,6 +1368,12 @@ async def submit_claim(data: dict, db: Session = Depends(get_db), user: dict = D
         }
         
         pred_res = predictor.predict(raw_features)
+        if pred_res.get("error"):
+            # The model failed but returned a neutral fallback score. Don't
+            # let that failure pass unnoticed: a claim scored by a broken
+            # model must be traceable in the logs.
+            logger.error("Fraud prediction failed for policy %s, using fallback score: %s",
+                         policy_number, pred_res.get("error"))
         fraud_score = float(pred_res.get("fraud_score", 0.5))
         prediction = pred_res.get("prediction", "Normal")
         
@@ -1446,10 +1456,15 @@ async def submit_claim(data: dict, db: Session = Depends(get_db), user: dict = D
             "fraud_score": fraud_score
         }
         
-    except Exception as e:
+    except HTTPException:
+        # Preserve intentional client errors (e.g. 404 "Policy not found")
+        # instead of collapsing them into a generic 500.
         db.rollback()
-        print(f"Claim submission processing error: {e}")
-        raise HTTPException(status_code=500, detail=f"Claim processing failed: {str(e)}")
+        raise
+    except Exception:
+        db.rollback()
+        logger.exception("Claim submission processing error for policy %s", policy_number)
+        raise HTTPException(status_code=500, detail="Claim processing failed")
 
 # ---------------------------------------------------------------------------
 # NEW ENDPOINTS: Dashboard trends, notifications generation, reports, export
@@ -1470,8 +1485,8 @@ async def get_stats_trends(db: Session = Depends(get_db), user: dict = Depends(g
         def tr(c, p): return round(((c/p)-1)*100, 1) if (p and p > 0) else 0
         return {"claims_trend": tr(cur.tc or 0, prev.tc or 0), "fraud_trend": tr(cur.tf or 0, prev.tf or 0),
                 "money_saved_trend": tr(cur.ms or 0, prev.ms or 0), "suspicious_providers_active": int(cur.ap or 0)}
-    except Exception as e:
-        print(f"Trends error: {e}")
+    except Exception:
+        logger.exception("Trends error")
         return {"claims_trend": 0, "fraud_trend": 0, "money_saved_trend": 0, "suspicious_providers_active": 0}
 
 @router.post("/notifications/generate")
@@ -1491,8 +1506,8 @@ async def generate_notifications(db: Session = Depends(get_db), user: dict = Dep
         db.commit()
         all_n = db.execute(text("SELECT * FROM Notifications ORDER BY created_at DESC LIMIT 50")).fetchall()
         return {"data": [format_row(r) for r in all_n]}
-    except Exception as e:
-        print(f"Generate notif error: {e}"); return {"data": []}
+    except Exception:
+        logger.exception("Generate notif error"); return {"data": []}
 
 @router.get("/reports/data")
 async def get_report_data(db: Session = Depends(get_db), user: dict = Depends(get_current_user),
@@ -1528,8 +1543,8 @@ async def get_report_data(db: Session = Depends(get_db), user: dict = Depends(ge
             "fraud_by_month":[{"month":r.m or "0000-00","total":r.total,"fraud":r.fraud,"amount":r.amount} for r in fbm],
             "claim_distribution":[{"range_name":r.rn,"count":r.cnt,"fraud_count":r.fc} for r in dist],
             "claims":[format_row(r) for r in cl]}
-    except Exception as e:
-        print(f"Report data error: {e}")
+    except Exception:
+        logger.exception("Report data error")
         return {"counts":None,"fraud_by_provider":[],"fraud_by_diagnosis":[],"fraud_by_month":[],"claim_distribution":[],"claims":[]}
 
 @router.get("/reports/export")
@@ -1548,5 +1563,5 @@ async def export_reports(db: Session = Depends(get_db), user: dict = Depends(get
             FROM Claims c JOIN Patient pt ON c.Patient_ID=pt.Patient_ID JOIN Provider p ON c.Provider_ID=p.Provider_ID
             WHERE {w} ORDER BY c.Claim_Date DESC"""), params).fetchall()
         return {"data":[format_row(r) for r in rows],"total":len(rows)}
-    except Exception as e:
-        print(f"Export error: {e}"); return {"data":[],"total":0}
+    except Exception:
+        logger.exception("Export error"); return {"data":[],"total":0}

@@ -1,5 +1,6 @@
 # Python virtual environment and cache
 venv/
+.venv/
 __pycache__/
 *.pyc
 healthcare_fraud.db
