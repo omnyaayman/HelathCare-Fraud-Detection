@@ -9,6 +9,7 @@ from core.config import settings
 import datetime
 import decimal
 import random
+import secrets
 from ML.predictor import predictor
 
 router = APIRouter()
@@ -36,10 +37,30 @@ def format_row(row):
             formatted[new_key] = v
     return formatted
 
+def _matches(provided: str, expected: str) -> bool:
+    # Reject empty expected values so an unset credential can never authenticate,
+    # and compare in constant time to avoid timing attacks.
+    if not expected:
+        return False
+    return secrets.compare_digest(provided, expected)
+
+
 def get_current_user(credentials: HTTPBasicCredentials = Depends(security), db: Session = Depends(get_db)):
-    if credentials.username == "admin_insurance" and credentials.password == "password123":
+    unauthorized = HTTPException(
+        status_code=401,
+        detail="Unauthorized",
+        headers={"WWW-Authenticate": "Basic"},
+    )
+
+    if _matches(credentials.username, settings.ADMIN_USERNAME) and _matches(credentials.password, settings.ADMIN_PASSWORD):
         return {"role": "insurance", "provider_id": None, "username": credentials.username}
-    
+
+    # Providers must present the shared provider password before their username
+    # is resolved. Without this check any known provider id/name would grant
+    # access with no credential at all.
+    if not _matches(credentials.password, settings.PROVIDER_PASSWORD):
+        raise unauthorized
+
     try:
         # Resolve by ID, Name, or 'provider_ID'
         result = db.execute(text("""
@@ -53,8 +74,8 @@ def get_current_user(credentials: HTTPBasicCredentials = Depends(security), db: 
             return {"role": "provider", "provider_id": result[0], "username": result[1]}
     except SQLAlchemyError:
         pass
-    
-    raise HTTPException(status_code=401, detail="Unauthorized")
+
+    raise unauthorized
 
 def ensure_sample_data(db: Session):
     try:
@@ -966,7 +987,6 @@ async def get_system_health(db: Session = Depends(get_db), user: dict = Depends(
         return {
             "api_status": "unhealthy",
             "db_status": "disconnected",
-            "error": str(e)
         }
 
 @router.patch("/claims/{claim_id}/status")
@@ -1284,7 +1304,10 @@ async def submit_claim(data: dict, db: Session = Depends(get_db), user: dict = D
             "fraud_score": fraud_score
         }
         
+    except HTTPException:
+        db.rollback()
+        raise
     except Exception as e:
         db.rollback()
         print(f"Claim submission processing error: {e}")
-        raise HTTPException(status_code=500, detail=f"Claim processing failed: {str(e)}")
+        raise HTTPException(status_code=500, detail="Claim processing failed")
