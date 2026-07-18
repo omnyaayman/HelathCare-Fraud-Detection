@@ -4,8 +4,21 @@ import api from '../../api';
 import Modal from '../../components/Modal';
 import Pagination from '../../components/Pagination';
 import StatusBadge from '../../components/StatusBadge';
+import { buildCsv, downloadFile } from '../../utils/csv';
 
 const PAGE_SIZE = 10;
+
+const EXPORT_COLUMNS = [
+  { key: 'id', label: 'ID' },
+  { key: 'claim_id', label: 'Claim ID' },
+  { key: 'patient_name', label: 'Patient' },
+  { key: 'provider_name', label: 'Provider' },
+  { key: 'amount', label: 'Amount' },
+  { key: 'fraud_label', label: 'Fraud Label' },
+  { key: 'auditor', label: 'Auditor' },
+  { key: 'audit_date', label: 'Audit Date' },
+  { key: 'notes', label: 'Notes' },
+];
 
 export default function LabeledData() {
   const [records, setRecords] = useState([]);
@@ -109,29 +122,7 @@ export default function LabeledData() {
   };
 
   const exportCSV = () => {
-    const headers = ['ID', 'Claim ID', 'Patient', 'Provider', 'Amount', 'Fraud Label', 'Auditor', 'Audit Date', 'Notes'];
-    const csv = [
-      headers.join(','),
-      ...records.map(r => [
-        r.id,
-        r.claim_id,
-        `"${r.patient_name || ''}"`,
-        `"${r.provider_name || ''}"`,
-        r.amount,
-        r.fraud_label,
-        r.auditor,
-        r.audit_date,
-        `"${r.notes || ''}"`
-      ].join(','))
-    ].join('\n');
-    
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'labeled_data.csv';
-    a.click();
-    window.URL.revokeObjectURL(url);
+    downloadFile(buildCsv(records, EXPORT_COLUMNS), 'labeled_data.csv');
   };
 
   const handleImport = (e) => {

@@ -4,20 +4,7 @@ import api from '../../api';
 import Skeleton from '../../components/Skeleton';
 import StatusBadge from '../../components/StatusBadge';
 import PlotlyChart from '../../components/PlotlyChart';
-
-const currency = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
-const compactCurrency = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', notation: 'compact', maximumFractionDigits: 1 });
-
-function toNumber(value) {
-  const n = Number(value);
-  return Number.isFinite(n) ? n : 0;
-}
-
-function clampScore(value) {
-  const n = toNumber(value);
-  if (n > 1) return Math.min(n / 100, 1);
-  return Math.min(Math.max(n, 0), 1);
-}
+import { toNumber, clampScore, formatCurrency, formatCompactCurrency } from '../../utils/format';
 
 function dateKey(value) {
   const raw = value || '';
@@ -234,7 +221,7 @@ export default function ProviderDashboard() {
         <KpiCard label="Pending Review" value={analytics.pending.toLocaleString()} helper="Awaiting processing or analyst review" icon={Clock} tone="warning" />
         <KpiCard label="High Risk Claims" value={analytics.flagged.toLocaleString()} helper="Flagged by status or fraud score" icon={AlertCircle} tone="danger" />
         <KpiCard label="Cleared Claims" value={analytics.approved.toLocaleString()} helper="Approved or cleared records" icon={CheckCircle} tone="success" />
-        <KpiCard label="Total Billed" value={compactCurrency.format(analytics.amount)} helper="Financial exposure in submitted claims" icon={DollarSign} tone="primary" />
+        <KpiCard label="Total Billed" value={formatCompactCurrency(analytics.amount)} helper="Financial exposure in submitted claims" icon={DollarSign} tone="primary" />
         <KpiCard label="Average Risk" value={`${(analytics.avgRisk * 100).toFixed(1)}%`} helper="Mean fraud probability" icon={BrainCircuit} tone="warning" />
         <KpiCard label="AI Accuracy" value={`${(clampScore(metrics?.model_accuracy) * 100).toFixed(1)}%`} helper="Returned from stats endpoint" icon={ShieldCheck} tone="success" />
         <KpiCard label="Last Retrain" value={metrics?.last_retrain ? new Date(metrics.last_retrain).toLocaleDateString() : 'N/A'} helper="Model lifecycle timestamp" icon={Activity} tone="cyan" />
@@ -318,7 +305,7 @@ export default function ProviderDashboard() {
                       <td className="font-mono text-xs font-black text-primary">#{claim.claim_id || 'N/A'}</td>
                       <td className="font-bold text-textPrimary">{claim.patient_name || 'Unknown patient'}</td>
                       <td className="text-xs text-textSecondary">{claim.service_name || 'Medical service'}</td>
-                      <td className="text-right font-mono text-textPrimary">{currency.format(toNumber(claim.claim_amount))}</td>
+                      <td className="text-right font-mono text-textPrimary">{formatCurrency(claim.claim_amount)}</td>
                       <td className={`text-right font-mono font-black ${score >= 0.7 ? 'text-danger' : score >= 0.4 ? 'text-warning' : 'text-success'}`}>{(score * 100).toFixed(1)}%</td>
                       <td><StatusBadge status={statusOf(claim)} /></td>
                     </tr>

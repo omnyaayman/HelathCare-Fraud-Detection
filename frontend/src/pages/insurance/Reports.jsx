@@ -3,8 +3,8 @@ import { FileText, Download, Filter, Search, Calendar, BarChart3, PieChart, Tren
 import api from '../../api';
 import Skeleton from '../../components/Skeleton';
 import PlotlyChart from '../../components/PlotlyChart';
-
-const formatCurrency = (val) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(val || 0);
+import { formatCurrency, toISODate } from '../../utils/format';
+import { buildCsv, downloadFile } from '../../utils/csv';
 
 export default function Reports() {
   const [reportData, setReportData] = useState(null);
@@ -47,16 +47,20 @@ export default function Reports() {
       if (data.length === 0) { flash('error', 'No data to export'); setExporting(false); return; }
 
       if (format === 'csv') {
-        const headers = ['Claim_ID,Patient,Provider,Diagnosis,Amount,Fraud_Score,Status,Date'];
-        const rows = data.map(r => `${r.claim_id},"${r.pn || r.patient_name || ''}","${r.prn || r.provider_name || ''}","${r.diagnosis_code || ''}",${r.claim_amount || r.amount || 0},${r.fraud_score || r.score || 0},"${r.status}","${r.claim_date || r.date}"`);
-        const blob = new Blob([[...headers, ...rows].join('\n')], { type: 'text/csv' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a'); a.href = url; a.download = `fraud_report_${new Date().toISOString().split('T')[0]}.csv`; a.click();
+        const columns = [
+          { key: 'claim_id', label: 'Claim_ID' },
+          { key: 'patient_name', label: 'Patient', value: (r) => r.pn || r.patient_name || '' },
+          { key: 'provider_name', label: 'Provider', value: (r) => r.prn || r.provider_name || '' },
+          { key: 'diagnosis_code', label: 'Diagnosis', value: (r) => r.diagnosis_code || '' },
+          { key: 'amount', label: 'Amount', value: (r) => r.claim_amount || r.amount || 0 },
+          { key: 'fraud_score', label: 'Fraud_Score', value: (r) => r.fraud_score || r.score || 0 },
+          { key: 'status', label: 'Status' },
+          { key: 'date', label: 'Date', value: (r) => r.claim_date || r.date },
+        ];
+        downloadFile(buildCsv(data, columns), `fraud_report_${toISODate()}.csv`, 'text/csv');
         flash('success', `Exported ${data.length} records as CSV`);
       } else if (format === 'json') {
-        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a'); a.href = url; a.download = `fraud_report_${new Date().toISOString().split('T')[0]}.json`; a.click();
+        downloadFile(JSON.stringify(data, null, 2), `fraud_report_${toISODate()}.json`, 'application/json');
         flash('success', `Exported ${data.length} records as JSON`);
       }
     } catch (err) {

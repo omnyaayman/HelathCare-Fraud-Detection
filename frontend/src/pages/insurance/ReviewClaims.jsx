@@ -8,6 +8,7 @@ import api from "../../api";
 import StatusBadge from "../../components/StatusBadge";
 import Skeleton from "../../components/Skeleton";
 import Pagination from "../../components/Pagination";
+import { formatCurrency } from "../../utils/format";
 
 export default function ReviewClaims() {
   const navigate = useNavigate();
@@ -146,7 +147,7 @@ export default function ReviewClaims() {
                   <td className="px-5 py-4 font-semibold text-textPrimary text-sm">{c.patient_name}</td>
                   <td className="px-5 py-4 text-textSecondary text-xs max-w-[150px] truncate">{c.provider_name}</td>
                   <td className="px-5 py-4 font-mono text-sm font-bold text-textPrimary">
-                    {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(c.claim_amount || 0)}
+                    {formatCurrency(c.claim_amount)}
                   </td>
                   <td className="px-5 py-4">
                     <div className="flex items-center gap-2">

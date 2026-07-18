@@ -3,15 +3,9 @@ import { Activity, AlertTriangle, BarChart3, BrainCircuit, Database, RefreshCcw,
 import api from '../../api';
 import Skeleton from '../../components/Skeleton';
 import PlotlyChart from '../../components/PlotlyChart';
+import { toNumber as n, formatNumber, formatCurrency } from '../../utils/format';
 
 const palette = ['#2563eb', '#0891b2', '#16a34a', '#f97316', '#dc2626', '#7c3aed'];
-const fmt = new Intl.NumberFormat('en-US');
-const money = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
-
-function n(value) {
-  const numeric = Number(value);
-  return Number.isFinite(numeric) ? numeric : 0;
-}
 
 function Panel({ title, subtitle, icon: Icon, children, empty }) {
   return (
@@ -216,9 +210,9 @@ export default function Analytics() {
       {error && <div className="rounded-xl border border-danger/20 bg-danger/10 p-4 text-sm font-bold text-danger">{error}</div>}
 
       <section className="grid gap-4 md:grid-cols-4">
-        <div className="enterprise-card p-4"><p className="text-[10px] font-black uppercase text-textSecondary">Claims</p><p className="mt-2 text-2xl font-black font-mono">{fmt.format(statsInfo.total)}</p></div>
-        <div className="enterprise-card p-4"><p className="text-[10px] font-black uppercase text-textSecondary">Fraud Signals</p><p className="mt-2 text-2xl font-black text-danger font-mono">{fmt.format(statsInfo.fraud)}</p></div>
-        <div className="enterprise-card p-4"><p className="text-[10px] font-black uppercase text-textSecondary">Claim Value</p><p className="mt-2 text-2xl font-black font-mono">{money.format(statsInfo.amount)}</p></div>
+        <div className="enterprise-card p-4"><p className="text-[10px] font-black uppercase text-textSecondary">Claims</p><p className="mt-2 text-2xl font-black font-mono">{formatNumber(statsInfo.total)}</p></div>
+        <div className="enterprise-card p-4"><p className="text-[10px] font-black uppercase text-textSecondary">Fraud Signals</p><p className="mt-2 text-2xl font-black text-danger font-mono">{formatNumber(statsInfo.fraud)}</p></div>
+        <div className="enterprise-card p-4"><p className="text-[10px] font-black uppercase text-textSecondary">Claim Value</p><p className="mt-2 text-2xl font-black font-mono">{formatCurrency(statsInfo.amount)}</p></div>
         <div className="enterprise-card p-4"><p className="text-[10px] font-black uppercase text-textSecondary">Avg Risk Score</p><p className="mt-2 text-2xl font-black text-warning font-mono">{(statsInfo.avgScore * 100).toFixed(1)}%</p></div>
       </section>
 

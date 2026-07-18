@@ -8,8 +8,7 @@ import api from "../../api";
 import StatusBadge from "../../components/StatusBadge";
 import Skeleton from "../../components/Skeleton";
 import Modal from "../../components/Modal";
-
-const formatCurrency = (val) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(val || 0);
+import { formatCurrency } from "../../utils/format";
 
 export default function FlaggedClaims() {
   const navigate = useNavigate();
