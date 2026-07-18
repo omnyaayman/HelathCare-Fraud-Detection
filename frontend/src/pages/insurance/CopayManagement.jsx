@@ -60,7 +60,7 @@ export default function CopayManagement() {
       return;
     }
     try {
-      await api.updateService(editing.service_id, { service_name: editing.service_name, copay_amount: amount });
+      await api.updateService(editing.service_id, { name: editing.service_name, copay_amount: amount });
       flash('success', 'Copay updated successfully.');
       setEditing(null);
       fetchServices();
@@ -81,7 +81,7 @@ export default function CopayManagement() {
       return;
     }
     try {
-      await api.createService({ service_name: serviceName, copay_amount: amount });
+      await api.createService({ name: serviceName, copay_amount: amount });
       flash('success', 'New service added successfully!');
       setAdding(false);
       setNewService({ service_name: '', copay_amount: '' });

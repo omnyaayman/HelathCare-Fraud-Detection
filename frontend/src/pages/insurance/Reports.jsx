@@ -274,7 +274,7 @@ export default function Reports() {
                         {((c.score || c.fraud_score || 0) * 100).toFixed(0)}%
                       </span>
                     </td>
-                    <td><span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-bg/50">{c.is_fraud ? 'Fraud' : c.status}</span></td>
+                    <td><span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-bg/50">{c.ifr ? 'Fraud' : c.status || c.is_fraudulent}</span></td>
                     <td className="text-xs text-textSecondary font-mono">{c.date || c.claim_date}</td>
                   </tr>
                 ))}

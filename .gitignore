@@ -13,3 +13,16 @@ node_modules/
 dist/
 **/dist/
 .eslintcache
+
+# Temp files
+check_schema.py
+migrate.py
+tmp_*.py
+
+# ML model files (too large, regenerated on retrain)
+ML/classifier.pkl
+ML/complete_fraud_system.joblib
+ML/label_encoders.pkl
+ML/features_list.pkl
+ML/xgb_fraud_model.pkl
+ML/*.ipynb

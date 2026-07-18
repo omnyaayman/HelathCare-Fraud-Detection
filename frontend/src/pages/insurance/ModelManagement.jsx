@@ -7,10 +7,11 @@ import PlotlyChart from '../../components/PlotlyChart';
 const computeConfusion = (precision, recall, totalSamples) => {
   const p = precision || 0.89;
   const r = recall || 0.88;
-  const tp = Math.round(200 * r);
-  const fn = Math.round(200 * (1 - r));
-  const fp = Math.round(tp * (1 / p - 1));
-  const tn = 200 - tp - fn - fp;
+  const n = Math.min(totalSamples || 200, 500);
+  const tp = Math.round(n * r);
+  const fn = Math.round(n * (1 - r));
+  const fp = Math.round(tp * (1 / Math.max(p, 0.01) - 1));
+  const tn = n - tp - fn - fp;
   return { tp: Math.max(tp, 0), fp: Math.max(fp, 0), fn: Math.max(fn, 0), tn: Math.max(tn, 0) };
 };
 

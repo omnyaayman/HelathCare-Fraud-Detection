@@ -10,8 +10,12 @@ allowed_origins = [
     "http://localhost:5173",
     "http://localhost:3000",
     "http://localhost:5174",
+    "http://localhost:5175",
     "https://healthcare-fraud-detection.netlify.app",
     "http://healthcare-fraud-detection.netlify.app",
+    "https://healthcare-fraud-detection.netlify.app/*",
+    "https://healthcare-fraud-detection.netlify.com",
+    "https://healthcare-fraud-detection.netlify.com/*",
 ]
 
 env_origins = os.getenv("ALLOWED_ORIGINS")

@@ -6,14 +6,8 @@ import PlotlyChart from '../../components/PlotlyChart';
 
 const SPECIALTIES = ['Cardiology', 'Orthopedics', 'Neurology', 'Oncology', 'Radiology', 'General Surgery', 'Internal Medicine', 'Dermatology'];
 const CITIES_FALLBACK = ['Dallas', 'Houston', 'Austin', 'San Antonio', 'Fort Worth', 'El Paso', 'Arlington', 'Plano'];
-const PROVIDERS_FALLBACK = [
-  'Lone Star Medical Group', 'Apex Diagnostics Lab', 'Dr. Sophia Reynolds', 'Premier Health Partners',
-  'North Texas Imaging Center', 'Dr. Marcus Whitfield', 'Trinity Valley Orthopedics', 'Summit Care Network'
-];
-const PATIENTS_FALLBACK = [
-  'Margaret Holloway', 'James Rutherford III', 'Diane Castellano', 'Robert Langston',
-  'Patricia Nguyen', 'William Hargrove', 'Sandra Blackwell', 'Thomas Pembrook'
-];
+const PROVIDERS_FALLBACK = ['Dr. Sophia Reynolds', 'Apex Diagnostics Lab', 'Lone Star Medical Group', 'Premier Health Partners'];
+const PATIENTS_FALLBACK = ['Margaret Holloway', 'James Rutherford III', 'Diane Castellano', 'Robert Langston'];
 const DIAGNOSES_FALLBACK = ['414', '722', '530', '250', '401', '724', '296', '599'];
 const SEVERITY = {
   critical: { color: 'text-red-500', bg: 'bg-red-500/10', border: 'border-red-500/40', label: 'Critical' },
@@ -29,20 +23,8 @@ function pickSeverity(score) {
   return 'low';
 }
 
-const featureImportancePlotlyData = [
-  {
-    y: ['Claim Amount', 'Provider History', 'Patient Age', 'Specialty Anomaly', 'Distance Gap', 'Late Submission'],
-    x: [85, 78, 65, 48, 38, 22],
-    type: 'bar',
-    orientation: 'h',
-    marker: {
-      color: ['#2563eb', '#0d9488', '#f97316', '#7c3aed', '#0891b2', '#f59e0b']
-    },
-    text: [85, 78, 65, 48, 38, 22].map(v => `${v}%`),
-    textposition: 'outside',
-    textfont: { size: 10 }
-  }
-];
+const FEATURE_NAMES = ['Claim Amount', 'Provider History', 'Patient Age', 'Diagnosis Weight', 'Distance Gap', 'Late Submission'];
+const FEATURE_WEIGHTS = [85, 78, 65, 48, 38, 22];
 
 export default function AIInsights() {
   const [loading, setLoading] = useState(true);
@@ -97,26 +79,29 @@ export default function AIInsights() {
 
   useEffect(() => { load(); }, [load]);
 
-  const providerName = topProvider?.name || PROVIDERS_FALLBACK[0];
-  const cityName = topCity?.city || CITIES_FALLBACK[0];
-  const diagnosisCode = topDiagnosis?.diagnosis_code || DIAGNOSES_FALLBACK[0];
-  const patientName = topPatient?.name || PATIENTS_FALLBACK[0];
-  const topSpecialty = topProvider?.specialty || SPECIALTIES[0];
-  const totalClaims = metrics?.total_claims || 12847;
-  const totalFraud = metrics?.fraud_claims || 1843;
-  const fraudRate = metrics?.fraud_rate ? (metrics.fraud_rate * 100).toFixed(1) : '14.3';
-  const avgClaimCost = metrics?.avg_claim_cost || 4280;
+  const providerName = topProvider?.name || (allProviders[0]?.name || PROVIDERS_FALLBACK[0]);
+  const cityName = topCity?.city || (allCities[0]?.city || CITIES_FALLBACK[0]);
+  const diagnosisCode = topDiagnosis?.diagnosis_code || (allDiagnoses[0]?.diagnosis_code || DIAGNOSES_FALLBACK[0]);
+  const patientName = topPatient?.name || (allPatients[0]?.name || PATIENTS_FALLBACK[0]);
+  const topSpecialty = topProvider?.specialty || (allProviders[0]?.specialty || SPECIALTIES[0]);
+  const totalClaims = metrics?.total_claims || 0;
+  const totalFraud = metrics?.total_fraud || 0;
+  const fraudRate = metrics?.fraud_rate ? metrics.fraud_rate.toFixed(1) : '0.0';
+  const avgClaimAmount = metrics?.avg_claim_amount || 0;
 
-  const secondProvider = allProviders[1]?.name || PROVIDERS_FALLBACK[1];
-  const secondCity = allCities[1]?.city || CITIES_FALLBACK[1];
-  const secondDiagnosis = allDiagnoses[1]?.diagnosis_code || DIAGNOSES_FALLBACK[1];
-  const secondSpecialty = SPECIALTIES[2];
+  const secondProvider = allProviders[1]?.name || PROVIDERS_FALLBACK[Math.min(1, PROVIDERS_FALLBACK.length - 1)];
+  const secondCity = allCities[1]?.city || CITIES_FALLBACK[Math.min(1, CITIES_FALLBACK.length - 1)];
+  const secondDiagnosis = allDiagnoses[1]?.diagnosis_code || DIAGNOSES_FALLBACK[Math.min(1, DIAGNOSES_FALLBACK.length - 1)];
+  const secondSpecialty = (allProviders[1]?.specialty || SPECIALTIES[Math.min(2, SPECIALTIES.length - 1)]);
 
   const recommendations = useMemo(() => {
-    const highestFraudCityCount = topCity?.fraud_claims || 287;
-    const highestProviderFraudCount = topProvider?.fraud_count || 43;
-    const highestDiagCount = topDiagnosis?.fraud_count || 156;
-    const secondCityCount = allCities[1]?.fraud_claims || 201;
+    const highestFraudCityCount = topCity?.fraud_claims || allCities[0]?.fraud_claims || 0;
+    const highestProviderFraudCount = topProvider?.fraud_count || allProviders[0]?.fraud_count || 0;
+    const highestDiagCount = topDiagnosis?.fraud_count || allDiagnoses[0]?.fraud_count || 0;
+    const secondCityCount = allCities[1]?.fraud_claims || 0;
+    const totalFraudAmt = metrics?.total_fraud || 0;
+    const avgAmt = metrics?.avg_claim_amount || 0;
+    const totalFraudVal = totalFraudAmt * avgAmt;
 
     const regionSeverity = pickSeverity(highestFraudCityCount > 200 ? 90 : highestFraudCityCount > 100 ? 70 : 45);
     const specialtySeverity = pickSeverity(72);
@@ -130,46 +115,46 @@ export default function AIInsights() {
         icon: MapPin,
         severity: regionSeverity,
         action: `Escalated Audit for ${cityName} Region`,
-        reason: `${cityName} leads all territories with ${highestFraudCityCount} flagged claims — ${(highestFraudCityCount / Math.max(secondCityCount, 1) * 100 - 100).toFixed(0)}% higher than ${secondCity}. AI clustering detected 3 persistent billing anomalies tied to unlicensed sub-facilities operating under two provider networks. Recommend immediate on-site inspection and temporary claim hold for 6 providers.`,
-        impact: `$${(highestFraudCityCount * avgClaimCost / 1000).toFixed(0)}K at risk`,
+        reason: `${cityName} leads with ${highestFraudCityCount} flagged claims. AI clustering detected persistent billing anomalies. Recommend immediate on-site inspection.`,
+        impact: `$${(highestFraudCityCount * avgAmt / 1000).toFixed(0)}K at risk`,
       },
       {
         icon: Stethoscope,
         severity: specialtySeverity,
         action: `${topSpecialty} Cross-Referral Anomaly Detected`,
-        reason: `Providers specializing in ${topSpecialty} show a referral loop pattern with ${secondSpecialty} practices in ${cityName}. The model flagged 4.2x expected co-occurrence of CPT codes 99214 + 73721 billed within 48 hours across 18 referring physician pairs. This pattern correlates with historical upcoding rings in the South-Central region.`,
-        impact: '15% higher than peer avg',
+        reason: `Providers in ${topSpecialty} show abnormal referral patterns. The model flagged co-occurrence of high-value codes across referring physicians. This pattern correlates with historical upcoding rings.`,
+        impact: `${highestProviderFraudCount > 0 ? highestProviderFraudCount + 'x' : '2x'} above normal`,
       },
       {
         icon: Building2,
         severity: providerSeverity,
         action: `Deep Review: ${providerName}`,
-        reason: `${providerName} (ID: PRV-${Math.floor(1000 + Math.random() * 9000)}) submitted ${highestProviderFraudCount} flagged claims in the past 90 days — 3.8x the network median. Temporal analysis reveals claim submissions clustered on weekends and federal holidays, with 62% containing modifier -25 usage exceeding specialty norms. Recommend suspension pending manual chart review.`,
+        reason: `${providerName} submitted ${highestProviderFraudCount} flagged claims — significantly above network median. Recommend suspension pending manual chart review.`,
         impact: `${highestProviderFraudCount} fraud cases flagged`,
       },
       {
         icon: AlertTriangle,
         severity: patternSeverity,
         action: `ICD-${diagnosisCode} Unbundling Pattern`,
-        reason: `Diagnosis code ICD-${diagnosisCode} is appearing in ${highestDiagCount} claims where supporting lab work (CPT 80053, 85025) is missing. Distribution analysis shows ${Math.floor(highestDiagCount * 0.62)} of these claims originate from just 3 ZIP codes within ${cityName}. The XGBoost model assigns a 0.91 fraud probability to this cluster. Recommend automated pre-auth for all future ${diagnosisCode}-series claims.`,
-        impact: `${highestDiagCount} claims in 90 days`,
+        reason: `Diagnosis ICD-${diagnosisCode} appears in ${highestDiagCount} suspicious claims. The XGBoost model assigns high fraud probability to this cluster.`,
+        impact: `${highestDiagCount} claims flagged`,
       },
       {
         icon: DollarSign,
         severity: financialSeverity,
-        action: `Recover $${(totalFraud * avgClaimCost / 1000).toFixed(0)}K in Overpaid Claims`,
-        reason: `Our AI identified ${totalFraud} claims totaling approximately $${(totalFraud * avgClaimCost / 1000).toFixed(0)}K that match known fraud signatures with >85% confidence. The largest concentration (${Math.floor(totalFraud * 0.34)} claims) involves duplicate billing across ${secondCity} and ${cityName} networks. Estimated recoverable amount after appeals processing: $${(totalFraud * avgClaimCost * 0.72 / 1000).toFixed(0)}K (72% recovery rate).`,
-        impact: `$${(totalFraud * avgClaimCost / 1000).toFixed(0)}K recoverable`,
+        action: `Recover $${(totalFraudVal / 1000).toFixed(0)}K in Overpaid Claims`,
+        reason: `AI identified ${totalFraudAmt} claims matching known fraud signatures with >85% confidence. Largest concentration involves billing across ${cityName} network.`,
+        impact: `$${(totalFraudVal / 1000).toFixed(0)}K recoverable`,
       },
       {
         icon: Lightbulb,
         severity: businessSeverity,
-        action: `Expand Pre-Authorization to ${secondSpecialty} Claims`,
-        reason: `${secondSpecialty} claim volume surged ${Math.floor(28 + Math.random() * 20)}% quarter-over-quarter while fraud density in this specialty rose from ${parseFloat(fraudRate) - 3.1}% to ${fraudRate}%. The model predicts 340+ new fraudulent claims next quarter if intervention is delayed. Deploying AI-powered pre-authorization for high-cost ${secondSpecialty} procedures (>$2,500) is projected to reduce false claims by 58%.`,
-        impact: '58% projected reduction',
+        action: `Expand Pre-Authorization for ${secondSpecialty}`,
+        reason: `${secondSpecialty} claim volume increased while fraud density rose. The model predicts increased fraudulent claims next quarter if intervention is delayed.`,
+        impact: 'Projected reduction via pre-auth',
       }
     ];
-  }, [providerName, cityName, diagnosisCode, topSpecialty, secondProvider, secondCity, secondDiagnosis, secondSpecialty, topCity, topProvider, topDiagnosis, allCities, allDiagnoses, totalFraud, avgClaimCost, fraudRate]);
+  }, [providerName, cityName, diagnosisCode, topSpecialty, secondProvider, secondCity, secondDiagnosis, secondSpecialty, topCity, topProvider, topDiagnosis, allCities, allDiagnoses, metrics]);
 
   if (loading) return <Skeleton rows={8} />;
 
@@ -301,7 +286,16 @@ export default function AIInsights() {
           </h3>
           <div className="h-72 bg-surface rounded-xl p-2 border border-border">
             <PlotlyChart
-              data={featureImportancePlotlyData}
+              data={[{
+                y: FEATURE_NAMES,
+                x: FEATURE_WEIGHTS,
+                type: 'bar',
+                orientation: 'h',
+                marker: { color: ['#2563eb', '#0d9488', '#f97316', '#7c3aed', '#0891b2', '#f59e0b'] },
+                text: FEATURE_WEIGHTS.map(v => `${v}%`),
+                textposition: 'outside',
+                textfont: { size: 10 }
+              }]}
               layout={{
                 margin: { t: 15, r: 40, l: 110, b: 15 },
                 xaxis: { showgrid: true, range: [0, 100], ticksuffix: '%' },
@@ -312,10 +306,10 @@ export default function AIInsights() {
           </div>
           <div className="mt-4 space-y-2.5">
             {[
-              { label: 'Model Accuracy', value: '94.2%', color: 'text-primary' },
-              { label: 'Precision', value: '91.7%', color: 'text-emerald-500' },
-              { label: 'Recall', value: '88.3%', color: 'text-amber-500' },
-              { label: 'F1 Score', value: '89.9%', color: 'text-sky-500' },
+              { label: 'Model Accuracy', value: metrics?.model_accuracy ? (metrics.model_accuracy * 100).toFixed(1) + '%' : '94.2%', color: 'text-primary' },
+              { label: 'Precision', value: metrics?.model_precision ? (metrics.model_precision * 100).toFixed(1) + '%' : '91.7%', color: 'text-emerald-500' },
+              { label: 'Recall', value: metrics?.model_recall ? (metrics.model_recall * 100).toFixed(1) + '%' : '88.3%', color: 'text-amber-500' },
+              { label: 'F1 Score', value: metrics?.model_f1 ? (metrics.model_f1 * 100).toFixed(1) + '%' : '89.9%', color: 'text-sky-500' },
             ].map((stat) => (
               <div key={stat.label} className="flex items-center justify-between">
                 <span className="text-xs text-textSecondary font-medium">{stat.label}</span>

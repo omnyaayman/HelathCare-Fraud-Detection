@@ -25,7 +25,7 @@ export default function ClaimDetails() {
     setLoading(true);
     setError(null);
     try {
-      const res = await api.request('GET', `/api/claims/${claimId}`);
+      const res = await api.getClaim(claimId);
       setData(res);
     } catch (err) {
       console.error(err);

@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Outlet, Navigate, useNavigate } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import { useAuth } from '../context/AuthContext';
-import { Bell, Search, ShieldCheck, Sun, Moon, ChevronDown, Activity, MapPin } from 'lucide-react';
+import { Bell, Search, ShieldCheck, Sun, Moon, ChevronDown, Activity, MapPin, X, FileText, User, Building2, FileKey } from 'lucide-react';
+import api from '../api';
 
 export default function Layout({ role }) {
   const { user } = useAuth();
@@ -15,6 +16,36 @@ export default function Layout({ role }) {
     return localStorage.getItem('sidebar_collapsed') === 'true';
   });
   const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState(null);
+  const [searching, setSearching] = useState(false);
+  const searchRef = useRef(null);
+  const searchInputRef = useRef(null);
+
+  useEffect(() => {
+    const handler = setTimeout(async () => {
+      if (searchQuery.trim().length < 2) { setSearchResults(null); return; }
+      setSearching(true);
+      try {
+        const res = await api.searchGlobal(searchQuery.trim());
+        setSearchResults(res);
+      } catch { setSearchResults(null); }
+      setSearching(false);
+    }, 300);
+    return () => clearTimeout(handler);
+  }, [searchQuery]);
+
+  useEffect(() => {
+    function handleClick(e) {
+      if (searchRef.current && !searchRef.current.contains(e.target)) {
+        setSearchOpen(false);
+        setSearchQuery('');
+        setSearchResults(null);
+      }
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, []);
 
   const toggleCollapse = () => {
     setCollapsed(prev => {
@@ -52,15 +83,67 @@ export default function Layout({ role }) {
       <div className="flex min-w-0 flex-1 flex-col transition-all duration-300">
         <header className="sticky top-0 z-20 border-b border-border/80 bg-surface/85 px-4 py-3 backdrop-blur-xl md:px-8">
           <div className="flex items-center justify-between gap-4 w-full">
-            <div className="flex-1 hidden md:block max-w-md">
+            <div className="flex-1 hidden md:block max-w-md relative" ref={searchRef}>
               <div className="relative">
                 <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-textSecondary/60" />
                 <input
+                  ref={searchInputRef}
                   type="text"
+                  value={searchQuery}
+                  onChange={e => { setSearchQuery(e.target.value); setSearchOpen(true); }}
+                  onFocus={() => setSearchOpen(true)}
                   placeholder="Search claims, patients, providers..."
-                  className="w-full rounded-xl border border-border/60 bg-bg/50 py-2 pl-9 pr-3 text-xs text-textPrimary placeholder:text-textSecondary/50 outline-none focus:border-primary/40 focus:bg-surface transition-all"
+                  className="w-full rounded-xl border border-border/60 bg-bg/50 py-2 pl-9 pr-8 text-xs text-textPrimary placeholder:text-textSecondary/50 outline-none focus:border-primary/40 focus:bg-surface transition-all"
                 />
+                {searchQuery && (
+                  <button onClick={() => { setSearchQuery(''); setSearchResults(null); }} className="absolute right-2 top-1/2 -translate-y-1/2 text-textSecondary hover:text-textPrimary">
+                    <X size={14} />
+                  </button>
+                )}
               </div>
+              {searchOpen && searchResults && (
+                <div className="absolute top-full left-0 right-0 mt-2 bg-surface border border-border rounded-2xl shadow-xl overflow-hidden z-50 max-h-96 overflow-y-auto">
+                  {searchResults.claims?.length > 0 && (
+                    <div className="p-2"><p className="text-[9px] font-black uppercase tracking-wider text-textSecondary px-2 py-1">Claims</p>
+                    {searchResults.claims.map(c => (
+                      <button key={c.id} onClick={() => { navigate(`/insurance/claims/${c.id}`); setSearchOpen(false); setSearchQuery(''); setSearchResults(null); }}
+                        className="flex items-center gap-2 w-full px-3 py-2 text-xs hover:bg-bg/50 rounded-lg text-left">
+                        <FileText size={12} className="text-primary" /> <span className="font-mono font-bold">#{c.id}</span> <span className="text-textSecondary">${c.value?.toFixed(0)}</span>
+                      </button>
+                    ))}</div>
+                  )}
+                  {searchResults.patients?.length > 0 && (
+                    <div className="p-2"><p className="text-[9px] font-black uppercase tracking-wider text-textSecondary px-2 py-1">Patients</p>
+                    {searchResults.patients.map(c => (
+                      <button key={c.id} className="flex items-center gap-2 w-full px-3 py-2 text-xs hover:bg-bg/50 rounded-lg text-left">
+                        <User size={12} className="text-indigo-500" /> <span className="font-bold">{c.label}</span> <span className="text-textSecondary">{c.extra}</span>
+                      </button>
+                    ))}</div>
+                  )}
+                  {searchResults.providers?.length > 0 && (
+                    <div className="p-2"><p className="text-[9px] font-black uppercase tracking-wider text-textSecondary px-2 py-1">Providers</p>
+                    {searchResults.providers.map(c => (
+                      <button key={c.id} className="flex items-center gap-2 w-full px-3 py-2 text-xs hover:bg-bg/50 rounded-lg text-left">
+                        <Building2 size={12} className="text-amber-500" /> <span className="font-bold">{c.label}</span> <span className="text-textSecondary">{c.extra}</span>
+                      </button>
+                    ))}</div>
+                  )}
+                  {searchResults.policies?.length > 0 && (
+                    <div className="p-2"><p className="text-[9px] font-black uppercase tracking-wider text-textSecondary px-2 py-1">Policies</p>
+                    {searchResults.policies.map(c => (
+                      <button key={c.id} className="flex items-center gap-2 w-full px-3 py-2 text-xs hover:bg-bg/50 rounded-lg text-left">
+                        <FileKey size={12} className="text-green-500" /> <span className="font-mono font-bold">{c.label}</span>
+                      </button>
+                    ))}</div>
+                  )}
+                  {!searchResults.claims?.length && !searchResults.patients?.length && !searchResults.providers?.length && !searchResults.policies?.length && (
+                    <div className="p-6 text-center text-xs text-textSecondary">No results found</div>
+                  )}
+                </div>
+              )}
+              {searching && searchOpen && (
+                <div className="absolute top-full left-0 right-0 mt-2 bg-surface border border-border rounded-2xl shadow-xl p-6 text-center text-xs text-textSecondary">Searching...</div>
+              )}
             </div>
             <div className="ml-auto flex items-center gap-2 sm:gap-3">
               <div className="hidden items-center gap-2 rounded-full border border-success/20 bg-success/10 px-3 py-1.5 text-xs font-bold text-success sm:flex">

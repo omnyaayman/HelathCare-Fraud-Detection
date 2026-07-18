@@ -63,8 +63,14 @@ export default function LabeledData() {
   const handleAdd = async () => {
     try {
       await api.createLabeledRecord({
-        ...form,
-        amount: parseFloat(form.amount) || 0
+        claim_id: form.claim_id,
+        patient_name: form.patient_name,
+        provider_name: form.provider_name,
+        amount: parseFloat(form.amount) || 0,
+        label: form.fraud_label,
+        is_fraudulent: form.fraud_label === 'Fraud' ? 1 : 0,
+        auditor: form.auditor,
+        notes: form.notes
       });
       flash('success', 'Record added successfully.');
       setShowAddModal(false);
@@ -86,8 +92,9 @@ export default function LabeledData() {
   const handleEdit = async () => {
     try {
       await api.updateLabeledRecord(showEditModal.id, {
-        ...form,
-        amount: parseFloat(form.amount) || 0
+        label: form.fraud_label,
+        is_fraudulent: form.fraud_label === 'Fraud' ? 1 : 0,
+        notes: form.notes
       });
       flash('success', 'Record updated successfully.');
       setShowEditModal(null);

@@ -28,7 +28,7 @@ export default function ReviewClaims() {
         const res = await api.getClaims({ page, page_size: pageSize });
         const data = Array.isArray(res) ? res : (res.data || res?.results || []);
         setClaimsList(data);
-        setTotal(data.length < pageSize ? (page - 1) * pageSize + data.length : page * pageSize + pageSize);
+        setTotal(res.total || data.length);
       } catch (err) {
         console.error("Failed to load claims", err);
       } finally {
@@ -96,10 +96,13 @@ export default function ReviewClaims() {
             <Filter size={14} className="text-textSecondary" />
             <select value={filters.status} onChange={e => setFilters(f => ({ ...f, status: e.target.value }))} className="enterprise-select text-xs">
               <option>All</option>
-              <option>Pending</option>
+              <option>Submitted</option>
+              <option>Under Review</option>
+              <option>AI Scored</option>
               <option>Approved</option>
-              <option>Denied</option>
-              <option>Flagged</option>
+              <option>Rejected</option>
+              <option>Fraud Confirmed</option>
+              <option>Closed</option>
             </select>
             <select value={filters.minScore} onChange={e => setFilters(f => ({ ...f, minScore: parseFloat(e.target.value) }))} className="enterprise-select text-xs">
               <option value={0}>Min Score: 0</option>

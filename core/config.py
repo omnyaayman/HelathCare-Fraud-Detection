@@ -4,8 +4,8 @@ from dotenv import load_dotenv
 load_dotenv()
 
 class Settings:
-    # Use SQLite for local development!
-    DATABASE_URL = "sqlite:///./healthcare_fraud.db"
+    # Use SQLite for local development, override with env var for Azure
+    DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./healthcare_fraud.db")
 
     # TABLE settings for data tables
     TABLE_CLAIMS = "Claims"
@@ -21,7 +21,7 @@ class Settings:
     KAFKA_CONSUMER_GROUP: str = "fraud-detection-group"
 
     # FastAPI Base URL (for the Consumer to send to the ML model)
-    APP_BASE_URL: str = "http://localhost:8000"
+    APP_BASE_URL: str = os.getenv("APP_BASE_URL", "http://localhost:8000")
 
 
 settings = Settings()

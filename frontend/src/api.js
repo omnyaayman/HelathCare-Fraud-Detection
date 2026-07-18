@@ -114,6 +114,17 @@ const api = {
   generateNotifications: () => request('POST', '/api/notifications/generate'),
   getReportData: (params) => request('GET', '/api/reports/data', null, params),
   exportReports: (params) => request('GET', '/api/reports/export', null, params),
+
+  // MISSING ENDPOINTS that pages use
+  getDistributionByRegion: () => request('GET', '/api/charts/fraud-by-region'),
+  getFraudByCategory: () => request('GET', '/api/charts/fraud-categories'),
+  
+  searchGlobal: (q) => request('GET', '/api/search', null, { q }),
+  
+  getClaim: (id) => request('GET', `/api/claims/${id}`),
+  getClaimInvestigation: (id) => request('GET', `/api/claims/${id}/investigation`),
+  updateInvestigation: (id, data) => request('PATCH', `/api/claims/${id}/investigation`, data),
+  addInvestigationNote: (id, note) => request('POST', `/api/claims/${id}/investigation/notes`, note),
 };
 
 export default api;

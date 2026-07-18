@@ -5,15 +5,17 @@ from core.config import settings
 
 # إعدادات المحرك (Engine) مع الربط القوي بـ Azure
 # أضفنا pool_size و pool_recycle لمنع سقوط الاتصال بعد فترة خمول
+# Support both SQLite (local) and Azure SQL (production)
+is_sqlite = settings.DATABASE_URL.startswith("sqlite")
+connect_args = {"timeout": 30} if is_sqlite else {}
+
 engine = create_engine(
     settings.DATABASE_URL,
-    pool_pre_ping=True,      # يتأكد من أن الاتصال فعال قبل كل طلب
-    pool_size=10,            # عدد الاتصالات الدائمة
-    max_overflow=20,         # أقصى زيادة للاتصالات عند الضغط
-    pool_recycle=300,        # إعادة تدوير الاتصال كل 5 دقائق لمنع الـ Timeout
-    connect_args={
-        "timeout": 30        # زيادة وقت انتظار الاتصال لـ 30 ثانية
-    }
+    pool_pre_ping=True,
+    pool_size=10 if not is_sqlite else 5,
+    max_overflow=20 if not is_sqlite else 10,
+    pool_recycle=300,
+    connect_args=connect_args if connect_args else {}
 )
 
 # إنشاء مصنع الجلسات

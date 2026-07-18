@@ -1,0 +1,17 @@
+__pycache__/
+*.pyc
+venv/
+.git/
+.gitignore
+.env
+healthcare_fraud.db
+frontend/
+node_modules/
+streamlit/
+dags/
+db/
+logs/
+*.md
+ML/*.ipynb
+ML/classifier.pkl
+ML/complete_fraud_system.joblib

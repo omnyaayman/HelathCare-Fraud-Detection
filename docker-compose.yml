@@ -1,10 +1,8 @@
 services:
-  
-
   # ==========================================
   # Zookeeper 
   # ==========================================
-   zookeeper:
+  zookeeper:
     image: confluentinc/cp-zookeeper:7.5.0
     container_name: zookeeper
     environment:
@@ -14,7 +12,7 @@ services:
   # ==========================================
   # Kafka Broker
   # ==========================================
-   kafka:
+  kafka:
     image: confluentinc/cp-kafka:7.5.0
     container_name: kafka
     depends_on:
@@ -29,9 +27,31 @@ services:
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
 
   # ==========================================
+  # FastAPI Backend
+  # ==========================================
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: fraud-backend
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: "sqlite:///./healthcare_fraud.db"
+      APP_BASE_URL: "http://localhost:8000"
+      ALLOWED_ORIGINS: "http://localhost:5173,http://localhost:3000,https://healthcare-fraud-detection.netlify.app"
+    volumes:
+      - ./healthcare_fraud.db:/app/healthcare_fraud.db
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ==========================================
   # Airflow
   # ==========================================
-   airflow:
+  airflow:
     image: apache/airflow:2.7.0
     container_name: airflow
     depends_on:
@@ -45,56 +65,12 @@ services:
       - ./model:/opt/airflow/model
       - ./reports:/opt/airflow/reports
     environment:
-      AIRFLOWCORELOAD_EXAMPLES: "False"
-      AIRFLOWCOREEXECUTOR: SequentialExecutor
-      AIRFLOWDATABASESQL_ALCHEMY_CONN: sqlite:////opt/airflow/airflow.db
-    command: >
-      bash -c "
-      airflow db init &&
-      airflow users create
-      --username admin
-      --password admin
-      --firstname admin
-      --lastname admin
-      --role Admin
-      --email admin@example.com || true &&
-      airflow scheduler &
-      exec airflow webserver
-      "
-
-
-   airflow:
-
-    image: apache/airflow:2.7.0
-
-    container_name: airflow
-
-    ports:
-      - "8080:8080"
-
-    volumes:
-      - ./dags:/opt/airflow/dags
-      - ./logs:/opt/airflow/logs
-      - ./data:/opt/airflow/data
-      - ./model:/opt/airflow/model
-      - ./reports:/opt/airflow/reports
-
-    environment:
       AIRFLOW__CORE__LOAD_EXAMPLES: "False"
       AIRFLOW__CORE__EXECUTOR: SequentialExecutor
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: sqlite:////opt/airflow/airflow.db
-
     command: >
       bash -c "
       airflow db init &&
-      airflow users create
-      --username admin
-      --password admin
-      --firstname admin
-      --lastname admin
-      --role Admin
-      --email admin@example.com || true &&
-      airflow scheduler & 
-      exec airflow webserver
+      airflow users create --username admin --password admin --firstname admin --lastname admin --role Admin --email admin@example.com || true &&
+      airflow scheduler & exec airflow webserver
       "
-

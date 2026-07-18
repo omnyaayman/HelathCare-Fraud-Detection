@@ -18,7 +18,7 @@ def process_claim(claim_data: dict) -> dict:
     
     try:
         response = requests.post(
-            url=f"{settings.APP_BASE_URL}/predict",
+            url=f"{settings.APP_BASE_URL}/api/claims",
             json=claim_data,
             timeout=10,
         )

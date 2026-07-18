@@ -95,48 +95,11 @@ const KpiCard = ({ title, value, subtitle, icon: Icon, bgClass, iconTextClass, t
   );
 };
 
-const DIVERSE_PROVIDERS = [
-  { name: 'Dr. Sophia Reynolds', specialty: 'Cardiology', claim_count: 45, fraud_count: 8, fraud_rate: 17.7 },
-  { name: 'Lone Star Medical Group', specialty: 'General Practice', claim_count: 120, fraud_count: 15, fraud_rate: 12.5 },
-  { name: 'Apex Diagnostics Lab', specialty: 'Diagnostics', claim_count: 85, fraud_count: 9, fraud_rate: 10.5 },
-  { name: 'Dr. Marcus Chen', specialty: 'Orthopedics', claim_count: 32, fraud_count: 3, fraud_rate: 9.3 },
-  { name: 'Dr. Elena Vasquez', specialty: 'Neurology', claim_count: 68, fraud_count: 11, fraud_rate: 16.1 },
-  { name: 'Pioneer Health Partners', specialty: 'Internal Medicine', claim_count: 94, fraud_count: 7, fraud_rate: 7.4 },
-];
-
-const DIVERSE_PATIENTS = [
-  { name: 'Jane Miller', age: 42, gender: 'F', city: 'Dallas', total_claims: 14, fraud_count: 3 },
-  { name: 'Robert Chen', age: 58, gender: 'M', city: 'Houston', total_claims: 19, fraud_count: 2 },
-  { name: 'William Davis', age: 67, gender: 'M', city: 'Austin', total_claims: 8, fraud_count: 2 },
-  { name: 'Emily Wilson', age: 31, gender: 'F', city: 'El Paso', total_claims: 11, fraud_count: 1 },
-  { name: 'Carlos Mendez', age: 45, gender: 'M', city: 'San Antonio', total_claims: 22, fraud_count: 4 },
-  { name: 'Aisha Patel', age: 29, gender: 'F', city: 'Plano', total_claims: 6, fraud_count: 0 },
-  { name: 'James Thompson', age: 73, gender: 'M', city: 'Fort Worth', total_claims: 16, fraud_count: 5 },
-];
-
 const ACTIVITY_EVENTS = [
-  { badge: 'Critical', bg: 'bg-red-500/10 text-red-500 border-red-500/20', descs: [
-    'Claim #48102 flagged as Critical Risk (94%) — provider upcoding pattern detected across 12 patients.',
-    'Claim #50217 scored 96% fraud probability — diagnosis-treatment mismatch with ICD-414.',
-    'Alert: Dr. Maria Santos billing 4.2x peer average for Level 5 visits in Dallas region.',
-    'Claim #49533 intercepted — patient-provider distance anomaly (387 miles) with no referral.',
-  ]},
-  { badge: 'Cleared', bg: 'bg-green-500/10 text-green-500 border-green-500/20', descs: [
-    'Auditor cleared Claim #47921 submitted by Dr. Sarah Thompson after manual review.',
-    'Claim #48812 auto-cleared — duplicate flag was false positive, original claim verified.',
-    'Batch clearing: 6 low-risk claims (scores < 0.2) auto-approved through adjudication pipeline.',
-  ]},
-  { badge: 'System', bg: 'bg-indigo-500/10 text-indigo-500 border-indigo-500/20', descs: [
-    'Daily Airflow DAG retraining pipeline completed successfully. Model v2.4.2 deployed.',
-    'Feature store sync complete — 18 engineered features refreshed from silver layer.',
-    'Database vacuum and indexing complete. Query latency reduced by 23%.',
-    'New data source connected: CMS Medicare Part B feed now streaming into bronze layer.',
-  ]},
-  { badge: 'High Risk', bg: 'bg-warning/10 text-warning border-warning/20', descs: [
-    'Claim #47881 flagged as High Risk (78%) — patient distance anomaly, no referral on file.',
-    'Claim #51204 scored 72% risk — unbundling violation detected (codes 99214 + 99215 same date).',
-    'Suspicious pattern: 3 claims from same provider for different patients with identical procedure codes.',
-  ]},
+  { badge: 'Critical', bg: 'bg-red-500/10 text-red-500 border-red-500/20' },
+  { badge: 'Cleared', bg: 'bg-green-500/10 text-green-500 border-green-500/20' },
+  { badge: 'System', bg: 'bg-indigo-500/10 text-indigo-500 border-indigo-500/20' },
+  { badge: 'High Risk', bg: 'bg-warning/10 text-warning border-warning/20' },
 ];
 
 export default function InsuranceDashboard() {
@@ -175,17 +138,10 @@ export default function InsuranceDashboard() {
       const claimsList = claimsRes.status === 'fulfilled' ? (claimsRes.value.data || claimsRes.value || []) : [];
       setLatestFlagged(claimsList.filter(c => c.fraud_score >= 0.5).slice(0, 6));
 
-      setTopProviders(topProvidersRes.status === 'fulfilled' ? topProvidersRes.value : DIVERSE_PROVIDERS);
-      setTopPatients(topPatientsRes.status === 'fulfilled' ? topPatientsRes.value : DIVERSE_PATIENTS);
+      setTopProviders(topProvidersRes.status === 'fulfilled' ? topProvidersRes.value : []);
+      setTopPatients(topPatientsRes.status === 'fulfilled' ? topPatientsRes.value : []);
 
-      setModelMetrics(modelMetricsRes.status === 'fulfilled' ? modelMetricsRes.value : {
-        model_version: '2.4.2',
-        accuracy: 0.945,
-        precision: 0.921,
-        recall: 0.898,
-        f1_score: 0.909,
-        last_training_date: new Date().toISOString()
-      });
+      setModelMetrics(modelMetricsRes.status === 'fulfilled' ? modelMetricsRes.value : null);
 
       setTrends(trendsRes.status === 'fulfilled' ? trendsRes.value : null);
 
@@ -204,50 +160,17 @@ export default function InsuranceDashboard() {
   }, [fetchData]);
 
   useEffect(() => {
-    const events = [];
-    ACTIVITY_EVENTS.forEach(group => {
-      group.descs.forEach((desc, i) => {
-        const mins = Math.floor(Math.random() * 60);
-        events.push({
-          id: events.length + 1,
-          time: mins === 0 ? 'Just now' : `${mins}m ago`,
-          desc,
-          badge: group.badge,
-          bg: group.bg,
-        });
-      });
-    });
-    setActivityFeed(events.sort(() => Math.random() - 0.5).slice(0, 6));
-  }, []);
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setActivityFeed(prev => {
-        const randId = Math.floor(Math.random() * 99999) + 10000;
-        const score = Math.floor(Math.random() * 30) + 70;
-        const providers = ['Dr. Maria Santos', 'Lone Star Medical', 'Apex Diagnostics', 'Dr. Robert Kim', 'Pioneer Health'];
-        const provider = providers[Math.floor(Math.random() * providers.length)];
-        const newEvent = {
-          id: Date.now(),
-          time: 'Just now',
-          desc: `Claim #${randId} scored ${score}% Risk probability — ${provider}. Intercepted for auditing.`,
-          badge: score >= 90 ? 'Critical' : 'High Risk',
-          bg: score >= 90 ? 'bg-red-500/10 text-red-500 border-red-500/20' : 'bg-warning/10 text-warning border-warning/20'
-        };
-        const updated = prev.map((item) => {
-          let t = item.time;
-          if (t === 'Just now') t = '1m ago';
-          else if (t.endsWith('m ago')) {
-            const mins = parseInt(t) + 1;
-            t = `${mins}m ago`;
-          }
-          return { ...item, time: t };
-        });
-        return [newEvent, ...updated.slice(0, 5)];
-      });
-    }, 25000);
-    return () => clearInterval(interval);
-  }, []);
+    if (latestFlagged.length > 0) {
+      const events = latestFlagged.slice(0, 6).map((c, i) => ({
+        id: c.claim_id || i,
+        time: i === 0 ? 'Just now' : `${i * 5}m ago`,
+        desc: `Claim #${c.claim_id} scored ${((c.fraud_score || 0) * 100).toFixed(0)}% Risk probability — ${c.provider_name || 'Unknown'}. Intercepted for auditing.`,
+        badge: (c.fraud_score || 0) >= 0.85 ? 'Critical' : 'High Risk',
+        bg: (c.fraud_score || 0) >= 0.85 ? 'bg-red-500/10 text-red-500 border-red-500/20' : 'bg-warning/10 text-warning border-warning/20'
+      }));
+      setActivityFeed(events);
+    }
+  }, [latestFlagged]);
 
   const claimsTimePlotlyData = useMemo(() => [
     {
@@ -603,18 +526,21 @@ export default function InsuranceDashboard() {
             Suspicious Provider Outliers
           </h3>
           <div className="space-y-4 flex-1">
-            {topProviders.slice(0, 4).map((p, idx) => (
+            {topProviders.slice(0, 4).map((p, idx) => {
+              const fraudRate = p.fraud_count && p.claim_count ? (p.fraud_count / p.claim_count) * 100 : 0;
+              return (
               <div key={idx} className="flex justify-between items-center text-xs border-b border-border/40 pb-2.5 last:border-0 last:pb-0">
                 <div className="min-w-0">
                   <p className="font-bold text-textPrimary truncate max-w-[180px]">{p.name || p.provider_name}</p>
-                  <p className="text-[10px] text-textSecondary">{p.specialty}</p>
+                  <p className="text-[10px] text-textSecondary">{p.specialty || (p.provider_type || '')}</p>
                 </div>
                 <div className="text-right shrink-0">
-                  <span className="font-bold text-danger">{(p.fraud_rate || 0).toFixed(1)}% risk</span>
+                  <span className="font-bold text-danger">{fraudRate.toFixed(1)}% risk</span>
                   <p className="text-[9px] text-textSecondary font-mono">{p.claim_count || p.total_claims} claims</p>
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         </div>
 
