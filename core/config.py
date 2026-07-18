@@ -23,5 +23,16 @@ class Settings:
     # FastAPI Base URL (for the Consumer to send to the ML model)
     APP_BASE_URL: str = "http://localhost:8000"
 
+    # Authentication credentials.
+    # These MUST be provided via environment variables in any non-local
+    # deployment. The fallback values below exist only so the project can be
+    # run locally out of the box and are intentionally insecure.
+    ADMIN_USERNAME: str = os.getenv("ADMIN_USERNAME", "admin_insurance")
+    ADMIN_PASSWORD: str = os.getenv("ADMIN_PASSWORD", "")
+    PROVIDER_PASSWORD: str = os.getenv("PROVIDER_PASSWORD", "")
+
+    # Enable dev-only conveniences (auto-reload, verbose tracebacks).
+    DEBUG: bool = os.getenv("DEBUG", "false").lower() in ("1", "true", "yes")
+
 
 settings = Settings()

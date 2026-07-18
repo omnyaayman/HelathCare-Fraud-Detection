@@ -39,6 +39,18 @@ Healthcare-Fraud-System/
 ```
 ---
 
+## 🔐 Backend Configuration & Authentication
+
+Authentication credentials are read from environment variables — no credentials
+are hardcoded in the source. Copy `.env.example` to `.env` and set at least:
+
+- `ADMIN_PASSWORD` — password for the `admin_insurance` account. If unset, admin login is disabled.
+- `PROVIDER_PASSWORD` — shared password providers must supply. If unset, all provider logins are rejected.
+
+Optional: `ADMIN_USERNAME`, `DEBUG` (auto-reload, dev only), `HOST`/`PORT`, `ALLOWED_ORIGINS`.
+
+Run the API with `python -m app.main` (binds to `127.0.0.1` by default; set `HOST=0.0.0.0` only behind a proxy/firewall).
+
 ## 🖥️ Frontend
 
 The system includes a **React-based dashboard** built using **Vite** for fast development and optimized builds. The frontend provides an interface to submit medical claims, visualize fraud predictions, and display analytics such as feature importance and anomaly indicators.

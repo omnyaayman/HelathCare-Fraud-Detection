@@ -9,6 +9,7 @@ from core.config import settings
 import datetime
 import decimal
 import random
+import secrets
 from ML.predictor import predictor
 
 router = APIRouter()
@@ -36,15 +37,33 @@ def format_row(row):
             formatted[new_key] = v
     return formatted
 
+def _matches(provided: str, expected: str) -> bool:
+    # Reject empty expected values so an unset credential can never authenticate,
+    # and compare in constant time to avoid timing attacks.
+    if not expected:
+        return False
+    return secrets.compare_digest(provided, expected)
+
+
 def get_current_user(credentials: HTTPBasicCredentials = Depends(security), db: Session = Depends(get_db)):
-    username = credentials.username
-    password = credentials.password
-    
-    if username in ["admin_insurance", "auditor_insurance", "manager_insurance"] and password == "password123":
-        return {"role": "insurance", "provider_id": None, "username": username}
-    
-    query_user = "1" if username == "doctor_provider" else username
-    
+    unauthorized = HTTPException(
+        status_code=401,
+        detail="Unauthorized",
+        headers={"WWW-Authenticate": "Basic"},
+    )
+
+    insurance_usernames = {settings.ADMIN_USERNAME, "auditor_insurance", "manager_insurance"}
+    if credentials.username in insurance_usernames and _matches(credentials.password, settings.ADMIN_PASSWORD):
+        return {"role": "insurance", "provider_id": None, "username": credentials.username}
+
+    # Providers must present the shared provider password before their username
+    # is resolved. Without this check any known provider id/name would grant
+    # access with no credential at all.
+    if not _matches(credentials.password, settings.PROVIDER_PASSWORD):
+        raise unauthorized
+
+    query_user = "1" if credentials.username == "doctor_provider" else credentials.username
+
     try:
         # Resolve by ID, Name, or 'provider_ID'
         result = db.execute(text("""
@@ -58,8 +77,8 @@ def get_current_user(credentials: HTTPBasicCredentials = Depends(security), db: 
             return {"role": "provider", "provider_id": result[0], "username": result[1]}
     except SQLAlchemyError:
         pass
-    
-    raise HTTPException(status_code=401, detail="Unauthorized")
+
+    raise unauthorized
 
 def ensure_sample_data(db: Session):
     try:
@@ -1128,7 +1147,6 @@ async def get_system_health(db: Session = Depends(get_db), user: dict = Depends(
         return {
             "api_status": "unhealthy",
             "db_status": "disconnected",
-            "error": str(e)
         }
 
 @router.patch("/claims/{claim_id}/status")
@@ -1446,10 +1464,13 @@ async def submit_claim(data: dict, db: Session = Depends(get_db), user: dict = D
             "fraud_score": fraud_score
         }
         
+    except HTTPException:
+        db.rollback()
+        raise
     except Exception as e:
         db.rollback()
         print(f"Claim submission processing error: {e}")
-        raise HTTPException(status_code=500, detail=f"Claim processing failed: {str(e)}")
+        raise HTTPException(status_code=500, detail="Claim processing failed")
 
 # ---------------------------------------------------------------------------
 # NEW ENDPOINTS: Dashboard trends, notifications generation, reports, export
