@@ -2,182 +2,457 @@ import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Search, Filter, Download, ArrowUpDown, FileText, AlertTriangle,
-  Clock, User, Building2, DollarSign, ChevronLeft, ChevronRight, CheckCircle, XCircle
+  Clock, User, Building2, DollarSign, ChevronLeft, ChevronRight,
+  CheckCircle, XCircle, Eye, Columns, BrainCircuit, X
 } from "lucide-react";
 import api from "../../api";
 import StatusBadge from "../../components/StatusBadge";
 import Skeleton from "../../components/Skeleton";
-import Pagination from "../../components/Pagination";
+import Modal from "../../components/Modal";
+import { formatCurrency, getRiskLevel, getStatusColor, buildSHAPExplanation } from "../../data/dataUtils";
+
+const STATUS_OPTIONS = ['All', 'Submitted', 'Under Review', 'AI Scored', 'Approved', 'Rejected', 'Fraud Confirmed', 'Closed'];
+
+const ALL_COLUMNS = [
+  { key: 'claim_id', label: 'Claim ID', icon: FileText },
+  { key: 'patient_name', label: 'Patient', icon: User },
+  { key: 'provider_name', label: 'Provider', icon: Building2 },
+  { key: 'service_name', label: 'Service', icon: FileText },
+  { key: 'diagnosis_code', label: 'Diagnosis', icon: FileText },
+  { key: 'claim_amount', label: 'Amount', icon: DollarSign },
+  { key: 'fraud_score', label: 'Fraud Score', icon: AlertTriangle },
+  { key: 'status', label: 'Status', icon: CheckCircle },
+  { key: 'claim_date', label: 'Date', icon: Clock },
+  { key: 'actions', label: 'Actions', icon: Eye },
+];
 
 export default function ReviewClaims() {
   const navigate = useNavigate();
-  const [claims, setClaimsList] = useState([]);
+
+  const [claims, setClaims] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+
   const [search, setSearch] = useState('');
-  const [sortField, setSortField] = useState('claim_id');
+  const [statusFilter, setStatusFilter] = useState('All');
+  const [minScore, setMinScore] = useState('');
+  const [maxScore, setMaxScore] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const [sortField, setSortField] = useState('claim_date');
   const [sortDir, setSortDir] = useState('desc');
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(20);
-  const [total, setTotal] = useState(0);
-  const [filters, setFilters] = useState({ status: 'All', minScore: 0, maxScore: 1 });
+  const [pageSize, setPageSize] = useState(25);
+
+  const [visibleColumns, setVisibleColumns] = useState(
+    ALL_COLUMNS.map(c => c.key)
+  );
+  const [showColumnPanel, setShowColumnPanel] = useState(false);
+
+  const [selectedClaim, setSelectedClaim] = useState(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [claimDetail, setClaimDetail] = useState(null);
+
+  const hasActiveFilters = search || statusFilter !== 'All' || minScore || maxScore || dateFrom || dateTo;
+
+  const clearFilters = () => {
+    setSearch('');
+    setStatusFilter('All');
+    setMinScore('');
+    setMaxScore('');
+    setDateFrom('');
+    setDateTo('');
+    setPage(1);
+  };
 
   useEffect(() => {
     const fetchClaims = async () => {
       setLoading(true);
       try {
-        const res = await api.getClaims({ page, page_size: pageSize });
+        const params = { page, page_size: pageSize };
+        if (search) params.search = search;
+        if (statusFilter !== 'All') params.status = statusFilter;
+        if (minScore) params.min_fraud_score = parseFloat(minScore);
+        if (maxScore) params.max_fraud_score = parseFloat(maxScore);
+        if (sortField) params.sort_by = sortField;
+        if (sortDir) params.sort_order = sortDir;
+
+        const res = await api.getClaims(params);
         const data = Array.isArray(res) ? res : (res.data || res?.results || []);
-        setClaimsList(data);
+        setClaims(data);
         setTotal(res.total || data.length);
+        setTotalPages(res.total_pages || Math.ceil((res.total || data.length) / pageSize));
       } catch (err) {
         console.error("Failed to load claims", err);
+        setClaims([]);
       } finally {
         setLoading(false);
       }
     };
     fetchClaims();
-  }, [page, pageSize]);
+  }, [page, pageSize, search, statusFilter, minScore, maxScore, sortField, sortDir]);
 
-  const filteredSorted = useMemo(() => {
+  const filteredClaims = useMemo(() => {
     let result = [...claims];
-    if (search) {
-      const q = search.toLowerCase();
-      result = result.filter(c =>
-        (c.claim_id?.toString().includes(q)) ||
-        (c.patient_name?.toLowerCase().includes(q)) ||
-        (c.provider_name?.toLowerCase().includes(q)) ||
-        (c.diagnosis_code?.toLowerCase().includes(q))
-      );
+    if (dateFrom) {
+      const from = new Date(dateFrom);
+      result = result.filter(c => c.claim_date && new Date(c.claim_date) >= from);
     }
-    if (filters.status !== 'All') {
-      result = result.filter(c => c.status === filters.status);
+    if (dateTo) {
+      const to = new Date(dateTo);
+      to.setHours(23, 59, 59, 999);
+      result = result.filter(c => c.claim_date && new Date(c.claim_date) <= to);
     }
-    result.sort((a, b) => {
-      let aVal = a[sortField], bVal = b[sortField];
-      if (typeof aVal === 'string') aVal = aVal.toLowerCase();
-      if (typeof bVal === 'string') bVal = bVal.toLowerCase();
-      if (aVal < bVal) return sortDir === 'asc' ? -1 : 1;
-      if (aVal > bVal) return sortDir === 'asc' ? 1 : -1;
-      return 0;
-    });
     return result;
-  }, [claims, search, filters, sortField, sortDir]);
+  }, [claims, dateFrom, dateTo]);
 
   const handleSort = (field) => {
-    if (sortField === field) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
-    else { setSortField(field); setSortDir('asc'); }
+    if (sortField === field) {
+      setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDir('asc');
+    }
+    setPage(1);
   };
 
-  if (loading) {
-    return <div className="space-y-4">{[...Array(10)].map((_, i) => <Skeleton key={i} rows={1} />)}</div>;
+  const toggleColumn = (key) => {
+    setVisibleColumns(cols =>
+      cols.includes(key) ? cols.filter(k => k !== key) : [...cols, key]
+    );
+  };
+
+  const openDetail = async (claimId) => {
+    setSelectedClaim(claimId);
+    setDetailLoading(true);
+    setClaimDetail(null);
+    try {
+      const res = await api.getClaim(claimId);
+      setClaimDetail(res);
+    } catch (err) {
+      console.error("Failed to load claim detail", err);
+    } finally {
+      setDetailLoading(false);
+    }
+  };
+
+  const exportCSV = () => {
+    const headers = ['Claim ID', 'Patient', 'Provider', 'Service', 'Diagnosis', 'Amount', 'Fraud Score', 'Status', 'Date'];
+    const rows = filteredClaims.map(c => [
+      c.claim_id, c.patient_name, c.provider_name, c.service_name,
+      c.diagnosis_code, c.claim_amount, (c.fraud_score * 100).toFixed(1) + '%',
+      c.status, c.claim_date
+    ]);
+    const csvContent = [headers, ...rows].map(r => r.map(v => `"${v || ''}"`).join(',')).join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `claims_export_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const renderFraudBar = (score) => {
+    const s = score || 0;
+    const pct = (s * 100).toFixed(0);
+    let colorClass = 'bg-success';
+    let textClass = 'text-success';
+    if (s >= 0.7) { colorClass = 'bg-danger'; textClass = 'text-danger'; }
+    else if (s >= 0.4) { colorClass = 'bg-warning'; textClass = 'text-warning'; }
+    return (
+      <div className="flex items-center gap-2">
+        <div className="flex-1 max-w-[80px] bg-bg/60 rounded-full h-1.5 overflow-hidden">
+          <div className={`h-full rounded-full transition-all ${colorClass}`} style={{ width: `${pct}%` }} />
+        </div>
+        <span className={`text-[10px] font-black ${textClass}`}>{pct}%</span>
+      </div>
+    );
+  };
+
+  const renderSortIcon = (field) => (
+    <ArrowUpDown size={10} className={sortField === field ? 'text-primary' : 'text-textSecondary/40'} />
+  );
+
+  const colVisible = (key) => visibleColumns.includes(key);
+
+  if (loading && claims.length === 0) {
+    return (
+      <div className="space-y-6 animate-in fade-in duration-300">
+        <div className="flex items-center justify-between">
+          <div>
+            <Skeleton rows={1} className="w-48" />
+            <Skeleton rows={1} className="w-32 mt-2" />
+          </div>
+        </div>
+        <div className="bg-surface rounded-2xl border border-border/80 p-4">
+          <Skeleton rows={1} className="h-10" />
+        </div>
+        <div className="bg-surface rounded-2xl border border-border/80 shadow-sm overflow-hidden">
+          {[...Array(10)].map((_, i) => (
+            <div key={i} className="flex items-center gap-4 px-5 py-4 border-b border-border/30">
+              <Skeleton rows={1} className="w-20" />
+              <Skeleton rows={1} className="w-32" />
+              <Skeleton rows={1} className="w-28" />
+              <Skeleton rows={1} className="w-16" />
+              <Skeleton rows={1} className="w-24" />
+            </div>
+          ))}
+        </div>
+      </div>
+    );
   }
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
+      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-black text-textPrimary">Review Claims</h1>
-          <p className="text-sm text-textSecondary font-medium">{total} claims loaded</p>
+          <h1 className="text-2xl font-black text-textPrimary tracking-tight">All Claims</h1>
+          <p className="text-sm text-textSecondary font-medium">{total} total claims</p>
         </div>
         <div className="flex items-center gap-2">
-          <button className="enterprise-btn-ghost py-2 px-4 text-xs flex items-center gap-1.5">
+          <div className="relative">
+            <button
+              onClick={() => setShowColumnPanel(!showColumnPanel)}
+              className="enterprise-btn-ghost py-2 px-3 text-xs flex items-center gap-1.5"
+            >
+              <Columns size={14} /> Columns
+            </button>
+            {showColumnPanel && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setShowColumnPanel(false)} />
+                <div className="absolute right-0 top-full mt-2 z-50 w-56 bg-surface border border-border/80 rounded-xl shadow-xl shadow-slate-950/20 p-3">
+                  <p className="text-[10px] font-black text-textSecondary uppercase tracking-widest mb-2">Toggle Columns</p>
+                  {ALL_COLUMNS.filter(c => c.key !== 'actions').map(col => (
+                    <label key={col.key} className="flex items-center gap-2 py-1.5 cursor-pointer hover:bg-bg/30 rounded-lg px-2 -mx-2 transition-colors">
+                      <input
+                        type="checkbox"
+                        checked={visibleColumns.includes(col.key)}
+                        onChange={() => toggleColumn(col.key)}
+                        className="rounded border-border accent-primary w-3.5 h-3.5"
+                      />
+                      <col.icon size={12} className="text-textSecondary" />
+                      <span className="text-xs text-textPrimary font-medium">{col.label}</span>
+                    </label>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+          <button onClick={exportCSV} className="enterprise-btn-ghost py-2 px-4 text-xs flex items-center gap-1.5">
             <Download size={14} /> Export CSV
           </button>
         </div>
       </div>
 
+      {/* Filter Bar */}
       <div className="bg-surface rounded-2xl border border-border/80 p-4 shadow-sm">
         <div className="flex flex-wrap items-center gap-3">
-          <div className="relative flex-1 min-w-[200px]">
+          <div className="relative flex-1 min-w-[220px]">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-textSecondary" />
-            <input type="text" placeholder="Search by ID, patient, provider..." value={search} onChange={e => setSearch(e.target.value)} className="enterprise-input pl-9 w-full text-xs" />
+            <input
+              type="text"
+              placeholder="Search claim ID, patient, provider..."
+              value={search}
+              onChange={e => { setSearch(e.target.value); setPage(1); }}
+              className="enterprise-input pl-9 w-full text-xs"
+            />
           </div>
+
           <div className="flex items-center gap-2">
             <Filter size={14} className="text-textSecondary" />
-            <select value={filters.status} onChange={e => setFilters(f => ({ ...f, status: e.target.value }))} className="enterprise-select text-xs">
-              <option>All</option>
-              <option>Submitted</option>
-              <option>Under Review</option>
-              <option>AI Scored</option>
-              <option>Approved</option>
-              <option>Rejected</option>
-              <option>Fraud Confirmed</option>
-              <option>Closed</option>
-            </select>
-            <select value={filters.minScore} onChange={e => setFilters(f => ({ ...f, minScore: parseFloat(e.target.value) }))} className="enterprise-select text-xs">
-              <option value={0}>Min Score: 0</option>
-              <option value={0.3}>Min Score: 0.3</option>
-              <option value={0.5}>Min Score: 0.5</option>
-              <option value={0.7}>Min Score: 0.7</option>
-              <option value={0.9}>Min Score: 0.9</option>
+            <select
+              value={statusFilter}
+              onChange={e => { setStatusFilter(e.target.value); setPage(1); }}
+              className="enterprise-select text-xs"
+            >
+              {STATUS_OPTIONS.map(s => <option key={s}>{s}</option>)}
             </select>
           </div>
-          <span className="text-[10px] text-textSecondary font-mono">{filteredSorted.length} results</span>
+
+          <div className="flex items-center gap-2">
+            <input
+              type="number"
+              placeholder="Min score"
+              min={0}
+              max={1}
+              step={0.05}
+              value={minScore}
+              onChange={e => { setMinScore(e.target.value); setPage(1); }}
+              className="enterprise-input text-xs w-24"
+            />
+            <span className="text-textSecondary text-[10px]">to</span>
+            <input
+              type="number"
+              placeholder="Max score"
+              min={0}
+              max={1}
+              step={0.05}
+              value={maxScore}
+              onChange={e => { setMaxScore(e.target.value); setPage(1); }}
+              className="enterprise-input text-xs w-24"
+            />
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Clock size={14} className="text-textSecondary" />
+            <input
+              type="date"
+              value={dateFrom}
+              onChange={e => { setDateFrom(e.target.value); setPage(1); }}
+              className="enterprise-input text-xs"
+            />
+            <span className="text-textSecondary text-[10px]">to</span>
+            <input
+              type="date"
+              value={dateTo}
+              onChange={e => { setDateTo(e.target.value); setPage(1); }}
+              className="enterprise-input text-xs"
+            />
+          </div>
+
+          {hasActiveFilters && (
+            <button onClick={clearFilters} className="enterprise-btn-ghost py-2 px-3 text-[10px] font-bold flex items-center gap-1 text-danger hover:bg-danger/10">
+              <X size={12} /> Clear
+            </button>
+          )}
+        </div>
+
+        <div className="flex items-center justify-between mt-3 pt-3 border-t border-border/40">
+          <span className="text-[10px] text-textSecondary font-mono">
+            Showing {filteredClaims.length} of {total} claims
+          </span>
+          {hasActiveFilters && (
+            <span className="text-[10px] text-primary font-semibold">Filters active</span>
+          )}
         </div>
       </div>
 
+      {/* Data Table */}
       <div className="bg-surface rounded-2xl border border-border/80 shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           <table className="enterprise-table w-full text-sm text-left">
             <thead>
               <tr className="bg-bg/50 border-b border-border text-[10px] font-black text-textSecondary uppercase tracking-widest">
-                <th className="px-5 py-3.5 cursor-pointer hover:text-primary" onClick={() => handleSort('claim_id')}>
-                  <span className="flex items-center gap-1">Claim ID <ArrowUpDown size={10} /></span>
-                </th>
-                <th className="px-5 py-3.5 cursor-pointer hover:text-primary" onClick={() => handleSort('patient_name')}>
-                  <span className="flex items-center gap-1"><User size={10} /> Patient <ArrowUpDown size={10} /></span>
-                </th>
-                <th className="px-5 py-3.5 cursor-pointer hover:text-primary" onClick={() => handleSort('provider_name')}>
-                  <span className="flex items-center gap-1"><Building2 size={10} /> Provider <ArrowUpDown size={10} /></span>
-                </th>
-                <th className="px-5 py-3.5 cursor-pointer hover:text-primary" onClick={() => handleSort('claim_amount')}>
-                  <span className="flex items-center gap-1"><DollarSign size={10} /> Amount <ArrowUpDown size={10} /></span>
-                </th>
-                <th className="px-5 py-3.5 cursor-pointer hover:text-primary" onClick={() => handleSort('fraud_score')}>
-                  <span className="flex items-center gap-1"><AlertTriangle size={10} /> Risk Score <ArrowUpDown size={10} /></span>
-                </th>
-                <th className="px-5 py-3.5 cursor-pointer hover:text-primary" onClick={() => handleSort('status')}>
-                  <span className="flex items-center gap-1">Status <ArrowUpDown size={10} /></span>
-                </th>
-                <th className="px-5 py-3.5">Action</th>
+                {colVisible('claim_id') && (
+                  <th className="px-5 py-3.5 cursor-pointer hover:text-primary whitespace-nowrap" onClick={() => handleSort('claim_id')}>
+                    <span className="flex items-center gap-1">Claim ID {renderSortIcon('claim_id')}</span>
+                  </th>
+                )}
+                {colVisible('patient_name') && (
+                  <th className="px-5 py-3.5 cursor-pointer hover:text-primary whitespace-nowrap" onClick={() => handleSort('patient_name')}>
+                    <span className="flex items-center gap-1"><User size={10} /> Patient {renderSortIcon('patient_name')}</span>
+                  </th>
+                )}
+                {colVisible('provider_name') && (
+                  <th className="px-5 py-3.5 cursor-pointer hover:text-primary whitespace-nowrap" onClick={() => handleSort('provider_name')}>
+                    <span className="flex items-center gap-1"><Building2 size={10} /> Provider {renderSortIcon('provider_name')}</span>
+                  </th>
+                )}
+                {colVisible('service_name') && (
+                  <th className="px-5 py-3.5 cursor-pointer hover:text-primary whitespace-nowrap" onClick={() => handleSort('service_name')}>
+                    <span className="flex items-center gap-1">Service {renderSortIcon('service_name')}</span>
+                  </th>
+                )}
+                {colVisible('diagnosis_code') && (
+                  <th className="px-5 py-3.5 cursor-pointer hover:text-primary whitespace-nowrap" onClick={() => handleSort('diagnosis_code')}>
+                    <span className="flex items-center gap-1">Diagnosis {renderSortIcon('diagnosis_code')}</span>
+                  </th>
+                )}
+                {colVisible('claim_amount') && (
+                  <th className="px-5 py-3.5 cursor-pointer hover:text-primary text-right whitespace-nowrap" onClick={() => handleSort('claim_amount')}>
+                    <span className="flex items-center justify-end gap-1"><DollarSign size={10} /> Amount {renderSortIcon('claim_amount')}</span>
+                  </th>
+                )}
+                {colVisible('fraud_score') && (
+                  <th className="px-5 py-3.5 cursor-pointer hover:text-primary whitespace-nowrap" onClick={() => handleSort('fraud_score')}>
+                    <span className="flex items-center gap-1"><AlertTriangle size={10} /> Risk Score {renderSortIcon('fraud_score')}</span>
+                  </th>
+                )}
+                {colVisible('status') && (
+                  <th className="px-5 py-3.5 cursor-pointer hover:text-primary whitespace-nowrap" onClick={() => handleSort('status')}>
+                    <span className="flex items-center gap-1">Status {renderSortIcon('status')}</span>
+                  </th>
+                )}
+                {colVisible('claim_date') && (
+                  <th className="px-5 py-3.5 cursor-pointer hover:text-primary whitespace-nowrap" onClick={() => handleSort('claim_date')}>
+                    <span className="flex items-center gap-1"><Clock size={10} /> Date {renderSortIcon('claim_date')}</span>
+                  </th>
+                )}
+                {colVisible('actions') && (
+                  <th className="px-5 py-3.5 whitespace-nowrap">Actions</th>
+                )}
               </tr>
             </thead>
             <tbody className="divide-y divide-border/60">
-              {filteredSorted.map((c) => (
-                <tr key={c.claim_id} className="hover:bg-bg/30 transition-colors group">
-                  <td className="px-5 py-4 font-mono text-xs font-bold text-primary">#{c.claim_id}</td>
-                  <td className="px-5 py-4 font-semibold text-textPrimary text-sm">{c.patient_name}</td>
-                  <td className="px-5 py-4 text-textSecondary text-xs max-w-[150px] truncate">{c.provider_name}</td>
-                  <td className="px-5 py-4 font-mono text-sm font-bold text-textPrimary">
-                    {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(c.claim_amount || 0)}
-                  </td>
-                  <td className="px-5 py-4">
-                    <div className="flex items-center gap-2">
-                      <div className="flex-1 max-w-[80px] bg-bg/60 rounded-full h-1.5 overflow-hidden">
-                        <div className={`h-full rounded-full transition-all ${(c.fraud_score || 0) >= 0.7 ? 'bg-danger' : (c.fraud_score || 0) >= 0.4 ? 'bg-warning' : 'bg-success'}`}
-                          style={{ width: `${((c.fraud_score || 0) * 100).toFixed(0)}%` }} />
-                      </div>
-                      <span className={`text-[10px] font-black ${(c.fraud_score || 0) >= 0.7 ? 'text-danger' : (c.fraud_score || 0) >= 0.4 ? 'text-warning' : 'text-success'}`}>
-                        {((c.fraud_score || 0) * 100).toFixed(0)}%
-                      </span>
-                    </div>
-                  </td>
-                  <td className="px-5 py-4"><StatusBadge status={c.status || 'pending'} /></td>
-                  <td className="px-5 py-4">
-                    <button onClick={() => navigate(`/insurance/claims/${c.claim_id}`)}
-                      className="text-xs font-bold text-primary hover:underline opacity-0 group-hover:opacity-100 transition-opacity">
-                      View Details
-                    </button>
+              {filteredClaims.map((c) => {
+                const risk = getRiskLevel(c.fraud_score);
+                return (
+                  <tr key={c.claim_id} className="hover:bg-bg/30 transition-colors group">
+                    {colVisible('claim_id') && (
+                      <td className="px-5 py-4 font-mono text-xs font-bold text-primary cursor-pointer hover:underline" onClick={() => openDetail(c.claim_id)}>
+                        #{c.claim_id}
+                      </td>
+                    )}
+                    {colVisible('patient_name') && (
+                      <td className="px-5 py-4 font-semibold text-textPrimary text-sm max-w-[160px] truncate">{c.patient_name}</td>
+                    )}
+                    {colVisible('provider_name') && (
+                      <td className="px-5 py-4 text-textSecondary text-xs max-w-[160px] truncate">{c.provider_name}</td>
+                    )}
+                    {colVisible('service_name') && (
+                      <td className="px-5 py-4 text-textSecondary text-xs max-w-[140px] truncate">{c.service_name || '—'}</td>
+                    )}
+                    {colVisible('diagnosis_code') && (
+                      <td className="px-5 py-4 font-mono text-xs text-textPrimary">{c.diagnosis_code || '—'}</td>
+                    )}
+                    {colVisible('claim_amount') && (
+                      <td className="px-5 py-4 font-mono text-sm font-bold text-textPrimary text-right">{formatCurrency(c.claim_amount)}</td>
+                    )}
+                    {colVisible('fraud_score') && (
+                      <td className="px-5 py-4">{renderFraudBar(c.fraud_score)}</td>
+                    )}
+                    {colVisible('status') && (
+                      <td className="px-5 py-4"><StatusBadge status={c.status || 'Submitted'} /></td>
+                    )}
+                    {colVisible('claim_date') && (
+                      <td className="px-5 py-4 text-[11px] text-textSecondary font-mono whitespace-nowrap">
+                        {c.claim_date ? new Date(c.claim_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}
+                      </td>
+                    )}
+                    {colVisible('actions') && (
+                      <td className="px-5 py-4">
+                        <button
+                          onClick={() => openDetail(c.claim_id)}
+                          className="text-xs font-bold text-primary hover:underline opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1"
+                        >
+                          <Eye size={12} /> View
+                        </button>
+                      </td>
+                    )}
+                  </tr>
+                );
+              })}
+              {filteredClaims.length === 0 && (
+                <tr>
+                  <td colSpan={ALL_COLUMNS.filter(c => colVisible(c.key)).length || 1} className="px-5 py-16 text-center">
+                    <AlertTriangle size={32} className="mx-auto text-textSecondary/30 mb-3" />
+                    <p className="text-sm text-textSecondary font-semibold">No claims match your filters</p>
+                    <p className="text-xs text-textSecondary/60 mt-1">Try adjusting your search or filter criteria</p>
+                    {hasActiveFilters && (
+                      <button onClick={clearFilters} className="mt-3 text-xs text-primary font-bold hover:underline">Clear all filters</button>
+                    )}
                   </td>
                 </tr>
-              ))}
-              {filteredSorted.length === 0 && (
-                <tr><td colSpan={7} className="px-5 py-12 text-center text-sm text-textSecondary italic">No claims match your filters.</td></tr>
               )}
             </tbody>
           </table>
         </div>
-        <div className="border-t border-border/60 px-5 py-3 flex items-center justify-between">
+
+        {/* Pagination */}
+        <div className="border-t border-border/60 px-5 py-3 flex flex-col sm:flex-row items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <span className="text-[10px] text-textSecondary font-semibold">Rows per page:</span>
             <select
@@ -190,17 +465,298 @@ export default function ReviewClaims() {
               <option value={50}>50</option>
               <option value={100}>100</option>
             </select>
-            <span className="text-[10px] text-textSecondary font-mono">Page {page}</span>
+            <span className="text-[10px] text-textSecondary font-mono">
+              Page {page} of {totalPages}
+            </span>
           </div>
           <div className="flex items-center gap-2">
-            <button disabled={page <= 1} onClick={() => setPage(p => Math.max(1, p - 1))}
-              className="enterprise-btn-ghost p-2 disabled:opacity-30"><ChevronLeft size={14} /></button>
-            <span className="text-xs font-mono text-textPrimary font-bold">{page}</span>
-            <button onClick={() => setPage(p => p + 1)}
-              className="enterprise-btn-ghost p-2"><ChevronRight size={14} /></button>
+            <span className="text-[10px] text-textSecondary font-mono">
+              {((page - 1) * pageSize) + 1}–{Math.min(page * pageSize, total)} of {total}
+            </span>
+            <button
+              disabled={page <= 1}
+              onClick={() => setPage(p => Math.max(1, p - 1))}
+              className="enterprise-btn-ghost p-2 disabled:opacity-30"
+            >
+              <ChevronLeft size={14} />
+            </button>
+            <button
+              disabled={page >= totalPages}
+              onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+              className="enterprise-btn-ghost p-2 disabled:opacity-30"
+            >
+              <ChevronRight size={14} />
+            </button>
           </div>
         </div>
       </div>
+
+      {/* Claim Detail Modal */}
+      <Modal open={!!selectedClaim} onClose={() => { setSelectedClaim(null); setClaimDetail(null); }} title="Claim Details" wide>
+        {detailLoading && (
+          <div className="space-y-4">
+            <Skeleton type="card" />
+            <Skeleton type="card" />
+            <Skeleton type="card" />
+          </div>
+        )}
+
+        {!detailLoading && claimDetail && (
+          <ClaimDetailContent claimDetail={claimDetail} onClose={() => { setSelectedClaim(null); setClaimDetail(null); }} />
+        )}
+      </Modal>
+    </div>
+  );
+}
+
+
+function ClaimDetailContent({ claimDetail, onClose }) {
+  const { claim, patient_history, shap_contributions, base_value } = claimDetail;
+  const [actionLoading, setActionLoading] = useState(null);
+
+  const risk = getRiskLevel(claim.fraud_score);
+  const shap = buildSHAPExplanation(claim);
+
+  const handleAction = async (action) => {
+    setActionLoading(action);
+    try {
+      const newStatus = action === 'approve' ? 'Approved' : action === 'reject' ? 'Rejected' : 'Under Review';
+      await api.updateClaimStatus(claim.claim_id, newStatus);
+      claim.status = newStatus;
+    } catch (err) {
+      console.error("Action failed:", err);
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Patient Profile */}
+      <Section icon={User} title="Patient Profile">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <InfoCell label="Name" value={claim.patient_name} />
+          <InfoCell label="Age" value={claim.patient_age ? `${claim.patient_age} yrs` : '—'} />
+          <InfoCell label="Gender" value={claim.patient_gender || '—'} />
+          <InfoCell label="Location" value={claim.patient_city || '—'} />
+        </div>
+      </Section>
+
+      {/* Provider Profile */}
+      <Section icon={Building2} title="Provider Profile">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <InfoCell label="Name" value={claim.provider_name} />
+          <InfoCell label="Type" value={claim.provider_type || '—'} />
+          <InfoCell label="Specialty" value={claim.provider_specialty || '—'} />
+          <InfoCell label="ID" value={claim.provider_id ? `#${claim.provider_id}` : '—'} />
+        </div>
+      </Section>
+
+      {/* Claim Details */}
+      <Section icon={FileText} title="Claim Details">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <InfoCell label="Amount" value={formatCurrency(claim.claim_amount)} highlight />
+          <InfoCell label="Diagnosis Code" value={claim.diagnosis_code || '—'} mono />
+          <InfoCell label="Procedure Code" value={claim.procedure_code || '—'} mono />
+          <InfoCell label="Status">
+            <StatusBadge status={claim.status} />
+          </InfoCell>
+          <InfoCell label="Claim Date" value={claim.claim_date ? new Date(claim.claim_date).toLocaleDateString() : '—'} />
+          <InfoCell label="Service Date" value={claim.service_date ? new Date(claim.service_date).toLocaleDateString() : '—'} />
+        </div>
+      </Section>
+
+      {/* AI Fraud Explanation */}
+      <Section icon={BrainCircuit} title="AI Fraud Analysis">
+        <div className="space-y-4">
+          {/* Risk Score Visual */}
+          <div className="bg-bg/50 rounded-xl p-4 border border-border/40">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-xs font-black text-textPrimary">Fraud Probability</span>
+              <span className={`text-lg font-black ${risk.color}`}>{((claim.fraud_score || 0) * 100).toFixed(1)}%</span>
+            </div>
+            <div className="w-full bg-bg rounded-full h-3 overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all ${
+                  (claim.fraud_score || 0) >= 0.7 ? 'bg-danger' : (claim.fraud_score || 0) >= 0.4 ? 'bg-warning' : 'bg-success'
+                }`}
+                style={{ width: `${((claim.fraud_score || 0) * 100)}%` }}
+              />
+            </div>
+            <div className="flex items-center justify-between mt-2">
+              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black border ${risk.bg} ${risk.color} ${risk.border}`}>
+                {risk.label} Risk
+              </span>
+              <span className="text-[10px] text-textSecondary font-mono">
+                Base: {((base_value || shap.base_value || 0) * 100).toFixed(1)}%
+              </span>
+            </div>
+          </div>
+
+          {/* SHAP Summary */}
+          <div className="text-xs text-textSecondary leading-relaxed bg-bg/30 rounded-lg p-3 border border-border/30">
+            {shap.summary}
+          </div>
+
+          {/* SHAP Factors */}
+          {shap.top_factors && shap.top_factors.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-[10px] font-black text-textSecondary uppercase tracking-widest">Contributing Factors</p>
+              {shap.top_factors.map((factor, i) => (
+                <div key={i} className="flex items-center gap-3 bg-bg/30 rounded-lg px-3 py-2 border border-border/30">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold text-textPrimary">{factor.feature}</span>
+                      <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-full ${
+                        factor.impact === 'high' ? 'bg-danger/10 text-danger' :
+                        factor.impact === 'medium' ? 'bg-warning/10 text-warning' :
+                        'bg-primary/10 text-primary'
+                      }`}>
+                        {factor.impact}
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-textSecondary mt-0.5">
+                      {factor.direction === 'increases' ? '↑' : factor.direction === 'decreases' ? '↓' : '—'} {factor.value}
+                    </p>
+                  </div>
+                  <div className="w-16">
+                    <div className="w-full bg-bg/60 rounded-full h-1.5 overflow-hidden">
+                      <div
+                        className={`h-full rounded-full ${
+                          factor.impact === 'high' ? 'bg-danger' :
+                          factor.impact === 'medium' ? 'bg-warning' : 'bg-primary'
+                        }`}
+                        style={{ width: `${(factor.weight * 100)}%` }}
+                      />
+                    </div>
+                    <span className="text-[9px] text-textSecondary font-mono block text-right mt-0.5">
+                      {(factor.weight * 100).toFixed(0)}%
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* SHAP Contributions (if available) */}
+          {shap_contributions && shap_contributions.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-[10px] font-black text-textSecondary uppercase tracking-widest">SHAP Feature Contributions</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {shap_contributions.slice(0, 10).map((item, i) => {
+                  const val = item.value || item.contribution || 0;
+                  const isPositive = val >= 0;
+                  return (
+                    <div key={i} className="flex items-center gap-2 bg-bg/30 rounded-lg px-3 py-2 border border-border/30">
+                      <span className="text-[10px] text-textPrimary font-medium flex-1 truncate">{item.feature || item.name}</span>
+                      <div className="w-12 h-1.5 bg-bg/60 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full rounded-full ${isPositive ? 'bg-danger' : 'bg-success'}`}
+                          style={{ width: `${Math.min(Math.abs(val) * 500, 100)}%` }}
+                        />
+                      </div>
+                      <span className={`text-[10px] font-mono font-bold ${isPositive ? 'text-danger' : 'text-success'}`}>
+                        {isPositive ? '+' : ''}{(val * 100).toFixed(1)}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      </Section>
+
+      {/* Patient Medical History */}
+      {patient_history && patient_history.length > 0 && (
+        <Section icon={Clock} title="Patient Medical History">
+          <div className="space-y-3">
+            {patient_history.map((item, i) => (
+              <div key={i} className="flex items-start gap-3 relative">
+                {i < patient_history.length - 1 && (
+                  <div className="absolute left-[7px] top-5 bottom-0 w-px bg-border/40" />
+                )}
+                <div className="w-3.5 h-3.5 rounded-full bg-primary/20 border-2 border-primary mt-0.5 shrink-0 z-10" />
+                <div className="flex-1 bg-bg/30 rounded-lg px-3 py-2 border border-border/30">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-textPrimary">{item.diagnosis || item.service_name || 'Medical Event'}</span>
+                    <span className="text-[10px] text-textSecondary font-mono">
+                      {item.date || item.service_date ? new Date(item.date || item.service_date).toLocaleDateString() : '—'}
+                    </span>
+                  </div>
+                  {item.provider_name && (
+                    <p className="text-[10px] text-textSecondary mt-0.5">Provider: {item.provider_name}</p>
+                  )}
+                  {item.amount && (
+                    <p className="text-[10px] text-textSecondary font-mono">Amount: {formatCurrency(item.amount)}</p>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </Section>
+      )}
+
+      {/* Investigation Actions */}
+      <Section icon={AlertTriangle} title="Investigation Actions">
+        <div className="flex flex-wrap gap-3">
+          <button
+            disabled={actionLoading === 'approve'}
+            onClick={() => handleAction('approve')}
+            className="enterprise-btn flex items-center gap-2 py-2.5 px-5 text-xs font-bold bg-success/10 text-success border border-success/20 hover:bg-success/20 transition-colors disabled:opacity-50"
+          >
+            <CheckCircle size={14} />
+            {actionLoading === 'approve' ? 'Processing...' : 'Approve Claim'}
+          </button>
+          <button
+            disabled={actionLoading === 'reject'}
+            onClick={() => handleAction('reject')}
+            className="enterprise-btn flex items-center gap-2 py-2.5 px-5 text-xs font-bold bg-danger/10 text-danger border border-danger/20 hover:bg-danger/20 transition-colors disabled:opacity-50"
+          >
+            <XCircle size={14} />
+            {actionLoading === 'reject' ? 'Processing...' : 'Reject Claim'}
+          </button>
+          <button
+            disabled={actionLoading === 'audit'}
+            onClick={() => handleAction('audit')}
+            className="enterprise-btn flex items-center gap-2 py-2.5 px-5 text-xs font-bold bg-warning/10 text-warning border border-warning/20 hover:bg-warning/20 transition-colors disabled:opacity-50"
+          >
+            <AlertTriangle size={14} />
+            {actionLoading === 'audit' ? 'Processing...' : 'Send to Audit'}
+          </button>
+        </div>
+      </Section>
+    </div>
+  );
+}
+
+
+function Section({ icon: Icon, title, children }) {
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-2 pb-2 border-b border-border/40">
+        <Icon size={14} className="text-primary" />
+        <h3 className="text-xs font-black text-textPrimary uppercase tracking-widest">{title}</h3>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+
+function InfoCell({ label, value, children, highlight, mono }) {
+  return (
+    <div>
+      <p className="text-[10px] text-textSecondary uppercase tracking-wider font-semibold mb-1">{label}</p>
+      {children || (
+        <p className={`text-sm font-bold ${
+          highlight ? 'text-primary font-mono' :
+          mono ? 'font-mono text-xs' :
+          'text-textPrimary'
+        }`}>
+          {value || '—'}
+        </p>
+      )}
     </div>
   );
 }

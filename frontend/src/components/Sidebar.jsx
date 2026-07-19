@@ -63,7 +63,7 @@ const roleConfigs = {
         title: 'SYSTEM',
         links: [
           { to: '/insurance/reports', label: 'Reports', icon: FileText },
-          { to: '/insurance/settings', label: 'Settings', icon: Settings },
+          { to: '/insurance/settings', label: 'System Monitoring', icon: Settings },
         ]
       }
     ],

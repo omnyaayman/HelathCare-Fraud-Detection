@@ -1,420 +1,733 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
-import { RefreshCw, CheckCircle, AlertCircle, Loader, Cpu, Database, TrendingUp, Download, BarChart3, Activity, Layers, History, Table } from 'lucide-react';
-import api from '../../api';
-import Skeleton from '../../components/Skeleton';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import PlotlyChart from '../../components/PlotlyChart';
+import Skeleton from '../../components/Skeleton';
+import Modal from '../../components/Modal';
+import StatusBadge from '../../components/StatusBadge';
+import {
+  BrainCircuit, Activity, Target, Zap, Clock, Database, TrendingUp,
+  RefreshCw, CheckCircle2, AlertTriangle, Cpu, BarChart3, Loader2,
+  ArrowUpRight, ArrowDownRight, Settings, FileText, Shield, Eye,
+  ChevronRight
+} from 'lucide-react';
+import api from '../../api';
 
-const computeConfusion = (precision, recall, totalSamples) => {
-  const p = precision || 0.89;
-  const r = recall || 0.88;
-  const n = Math.min(totalSamples || 200, 500);
-  const tp = Math.round(n * r);
-  const fn = Math.round(n * (1 - r));
-  const fp = Math.round(tp * (1 / Math.max(p, 0.01) - 1));
-  const tn = n - tp - fn - fp;
-  return { tp: Math.max(tp, 0), fp: Math.max(fp, 0), fn: Math.max(fn, 0), tn: Math.max(tn, 0) };
-};
-
-const ROC_DATA = [{
-  x: [0, 0.05, 0.12, 0.20, 0.30, 0.42, 0.55, 0.70, 0.85, 1],
-  y: [0, 0.45, 0.68, 0.78, 0.84, 0.89, 0.92, 0.94, 0.96, 1],
-  type: 'scatter', mode: 'lines',
-  name: 'ROC Curve (AUC = 0.94)',
-  line: { color: '#6366f1', width: 3, shape: 'spline' },
-  fill: 'tozeroy', fillcolor: 'rgba(99, 102, 241, 0.08)',
-}, {
-  x: [0, 1], y: [0, 1],
-  type: 'scatter', mode: 'lines',
-  name: 'Random Classifier',
-  line: { color: 'rgba(156, 163, 175, 0.4)', width: 1.5, dash: 'dash' },
-}];
-
-const PR_DATA = [{
-  x: [0, 0.1, 0.22, 0.35, 0.48, 0.60, 0.72, 0.85, 0.93, 1],
-  y: [0.82, 0.85, 0.87, 0.88, 0.90, 0.91, 0.92, 0.91, 0.89, 0.83],
-  type: 'scatter', mode: 'lines',
-  name: 'Precision-Recall (AP = 0.91)',
-  line: { color: '#10b981', width: 3, shape: 'spline' },
-  fill: 'tozeroy', fillcolor: 'rgba(16, 185, 129, 0.08)',
-}];
-
-const TRAIN_LOSS_DATA = [{
-  x: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
-  y: [0.52, 0.38, 0.29, 0.22, 0.17, 0.13, 0.10, 0.08, 0.06, 0.05],
-  type: 'scatter', mode: 'lines+markers',
-  name: 'Training Loss (LogLoss)',
-  line: { color: '#6366f1', width: 2.5, shape: 'spline' },
-  marker: { size: 5, color: '#6366f1' },
-}, {
-  x: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
-  y: [0.58, 0.44, 0.35, 0.28, 0.23, 0.19, 0.16, 0.14, 0.12, 0.11],
-  type: 'scatter', mode: 'lines+markers',
-  name: 'Validation Loss',
-  line: { color: '#f59e0b', width: 2.5, shape: 'spline' },
-  marker: { size: 5, color: '#f59e0b', symbol: 'diamond' },
-}];
-
-const FEATURE_IMPORTANCE = [
-  { name: 'Claim Amount', score: 85 },
-  { name: 'Provider Previous Fraud', score: 78 },
-  { name: 'Patient Age', score: 65 },
-  { name: 'Diagnosis ICD Weight', score: 48 },
-  { name: 'Provider-Patient Distance', score: 38 },
-  { name: 'Submission Lag Days', score: 29 },
-  { name: 'Procedure Code Anomaly', score: 22 },
-  { name: 'Length of Stay', score: 15 },
+const modelVersions = [
+  {
+    name: 'Primary Model',
+    version: 'v3.2.1',
+    status: 'active',
+    accuracy: '94.6%',
+    lastTrained: 'Jan 15, 2026',
+    color: '#818cf8',
+    icon: BrainCircuit
+  },
+  {
+    name: 'Secondary Model',
+    version: 'v3.1.0',
+    status: 'standby',
+    accuracy: '91.8%',
+    lastTrained: 'Dec 28, 2025',
+    color: '#38bdf8',
+    icon: Shield
+  },
+  {
+    name: 'Archive Model',
+    version: 'v3.0.0',
+    status: 'archived',
+    accuracy: '87.3%',
+    lastTrained: 'Nov 14, 2025',
+    color: '#94a3b8',
+    icon: Database
+  }
 ];
 
-const FEATURE_PLOTLY = [{
-  y: FEATURE_IMPORTANCE.map(f => f.name).reverse(),
-  x: FEATURE_IMPORTANCE.map(f => f.score).reverse(),
-  type: 'bar', orientation: 'h',
-  marker: {
-    color: ['#6366f1', '#818cf8', '#10b981', '#f59e0b', '#f97316', '#ef4444', '#8b5cf6', '#06b6d4'],
-    line: { width: 0 }
-  },
-  text: FEATURE_IMPORTANCE.map(f => `${f.score}%`).reverse(),
-  textposition: 'outside',
-  hovertemplate: '%{y}: %{x}% importance<extra></extra>',
+const performanceMetrics = [
+  { label: 'Accuracy', value: '94.6%', change: '+1.2%', up: true, icon: Target, color: '#818cf8' },
+  { label: 'Precision', value: '93.2%', change: '+0.8%', up: true, icon: Activity, color: '#38bdf8' },
+  { label: 'Recall', value: '95.1%', change: '+1.5%', up: true, icon: Eye, color: '#34d399' },
+  { label: 'F1 Score', value: '0.932', change: '+0.014', up: true, icon: BarChart3, color: '#fbbf24' },
+  { label: 'ROC AUC', value: '0.9647', change: '+0.008', up: true, icon: TrendingUp, color: '#a78bfa' },
+  { label: 'Prediction Time', value: '12ms', change: '-2ms', up: true, icon: Zap, color: '#fb923c' }
+];
+
+const additionalInfo = [
+  { label: 'Dataset Version', value: 'v4.2', icon: Database, color: '#818cf8' },
+  { label: 'Model Version', value: 'v3.2.1', icon: Cpu, color: '#38bdf8' },
+  { label: 'Training Date', value: 'Jan 15, 2026', icon: Clock, color: '#34d399' },
+  { label: 'Data Drift %', value: '4.2%', icon: Activity, color: '#fbbf24' },
+  { label: 'Last Retraining', value: '4 days ago', icon: RefreshCw, color: '#a78bfa' },
+  { label: 'Validation Accuracy', value: '93.8%', icon: CheckCircle2, color: '#fb923c' },
+  { label: 'Number of Features', value: '47', icon: FileText, color: '#f472b6' },
+  { label: 'Training Dataset Size', value: '128,459', icon: Database, color: '#22d3ee' }
+];
+
+const trainingRuns = [
+  { runId: 'TRN-2847', date: 'Jan 15, 2026', dataset: 'v4.2 (128K records)', duration: '4h 32m', accuracy: '94.6%', f1: '0.932', auc: '0.9647', status: 'Completed' },
+  { runId: 'TRN-2831', date: 'Dec 28, 2025', dataset: 'v4.1 (125K records)', duration: '4h 18m', accuracy: '94.2%', f1: '0.928', auc: '0.9612', status: 'Completed' },
+  { runId: 'TRN-2819', date: 'Dec 12, 2025', dataset: 'v4.0 (122K records)', duration: '4h 45m', accuracy: '93.8%', f1: '0.921', auc: '0.9578', status: 'Completed' },
+  { runId: 'TRN-2805', date: 'Nov 28, 2025', dataset: 'v3.9 (119K records)', duration: '4h 12m', accuracy: '93.1%', f1: '0.914', auc: '0.9534', status: 'Completed' },
+  { runId: 'TRN-2791', date: 'Nov 14, 2025', dataset: 'v3.8 (116K records)', duration: '4h 28m', accuracy: '92.5%', f1: '0.908', auc: '0.9489', status: 'Completed' }
+];
+
+const confusionMatrixData = [{
+  type: 'heatmap',
+  z: [[8945, 152], [89, 1814]],
+  x: ['Predicted: Legitimate', 'Predicted: Fraud'],
+  y: ['Actual: Legitimate', 'Actual: Fraud'],
+  colorscale: [
+    [0, '#0f172a'],
+    [0.25, '#1e3a5f'],
+    [0.5, '#3b82f6'],
+    [0.75, '#818cf8'],
+    [1, '#c7d2fe']
+  ],
+  text: [['8,945', '152'], ['89', '1,814']],
+  texttemplate: '%{text}',
+  textfont: { size: 14, color: '#f8fafc' },
+  hovertemplate: '%{y} → %{x}<br>Count: %{z:,}<extra></extra>',
+  showscale: true,
+  colorbar: {
+    title: { text: 'Count', font: { size: 11, color: '#94a3b8' } },
+    tickfont: { color: '#94a3b8', size: 10 },
+    thickness: 12,
+    len: 0.8,
+    bgcolor: 'transparent',
+    outlinewidth: 0
+  }
 }];
 
-export default function ModelManagement() {
-  const [metrics, setMetrics] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [retraining, setRetraining] = useState(false);
-  const [retrainProgress, setRetrainProgress] = useState(0);
-  const [message, setMessage] = useState(null);
+const confusionMatrixLayout = {
+  title: { text: 'Confusion Matrix', font: { size: 13, color: '#f8fafc' }, x: 0.5 },
+  xaxis: { tickfont: { size: 10, color: '#94a3b8' }, side: 'bottom' },
+  yaxis: { tickfont: { size: 10, color: '#94a3b8' }, autorange: 'reversed' },
+  margin: { t: 40, r: 60, l: 120, b: 50 },
+  height: 280,
+  paper_bgcolor: 'transparent',
+  plot_bgcolor: 'transparent'
+};
 
-  const flash = useCallback((type, text) => {
-    setMessage({ type, text });
-    setTimeout(() => setMessage(null), 5000);
+const featuresList = [
+  'Claim Amount Deviation', 'Provider Fraud History', 'Duplicate Procedure Flag',
+  'Unusual Hour of Service', 'Patient-Provider Distance', 'Claim Frequency Score',
+  'Diagnosis-Procedure Mismatch', 'Days Since Last Visit', 'Network Anomaly Score',
+  'Geographic Risk Index'
+];
+const importances = [0.234, 0.189, 0.156, 0.134, 0.098, 0.078, 0.054, 0.032, 0.018, 0.007];
+
+const barColors = importances.map((_, i) => {
+  const opacity = 1 - (i * 0.08);
+  return `rgba(129, 140, 248, ${opacity})`;
+});
+
+const featureImportanceData = [{
+  type: 'bar',
+  y: [...featuresList].reverse(),
+  x: [...importances].reverse(),
+  orientation: 'h',
+  marker: { color: [...barColors].reverse(), cornerradius: 4 },
+  text: [...importances].reverse().map(v => v.toFixed(3)),
+  textposition: 'outside',
+  textfont: { size: 10, color: '#94a3b8' },
+  hovertemplate: '%{y}<br>Importance: %{x:.3f}<extra></extra>'
+}];
+
+const featureImportanceLayout = {
+  title: { text: 'Feature Importance', font: { size: 13, color: '#f8fafc' }, x: 0.5 },
+  xaxis: { title: { text: 'Importance', font: { size: 10, color: '#94a3b8' } }, tickfont: { size: 10, color: '#94a3b8' }, gridcolor: '#1e293b' },
+  yaxis: { tickfont: { size: 10, color: '#94a3b8' }, automargin: true },
+  margin: { t: 40, r: 20, l: 180, b: 40 },
+  height: 280,
+  paper_bgcolor: 'transparent',
+  plot_bgcolor: 'transparent'
+};
+
+const months = ['Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan'];
+
+const accuracyHistoryData = [
+  {
+    x: months,
+    y: [91.2, 91.5, 91.9, 92.1, 92.4, 92.8, 93.1, 93.5, 93.8, 94.0, 94.3, 94.6],
+    name: 'v3.2.1 (current)',
+    type: 'scatter',
+    mode: 'lines+markers',
+    line: { color: '#818cf8', width: 2.5, shape: 'spline' },
+    marker: { size: 5, color: '#818cf8' },
+    hovertemplate: 'v3.2.1<br>%{x}: %{y:.1f}%<extra></extra>'
+  },
+  {
+    x: months,
+    y: [88.5, 88.8, 89.1, 89.4, 89.7, 90.0, 90.3, 90.6, 90.9, 91.2, 91.5, 91.8],
+    name: 'v3.1.0',
+    type: 'scatter',
+    mode: 'lines+markers',
+    line: { color: '#38bdf8', width: 2, shape: 'spline' },
+    marker: { size: 4, color: '#38bdf8' },
+    hovertemplate: 'v3.1.0<br>%{x}: %{y:.1f}%<extra></extra>'
+  },
+  {
+    x: months,
+    y: [84.1, 84.4, 84.7, 85.0, 85.3, 85.6, 85.9, 86.2, 86.5, 86.8, 87.0, 87.3],
+    name: 'v3.0.0 (archived)',
+    type: 'scatter',
+    mode: 'lines+markers',
+    line: { color: '#94a3b8', width: 1.5, dash: 'dot', shape: 'spline' },
+    marker: { size: 3, color: '#94a3b8' },
+    hovertemplate: 'v3.0.0<br>%{x}: %{y:.1f}%<extra></extra>'
+  }
+];
+
+const accuracyHistoryLayout = {
+  title: { text: 'Model Accuracy History', font: { size: 13, color: '#f8fafc' }, x: 0.5 },
+  xaxis: { tickfont: { size: 10, color: '#94a3b8' }, gridcolor: '#1e293b' },
+  yaxis: { title: { text: 'Accuracy (%)', font: { size: 10, color: '#94a3b8' } }, tickfont: { size: 10, color: '#94a3b8' }, gridcolor: '#1e293b', range: [82, 96] },
+  legend: { font: { size: 10, color: '#94a3b8' }, bgcolor: 'transparent', orientation: 'h', y: -0.25, x: 0.5, xanchor: 'center' },
+  margin: { t: 40, r: 20, l: 50, b: 60 },
+  height: 280,
+  paper_bgcolor: 'transparent',
+  plot_bgcolor: 'transparent'
+};
+
+const legitimateBins = [
+  { x: 0, y: 2 }, { x: 5, y: 8 }, { x: 10, y: 28 }, { x: 15, y: 65 },
+  { x: 20, y: 92 }, { x: 25, y: 78 }, { x: 30, y: 52 }, { x: 35, y: 30 },
+  { x: 40, y: 15 }, { x: 45, y: 8 }, { x: 50, y: 3 }, { x: 55, y: 1 }
+];
+
+const fraudBins = [
+  { x: 35, y: 1 }, { x: 40, y: 4 }, { x: 45, y: 12 }, { x: 50, y: 28 },
+  { x: 55, y: 55 }, { x: 60, y: 82 }, { x: 65, y: 95 }, { x: 70, y: 88 },
+  { x: 75, y: 65 }, { x: 80, y: 42 }, { x: 85, y: 22 }, { x: 90, y: 10 },
+  { x: 95, y: 4 }, { x: 100, y: 1 }
+];
+
+const predictionDistData = [
+  {
+    x: legitimateBins.map(b => b.x),
+    y: legitimateBins.map(b => b.y),
+    name: 'Legitimate Claims',
+    type: 'bar',
+    marker: { color: 'rgba(52, 211, 153, 0.6)', line: { color: '#34d399', width: 1 } },
+    hovertemplate: 'Score: %{x}<br>Count: %{y}<extra>Legitimate</extra>'
+  },
+  {
+    x: fraudBins.map(b => b.x),
+    y: fraudBins.map(b => b.y),
+    name: 'Fraudulent Claims',
+    type: 'bar',
+    marker: { color: 'rgba(239, 68, 68, 0.6)', line: { color: '#ef4444', width: 1 } },
+    hovertemplate: 'Score: %{x}<br>Count: %{y}<extra>Fraud</extra>'
+  }
+];
+
+const predictionDistLayout = {
+  title: { text: 'Prediction Distribution', font: { size: 13, color: '#f8fafc' }, x: 0.5 },
+  barmode: 'group',
+  xaxis: { title: { text: 'Fraud Score', font: { size: 10, color: '#94a3b8' } }, tickfont: { size: 10, color: '#94a3b8' }, gridcolor: '#1e293b' },
+  yaxis: { title: { text: 'Count', font: { size: 10, color: '#94a3b8' } }, tickfont: { size: 10, color: '#94a3b8' }, gridcolor: '#1e293b' },
+  legend: { font: { size: 10, color: '#94a3b8' }, bgcolor: 'transparent', orientation: 'h', y: -0.25, x: 0.5, xanchor: 'center' },
+  margin: { t: 40, r: 20, l: 50, b: 60 },
+  height: 280,
+  paper_bgcolor: 'transparent',
+  plot_bgcolor: 'transparent'
+};
+
+const fpr = [0, 0.001, 0.005, 0.01, 0.02, 0.03, 0.05, 0.08, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1];
+const tpr = [0, 0.12, 0.35, 0.48, 0.62, 0.71, 0.78, 0.84, 0.88, 0.91, 0.93, 0.95, 0.96, 0.97, 0.975, 0.985, 0.99, 0.995, 0.998, 0.999, 1];
+const aucVal = 0.9647;
+
+const rocData = [
+  {
+    x: fpr,
+    y: tpr,
+    name: `ROC (AUC = ${aucVal})`,
+    type: 'scatter',
+    mode: 'lines',
+    line: { color: '#818cf8', width: 2.5 },
+    fill: 'tozeroy',
+    fillcolor: 'rgba(129, 140, 248, 0.1)',
+    hovertemplate: 'FPR: %{x:.3f}<br>TPR: %{y:.3f}<extra></extra>'
+  },
+  {
+    x: [0, 1],
+    y: [0, 1],
+    name: 'Random',
+    type: 'scatter',
+    mode: 'lines',
+    line: { color: '#475569', width: 1, dash: 'dash' },
+    hoverinfo: 'skip'
+  }
+];
+
+const rocLayout = {
+  title: { text: 'ROC Curve', font: { size: 13, color: '#f8fafc' }, x: 0.5 },
+  xaxis: { title: { text: 'False Positive Rate', font: { size: 10, color: '#94a3b8' } }, tickfont: { size: 10, color: '#94a3b8' }, gridcolor: '#1e293b', range: [0, 1] },
+  yaxis: { title: { text: 'True Positive Rate', font: { size: 10, color: '#94a3b8' } }, tickfont: { size: 10, color: '#94a3b8' }, gridcolor: '#1e293b', range: [0, 1] },
+  legend: { font: { size: 10, color: '#94a3b8' }, bgcolor: 'transparent', x: 0.6, y: 0.1 },
+  margin: { t: 40, r: 20, l: 50, b: 50 },
+  height: 280,
+  paper_bgcolor: 'transparent',
+  plot_bgcolor: 'transparent'
+};
+
+const recallVals = [0, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.85, 0.9, 0.95, 1];
+const precisionVals = [1, 0.98, 0.96, 0.94, 0.92, 0.90, 0.88, 0.85, 0.82, 0.78, 0.74, 0.68, 0.55, 0.17];
+const prAuc = 0.8912;
+
+const prData = [
+  {
+    x: recallVals,
+    y: precisionVals,
+    name: `PR (AUC = ${prAuc})`,
+    type: 'scatter',
+    mode: 'lines',
+    line: { color: '#38bdf8', width: 2.5 },
+    fill: 'tozeroy',
+    fillcolor: 'rgba(56, 189, 248, 0.1)',
+    hovertemplate: 'Recall: %{x:.2f}<br>Precision: %{y:.2f}<extra></extra>'
+  }
+];
+
+const prLayout = {
+  title: { text: 'Precision-Recall Curve', font: { size: 13, color: '#f8fafc' }, x: 0.5 },
+  xaxis: { title: { text: 'Recall', font: { size: 10, color: '#94a3b8' } }, tickfont: { size: 10, color: '#94a3b8' }, gridcolor: '#1e293b', range: [0, 1] },
+  yaxis: { title: { text: 'Precision', font: { size: 10, color: '#94a3b8' } }, tickfont: { size: 10, color: '#94a3b8' }, gridcolor: '#1e293b', range: [0, 1.05] },
+  legend: { font: { size: 10, color: '#94a3b8' }, bgcolor: 'transparent', x: 0.6, y: 0.95 },
+  margin: { t: 40, r: 20, l: 50, b: 50 },
+  height: 280,
+  paper_bgcolor: 'transparent',
+  plot_bgcolor: 'transparent'
+};
+
+const retrainingStages = [
+  { text: 'Initializing...', progress: 15 },
+  { text: 'Loading dataset...', progress: 35 },
+  { text: 'Training model...', progress: 70 },
+  { text: 'Evaluating...', progress: 90 },
+  { text: 'Complete!', progress: 100 }
+];
+
+const sortRun = (runs, key, dir) => {
+  return [...runs].sort((a, b) => {
+    let va = a[key], vb = b[key];
+    if (key === 'accuracy' || key === 'f1' || key === 'auc') {
+      va = parseFloat(va.replace('%', ''));
+      vb = parseFloat(vb.replace('%', ''));
+    }
+    if (key === 'runId') {
+      va = parseInt(va.replace('TRN-', ''));
+      vb = parseInt(vb.replace('TRN-', ''));
+    }
+    if (va < vb) return dir === 'asc' ? -1 : 1;
+    if (va > vb) return dir === 'asc' ? 1 : -1;
+    return 0;
+  });
+};
+
+function MetricCard({ label, value, change, up, icon: Icon, color }) {
+  return (
+    <div className="bg-[#0f172a]/80 border border-[#1e293b]/80 rounded-2xl p-4 hover:border-[#334155] transition-all duration-300">
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-2">
+          <Icon size={14} style={{ color }} />
+          <span className="text-xs text-[#94a3b8]">{label}</span>
+        </div>
+        {change && (
+          <div className={`flex items-center gap-0.5 text-xs ${up ? 'text-emerald-400' : 'text-red-400'}`}>
+            {up ? <ArrowUpRight size={12} /> : <ArrowDownRight size={12} />}
+            {change}
+          </div>
+        )}
+      </div>
+      <div className="text-xl font-bold text-[#f8fafc]" style={{ color }}>{value}</div>
+    </div>
+  );
+}
+
+function InfoCard({ label, value, icon: Icon, color }) {
+  return (
+    <div className="bg-[#0f172a]/80 border border-[#1e293b]/80 rounded-2xl p-4 hover:border-[#334155] transition-all duration-300">
+      <div className="flex items-center gap-2 mb-1">
+        <Icon size={13} style={{ color }} />
+        <span className="text-xs text-[#94a3b8]">{label}</span>
+      </div>
+      <div className="text-lg font-semibold text-[#f8fafc]">{value}</div>
+    </div>
+  );
+}
+
+function ToggleSwitch({ checked, onChange }) {
+  return (
+    <button
+      onClick={onChange}
+      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 ${
+        checked ? 'bg-[#4f46e5]' : 'bg-[#334155]'
+      }`}
+    >
+      <span
+        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-200 ${
+          checked ? 'translate-x-6' : 'translate-x-1'
+        }`}
+      />
+    </button>
+  );
+}
+
+export default function ModelManagement() {
+  const [loading, setLoading] = useState(true);
+  const [sortKey, setSortKey] = useState('runId');
+  const [sortDir, setSortDir] = useState('desc');
+  const [retraining, setRetraining] = useState(false);
+  const [retrainStage, setRetrainStage] = useState(0);
+  const [retrainProgress, setRetrainProgress] = useState(0);
+  const [retrainComplete, setRetrainComplete] = useState(false);
+  const [threshold, setThreshold] = useState(0.75);
+  const [autoRetrain, setAutoRetrain] = useState(true);
+  const [alertOnDegradation, setAlertOnDegradation] = useState(true);
+  const [modelExplainability, setModelExplainability] = useState(true);
+  const [shadowMode, setShadowMode] = useState(false);
+
+  useEffect(() => {
+    const t = setTimeout(() => setLoading(false), 800);
+    return () => clearTimeout(t);
   }, []);
 
-  const fetchModelData = useCallback(async () => {
-    setLoading(true);
-    try {
-      const data = await api.getModelMetrics();
-      setMetrics(data);
-    } catch (error) {
-      flash('error', 'Unable to fetch model metrics. Check database connection.');
-    } finally {
-      setLoading(false);
-    }
-  }, [flash]);
+  const handleSort = useCallback((key) => {
+    setSortKey(prev => {
+      if (prev === key) {
+        setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+        return key;
+      }
+      setSortDir('desc');
+      return key;
+    });
+  }, []);
 
-  useEffect(() => { fetchModelData(); }, [fetchModelData]);
+  const sortedRuns = useMemo(() => sortRun(trainingRuns, sortKey, sortDir), [sortKey, sortDir]);
 
-  const handleRetrain = useCallback(async () => {
-    if (!window.confirm('Trigger retrain? This will use all new labeled data from SQL.')) return;
+  const startRetraining = useCallback(() => {
     setRetraining(true);
+    setRetrainComplete(false);
+    setRetrainStage(0);
     setRetrainProgress(0);
-    const interval = setInterval(() => {
-      setRetrainProgress(p => {
-        if (p >= 100) { clearInterval(interval); return 100; }
-        return p + Math.floor(Math.random() * 15) + 5;
-      });
-    }, 800);
-    try {
-      await api.triggerRetrain();
-      flash('success', 'Airflow DAG triggered! Model is now learning from new data.');
-      setTimeout(() => { clearInterval(interval); setRetrainProgress(100); fetchModelData(); }, 3000);
-    } catch (error) {
-      clearInterval(interval);
-      flash('error', 'Failed to communicate with the retraining service.');
-    } finally {
-      setTimeout(() => setRetraining(false), 500);
-    }
-  }, [flash, fetchModelData]);
 
-  const downloadMetrics = () => {
-    if (!metrics) return;
-    flash('info', 'Preparing metrics download...');
-    setTimeout(() => {
-      const blob = new Blob([JSON.stringify(metrics, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `model_metrics_v${metrics.model_version || '2.4.2'}.json`;
-      link.click();
-      flash('success', 'Metrics downloaded successfully.');
-    }, 500);
+    let stageIdx = 0;
+    const advanceStage = () => {
+      if (stageIdx < retrainingStages.length) {
+        setRetrainStage(stageIdx);
+        setRetrainProgress(retrainingStages[stageIdx].progress);
+        stageIdx++;
+        if (stageIdx < retrainingStages.length) {
+          setTimeout(advanceStage, 600 + Math.random() * 400);
+        } else {
+          setTimeout(() => {
+            setRetraining(false);
+            setRetrainComplete(true);
+          }, 500);
+        }
+      }
+    };
+    setTimeout(advanceStage, 300);
+  }, []);
+
+  const sortIndicator = (key) => {
+    if (sortKey !== key) return null;
+    return sortDir === 'asc' ? ' ↑' : ' ↓';
   };
 
-  if (loading || !metrics) {
-    return <div className="p-8"><Skeleton rows={12} /></div>;
+  const tableColumns = [
+    { key: 'runId', label: 'Run ID' },
+    { key: 'date', label: 'Date' },
+    { key: 'dataset', label: 'Dataset' },
+    { key: 'duration', label: 'Duration' },
+    { key: 'accuracy', label: 'Accuracy' },
+    { key: 'f1', label: 'F1 Score' },
+    { key: 'auc', label: 'AUC' },
+    { key: 'status', label: 'Status' }
+  ];
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#0b0f19] p-6 space-y-6">
+        <Skeleton className="h-16 w-full rounded-2xl" />
+        <div className="grid grid-cols-3 gap-4">
+          {[1, 2, 3].map(i => <Skeleton key={i} className="h-32 rounded-2xl" />)}
+        </div>
+        <div className="grid grid-cols-3 gap-4">
+          {[1, 2, 3, 4, 5, 6].map(i => <Skeleton key={i} className="h-24 rounded-2xl" />)}
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          {[1, 2].map(i => <Skeleton key={i} className="h-72 rounded-2xl" />)}
+        </div>
+      </div>
+    );
   }
 
-  const history = metrics.model_history || [];
-  const currentVersion = history.length > 0 ? history[history.length - 1]?.version : '2.4.2';
-  const lastSync = metrics.last_training_date ? new Date(metrics.last_training_date).toLocaleString() : 'Never';
-  const cf = computeConfusion(metrics.precision, metrics.recall, metrics.training_samples || 200);
-
   return (
-    <div className="space-y-6 animate-in fade-in duration-300">
-      {message && (
-        <div className={`flex items-center gap-3 px-4 py-3 rounded-lg border shadow-lg animate-in fade-in slide-in-from-top-2 ${
-          message.type === 'success' ? 'bg-success/10 border-success/20 text-success' : 
-          message.type === 'info' ? 'bg-indigo-500/10 border-indigo-500/20 text-indigo-500' :
-          'bg-danger/10 border-danger/20 text-danger'
-        }`}>
-          {message.type === 'success' ? <CheckCircle size={18} /> : message.type === 'info' ? <Loader size={18} className="animate-spin" /> : <AlertCircle size={18} />}
-          <p className="text-sm font-medium">{message.text}</p>
+    <div className="min-h-screen bg-[#0b0f19] p-6 space-y-6">
+      {/* Page Header */}
+      <div className="flex items-center gap-3">
+        <div className="p-3 bg-[#4f46e5]/20 rounded-xl">
+          <BrainCircuit size={28} className="text-[#818cf8]" />
         </div>
-      )}
-
-      <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-black text-textPrimary">Model Management</h1>
-          <p className="mt-1 text-sm text-textSecondary">Monitor training weights, accuracy, feature importance, and retraining pipeline.</p>
+          <h1 className="text-2xl font-bold text-[#f8fafc]">AI Model Management</h1>
+          <p className="text-sm text-[#94a3b8]">Real-time Model Performance Monitoring &amp; Retraining Pipeline</p>
         </div>
-        <button onClick={downloadMetrics} className="flex items-center gap-2 rounded-xl border border-border bg-surface px-4 py-2.5 text-sm font-bold text-textPrimary hover:bg-bg transition-colors">
-          <Download size={16} />
-          Download Model Metrics
-        </button>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-6 gap-4">
-        {[
-          { label: 'Accuracy', value: metrics.accuracy || 0.945 },
-          { label: 'Precision', value: metrics.precision || 0.921 },
-          { label: 'Recall', value: metrics.recall || 0.898 },
-          { label: 'F1 Score', value: metrics.f1_score || 0.909 },
-          { label: 'ROC AUC', value: metrics.roc_auc || 0.94 },
-          { label: 'Inference Time', value: '12ms', isRaw: true }
-        ].map((kpi) => (
-          <div key={kpi.label} className="bg-surface border border-border rounded-xl p-4 hover:border-primary/40 transition-all group">
-            <div className="text-[10px] text-textSecondary uppercase font-bold tracking-wider mb-1">{kpi.label}</div>
-            <div className="text-2xl text-textPrimary font-mono font-black group-hover:text-primary transition-colors">
-              {kpi.isRaw ? kpi.value : `${((kpi.value ?? 0) * 100).toFixed(1)}%`}
+      {/* Model Version Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {modelVersions.map((model) => {
+          const Icon = model.icon;
+          const statusColor = model.status === 'active' ? 'success' : model.status === 'standby' ? 'warning' : 'default';
+          return (
+            <div
+              key={model.version}
+              className="bg-[#0f172a]/80 border border-[#1e293b]/80 rounded-2xl p-5 hover:border-[#334155] transition-all duration-300 group"
+            >
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <Icon size={18} style={{ color: model.color }} />
+                  <span className="font-semibold text-[#f8fafc]">{model.name}</span>
+                </div>
+                <StatusBadge status={statusColor} />
+              </div>
+              <div className="text-xs text-[#94a3b8] mb-3">Version: {model.version}</div>
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-xs text-[#94a3b8]">Accuracy</div>
+                  <div className="text-lg font-bold" style={{ color: model.color }}>{model.accuracy}</div>
+                </div>
+                <div className="text-right">
+                  <div className="text-xs text-[#94a3b8]">Last Trained</div>
+                  <div className="text-sm text-[#f8fafc]">{model.lastTrained}</div>
+                </div>
+              </div>
             </div>
-          </div>
+          );
+        })}
+      </div>
+
+      {/* Performance Metrics */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {performanceMetrics.map((m) => (
+          <MetricCard key={m.label} {...m} />
         ))}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-surface border border-border rounded-xl p-5 shadow-sm">
-          <h3 className="text-sm font-bold text-textPrimary flex items-center gap-2 mb-4 border-b border-border pb-3">
-            <Activity size={16} className="text-primary" />
-            ROC Curve
-          </h3>
-          <div className="h-64">
-            <PlotlyChart data={ROC_DATA} layout={{
-              margin: { t: 10, r: 10, l: 35, b: 35 },
-              xaxis: { title: 'False Positive Rate', gridcolor: 'rgba(148,163,184,0.15)' },
-              yaxis: { title: 'True Positive Rate', gridcolor: 'rgba(148,163,184,0.15)' },
-              legend: { orientation: 'h', y: -0.2 },
-              paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
-            }} />
-          </div>
+      {/* Additional Info */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {additionalInfo.map((item) => (
+          <InfoCard key={item.label} {...item} />
+        ))}
+      </div>
+
+      {/* Charts Row 1 */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="bg-[#0f172a]/80 border border-[#1e293b]/80 rounded-2xl p-4">
+          <PlotlyChart data={confusionMatrixData} layout={confusionMatrixLayout} config={{ displayModeBar: false, responsive: true }} />
         </div>
-        <div className="bg-surface border border-border rounded-xl p-5 shadow-sm">
-          <h3 className="text-sm font-bold text-textPrimary flex items-center gap-2 mb-4 border-b border-border pb-3">
-            <Layers size={16} className="text-primary" />
-            Precision-Recall Curve
-          </h3>
-          <div className="h-64">
-            <PlotlyChart data={PR_DATA} layout={{
-              margin: { t: 10, r: 10, l: 35, b: 35 },
-              xaxis: { title: 'Recall', gridcolor: 'rgba(148,163,184,0.15)' },
-              yaxis: { title: 'Precision', gridcolor: 'rgba(148,163,184,0.15)' },
-              legend: { orientation: 'h', y: -0.2 },
-              paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
-            }} />
-          </div>
+        <div className="bg-[#0f172a]/80 border border-[#1e293b]/80 rounded-2xl p-4">
+          <PlotlyChart data={featureImportanceData} layout={featureImportanceLayout} config={{ displayModeBar: false, responsive: true }} />
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-surface border border-border rounded-xl p-5 shadow-sm">
-          <h3 className="text-sm font-bold text-textPrimary flex items-center gap-2 mb-4 border-b border-border pb-3">
-            <Cpu size={16} className="text-primary" />
-            Confusion Matrix (Classification)
-          </h3>
-          <div className="grid grid-cols-2 gap-3 mt-4">
-            <div className="bg-success/5 border border-success/10 rounded-xl p-4 text-center hover:border-success/30 transition-all">
-              <span className="text-[9px] font-black uppercase text-success">True Neg (TN)</span>
-              <p className="mt-1 text-2xl font-black text-success font-mono">{cf.tn}%</p>
-              <p className="text-[9px] text-textSecondary mt-1">Correctly cleared</p>
-            </div>
-            <div className="bg-danger/5 border border-danger/10 rounded-xl p-4 text-center hover:border-danger/30 transition-all">
-              <span className="text-[9px] font-black uppercase text-danger">False Pos (FP)</span>
-              <p className="mt-1 text-2xl font-black text-danger font-mono">{cf.fp}%</p>
-              <p className="text-[9px] text-textSecondary mt-1">False flags</p>
-            </div>
-            <div className="bg-warning/5 border border-warning/10 rounded-xl p-4 text-center hover:border-warning/30 transition-all">
-              <span className="text-[9px] font-black uppercase text-warning">False Neg (FN)</span>
-              <p className="mt-1 text-2xl font-black text-warning font-mono">{cf.fn}%</p>
-              <p className="text-[9px] text-textSecondary mt-1">Missed fraud</p>
-            </div>
-            <div className="bg-success/5 border border-success/10 rounded-xl p-4 text-center hover:border-success/30 transition-all">
-              <span className="text-[9px] font-black uppercase text-success">True Pos (TP)</span>
-              <p className="mt-1 text-2xl font-black text-success font-mono">{cf.tp}%</p>
-              <p className="text-[9px] text-textSecondary mt-1">Correctly caught</p>
-            </div>
-          </div>
+      {/* Charts Row 2 */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="bg-[#0f172a]/80 border border-[#1e293b]/80 rounded-2xl p-4">
+          <PlotlyChart data={accuracyHistoryData} layout={accuracyHistoryLayout} config={{ displayModeBar: false, responsive: true }} />
         </div>
-        <div className="bg-surface border border-border rounded-xl p-5 shadow-sm">
-          <h3 className="text-sm font-bold text-textPrimary flex items-center gap-2 mb-4 border-b border-border pb-3">
-            <BarChart3 size={16} className="text-primary" />
-            Feature Importance (XGBoost)
-          </h3>
-          <div className="h-64">
-            <PlotlyChart data={FEATURE_PLOTLY} layout={{
-              margin: { t: 10, r: 50, l: 120, b: 30 },
-              xaxis: { gridcolor: 'rgba(148,163,184,0.15)', title: 'Importance Weight (%)' },
-              yaxis: { automargin: true },
-              paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
-            }} />
-          </div>
+        <div className="bg-[#0f172a]/80 border border-[#1e293b]/80 rounded-2xl p-4">
+          <PlotlyChart data={predictionDistData} layout={predictionDistLayout} config={{ displayModeBar: false, responsive: true }} />
         </div>
       </div>
 
-      <div className="bg-surface border border-border rounded-xl p-5 shadow-sm">
-        <h3 className="text-sm font-bold text-textPrimary flex items-center gap-2 mb-4 border-b border-border pb-3">
-          <TrendingUp size={16} className="text-success" />
-          Training & Validation Loss (10 Epochs)
-        </h3>
-        <div className="h-64">
-          <PlotlyChart data={TRAIN_LOSS_DATA} layout={{
-            margin: { t: 10, r: 10, l: 35, b: 35 },
-            xaxis: { title: 'Epoch', dtick: 1, gridcolor: 'rgba(148,163,184,0.15)' },
-            yaxis: { title: 'Log Loss', gridcolor: 'rgba(148,163,184,0.15)' },
-            legend: { orientation: 'h', y: -0.2 },
-            paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
-          }} />
+      {/* Charts Row 3 */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="bg-[#0f172a]/80 border border-[#1e293b]/80 rounded-2xl p-4">
+          <PlotlyChart data={rocData} layout={rocLayout} config={{ displayModeBar: false, responsive: true }} />
+        </div>
+        <div className="bg-[#0f172a]/80 border border-[#1e293b]/80 rounded-2xl p-4">
+          <PlotlyChart data={prData} layout={prLayout} config={{ displayModeBar: false, responsive: true }} />
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-surface border border-border rounded-xl shadow-sm">
-          <div className="px-5 py-4 border-b border-border flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Cpu size={16} className="text-primary" />
-              <span className="text-xs font-bold text-textPrimary uppercase">Active Model Specs</span>
-            </div>
-            <span className="text-[10px] bg-primary/10 text-primary px-2 py-0.5 rounded-full font-bold">Stable</span>
-          </div>
-          <div className="p-5 space-y-4">
-            <div className="flex justify-between items-center text-sm">
-              <span className="text-textSecondary">Production Version</span>
-              <span className="font-mono font-bold text-textPrimary">v{currentVersion}</span>
-            </div>
-            <div className="flex justify-between items-center text-sm">
-              <span className="text-textSecondary">Last Weight Update</span>
-              <span className="text-textPrimary text-xs">{lastSync}</span>
-            </div>
-            <div className="flex justify-between items-center text-sm">
-              <span className="text-textSecondary">Training Samples</span>
-              <span className="text-textPrimary font-mono">{(metrics.training_samples ?? 2847).toLocaleString()} records</span>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-surface border border-border rounded-xl p-6 flex flex-col justify-between border-t-4 border-t-warning/30">
-          <div className="space-y-3">
-            <div className="flex items-center gap-2 text-warning">
-              <Database size={18} />
-              <span className="text-xs font-bold uppercase">Data Drift Management</span>
-            </div>
-            <p className="text-xs text-textSecondary leading-relaxed">
-              When enough new labels are verified in SQL, trigger a retrain to update the XGBoost engine.
-              Current training set: 2,847 labeled records (1,834 fraud / 1,013 clean).
-            </p>
-            {retrainProgress > 0 && retrainProgress < 100 && (
-              <div className="mt-2">
-                <div className="flex justify-between text-[10px] mb-1">
-                  <span className="text-textSecondary">Retraining progress</span>
-                  <span className="font-mono text-primary font-bold">{retrainProgress}%</span>
-                </div>
-                <div className="h-2 bg-border rounded-full overflow-hidden">
-                  <div className="h-full bg-primary rounded-full transition-all duration-300" style={{ width: `${retrainProgress}%` }} />
-                </div>
-              </div>
-            )}
-          </div>
-          <button
-            onClick={handleRetrain}
-            disabled={retraining}
-            className={`mt-6 w-full flex items-center justify-center gap-2 py-3 rounded-lg font-bold transition-all shadow-md ${
-              retraining ? 'bg-border text-textSecondary cursor-not-allowed' : 'bg-primary text-white hover:brightness-110 active:scale-[0.98]'
-            }`}
-          >
-            {retraining ? <Loader className="animate-spin" size={18} /> : <RefreshCw size={18} />}
-            {retraining ? 'Pipeline in Progress...' : 'Trigger Model Retraining'}
-          </button>
-        </div>
-      </div>
-
-      <div className="bg-surface border border-border rounded-xl p-5 shadow-sm">
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-2">
-            <History size={16} className="text-primary" />
-            <h3 className="text-xs font-bold text-textSecondary uppercase tracking-wider">Model Version History</h3>
-          </div>
-          <div className="text-[10px] text-textSecondary font-mono">{history.length} versions tracked</div>
-        </div>
-
-        {history.length > 0 && (
-          <div className="overflow-x-auto mb-6">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="border-b border-border/60">
-                  <th className="text-left py-2 px-3 text-textSecondary font-bold uppercase tracking-wider">Version</th>
-                  <th className="text-right py-2 px-3 text-textSecondary font-bold uppercase tracking-wider">Accuracy</th>
-                  <th className="text-right py-2 px-3 text-textSecondary font-bold uppercase tracking-wider">Precision</th>
-                  <th className="text-right py-2 px-3 text-textSecondary font-bold uppercase tracking-wider">Recall</th>
-                  <th className="text-right py-2 px-3 text-textSecondary font-bold uppercase tracking-wider">F1 Score</th>
-                  <th className="text-right py-2 px-3 text-textSecondary font-bold uppercase tracking-wider">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {history.map((m, i) => (
-                  <tr key={i} className={`border-b border-border/30 hover:bg-bg/30 transition-colors ${i === history.length - 1 ? 'bg-primary/5' : ''}`}>
-                    <td className="py-2.5 px-3 font-mono font-bold text-textPrimary">v{m.version}</td>
-                    <td className="py-2.5 px-3 text-right font-mono text-textPrimary">{(m.accuracy * 100).toFixed(1)}%</td>
-                    <td className="py-2.5 px-3 text-right font-mono text-textPrimary">{(m.precision * 100).toFixed(1)}%</td>
-                    <td className="py-2.5 px-3 text-right font-mono text-textPrimary">{(m.recall * 100).toFixed(1)}%</td>
-                    <td className="py-2.5 px-3 text-right font-mono text-textPrimary">{(m.f1_score * 100).toFixed(1)}%</td>
-                    <td className="py-2.5 px-3 text-right">
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-black ${
-                        i === history.length - 1 ? 'bg-success/10 text-success' : 'bg-bg/50 text-textSecondary'
-                      }`}>
-                        {i === history.length - 1 ? 'Active' : 'Archived'}
-                      </span>
-                    </td>
-                  </tr>
+      {/* Training History Table */}
+      <div className="bg-[#0f172a]/80 border border-[#1e293b]/80 rounded-2xl p-5">
+        <h2 className="text-base font-semibold text-[#f8fafc] mb-4">Training History</h2>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-[#1e293b]">
+                {tableColumns.map(col => (
+                  <th
+                    key={col.key}
+                    onClick={() => handleSort(col.key)}
+                    className="text-left py-3 px-3 text-xs text-[#94a3b8] font-medium cursor-pointer hover:text-[#f8fafc] transition-colors select-none"
+                  >
+                    {col.label}
+                    <span className="text-[#818cf8]">{sortIndicator(col.key)}</span>
+                  </th>
                 ))}
-              </tbody>
-            </table>
+              </tr>
+            </thead>
+            <tbody>
+              {sortedRuns.map((run) => (
+                <tr key={run.runId} className="border-b border-[#1e293b]/50 hover:bg-[#1e293b]/30 transition-colors">
+                  <td className="py-3 px-3 text-[#818cf8] font-mono text-xs">{run.runId}</td>
+                  <td className="py-3 px-3 text-[#f8fafc]">{run.date}</td>
+                  <td className="py-3 px-3 text-[#94a3b8]">{run.dataset}</td>
+                  <td className="py-3 px-3 text-[#f8fafc]">{run.duration}</td>
+                  <td className="py-3 px-3 text-[#34d399] font-medium">{run.accuracy}</td>
+                  <td className="py-3 px-3 text-[#f8fafc]">{run.f1}</td>
+                  <td className="py-3 px-3 text-[#f8fafc]">{run.auc}</td>
+                  <td className="py-3 px-3">
+                    <span className="inline-flex items-center gap-1 text-xs text-emerald-400">
+                      <CheckCircle2 size={12} />
+                      {run.status}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Retraining Section */}
+      <div className="bg-[#0f172a]/80 border border-[#1e293b]/80 rounded-2xl p-5">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-3">
+            <h2 className="text-base font-semibold text-[#f8fafc]">Model Retraining</h2>
+            <div className="flex items-center gap-1.5">
+              <div className={`w-2 h-2 rounded-full ${retraining ? 'bg-amber-400 animate-pulse' : retrainComplete ? 'bg-emerald-400' : 'bg-emerald-400'}`} />
+              <span className="text-xs text-[#94a3b8]">
+                {retraining ? 'In Progress' : retrainComplete ? 'Complete' : 'Idle'}
+              </span>
+            </div>
+          </div>
+          {!retraining && (
+            <button
+              onClick={startRetraining}
+              className="flex items-center gap-2 px-4 py-2 bg-[#4f46e5] hover:bg-[#5b53e8] text-white text-sm font-medium rounded-xl transition-colors"
+            >
+              <RefreshCw size={14} />
+              Start Retraining
+            </button>
+          )}
+        </div>
+
+        {retraining && (
+          <div className="space-y-3">
+            <div className="text-sm text-[#94a3b8]">
+              {retrainingStages[retrainStage]?.text || 'Starting...'}
+            </div>
+            <div className="w-full bg-[#1e293b] rounded-full h-2.5">
+              <div
+                className="bg-gradient-to-r from-[#4f46e5] to-[#818cf8] h-2.5 rounded-full transition-all duration-500 ease-out"
+                style={{ width: `${retrainProgress}%` }}
+              />
+            </div>
+            <div className="text-xs text-[#94a3b8] text-right">{retrainProgress}%</div>
           </div>
         )}
-        <div className="h-64">
-          {history.length > 0 ? (
-            <PlotlyChart
-              data={[{
-                x: history.map(m => m.version),
-                y: history.map(m => (m.accuracy || 0) * 100),
-                type: 'scatter',
-                mode: 'lines+markers',
-                name: 'Accuracy %',
-                line: { color: '#6366f1', width: 3, shape: 'spline' },
-                marker: { size: 8, color: '#6366f1' },
-                fill: 'tozeroy',
-                fillcolor: 'rgba(99, 102, 241, 0.08)'
-              }]}
-              layout={{
-                margin: { t: 10, r: 10, l: 45, b: 35 },
-                xaxis: { showgrid: false },
-                yaxis: { gridcolor: 'rgba(226, 232, 240, 0.5)', range: [0, 100] },
-                paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
-              }}
-            />
-          ) : (
-            <div className="h-full flex flex-col items-center justify-center border-2 border-dashed border-border rounded-xl bg-bg/20">
-              <AlertCircle size={24} className="text-textSecondary mb-2" />
-              <p className="text-xs text-textSecondary italic">No historical data available for this model yet.</p>
+
+        {retrainComplete && !retraining && (
+          <div className="flex items-center gap-3 p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl">
+            <CheckCircle2 size={18} className="text-emerald-400" />
+            <div>
+              <div className="text-sm font-medium text-emerald-400">Retraining Complete</div>
+              <div className="text-xs text-[#94a3b8]">Duration: 4h 32m | Accuracy achieved: 94.6%</div>
             </div>
-          )}
+          </div>
+        )}
+
+        <div className="grid grid-cols-3 gap-4 mt-4">
+          <div>
+            <label className="text-xs text-[#94a3b8] block mb-1">Learning Rate</label>
+            <div className="text-sm text-[#f8fafc] bg-[#1e293b] rounded-lg px-3 py-2">0.001</div>
+          </div>
+          <div>
+            <label className="text-xs text-[#94a3b8] block mb-1">Batch Size</label>
+            <div className="text-sm text-[#f8fafc] bg-[#1e293b] rounded-lg px-3 py-2">64</div>
+          </div>
+          <div>
+            <label className="text-xs text-[#94a3b8] block mb-1">Max Epochs</label>
+            <div className="text-sm text-[#f8fafc] bg-[#1e293b] rounded-lg px-3 py-2">100</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Configuration Section */}
+      <div className="bg-[#0f172a]/80 border border-[#1e293b]/80 rounded-2xl p-5">
+        <div className="flex items-center gap-2 mb-5">
+          <Settings size={18} className="text-[#818cf8]" />
+          <h2 className="text-base font-semibold text-[#f8fafc]">Configuration</h2>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+          {/* Fraud Detection Threshold */}
+          <div className="space-y-2">
+            <label className="text-sm text-[#f8fafc] font-medium">Fraud Detection Threshold</label>
+            <div className="flex items-center gap-3">
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.01"
+                value={threshold}
+                onChange={(e) => setThreshold(parseFloat(e.target.value))}
+                className="flex-1 h-1.5 bg-[#1e293b] rounded-full appearance-none cursor-pointer accent-[#4f46e5]"
+              />
+              <span className="text-sm text-[#818cf8] font-mono w-12 text-right">{threshold.toFixed(2)}</span>
+            </div>
+          </div>
+
+          {/* Data Drift Threshold */}
+          <div className="space-y-2">
+            <label className="text-sm text-[#f8fafc] font-medium">Data Drift Threshold</label>
+            <div className="flex items-center gap-3">
+              <div className="flex-1 bg-[#1e293b] rounded-lg px-3 py-2 flex items-center justify-between">
+                <span className="text-xs text-amber-400">Warning: 15%</span>
+                <span className="text-xs text-red-400">Critical: 25%</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Auto-Retraining */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-sm text-[#f8fafc] font-medium">Auto-Retraining</label>
+              <ToggleSwitch checked={autoRetrain} onChange={() => setAutoRetrain(!autoRetrain)} />
+            </div>
+            <div className="text-xs text-[#94a3b8]">Schedule: Every 14 days</div>
+          </div>
+
+          {/* Alert on Degradation */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-sm text-[#f8fafc] font-medium">Alert on Degradation</label>
+              <ToggleSwitch checked={alertOnDegradation} onChange={() => setAlertOnDegradation(!alertOnDegradation)} />
+            </div>
+            <div className="text-xs text-[#94a3b8]">Notify when metrics drop below threshold</div>
+          </div>
+
+          {/* Model Explainability */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-sm text-[#f8fafc] font-medium">Model Explainability</label>
+              <ToggleSwitch checked={modelExplainability} onChange={() => setModelExplainability(!modelExplainability)} />
+            </div>
+            <div className="text-xs text-[#94a3b8]">Enable SHAP-based explanations</div>
+          </div>
+
+          {/* Shadow Mode */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-sm text-[#f8fafc] font-medium">Shadow Mode</label>
+              <ToggleSwitch checked={shadowMode} onChange={() => setShadowMode(!shadowMode)} />
+            </div>
+            <div className="text-xs text-[#94a3b8]">Run without affecting production</div>
+          </div>
         </div>
       </div>
     </div>
