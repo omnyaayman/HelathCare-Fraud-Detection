@@ -1,15 +1,14 @@
 import { useState, useEffect, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
 import {
   Search, Filter, Download, ArrowUpDown, FileText, AlertTriangle,
   Clock, User, Building2, DollarSign, ChevronLeft, ChevronRight,
-  CheckCircle, XCircle, Eye, Columns, BrainCircuit, X
+  CheckCircle, XCircle, Eye, Columns, BrainCircuit, X, ShieldCheck, History
 } from "lucide-react";
 import api from "../../api";
 import StatusBadge from "../../components/StatusBadge";
 import Skeleton from "../../components/Skeleton";
 import Modal from "../../components/Modal";
-import { formatCurrency, getRiskLevel, getStatusColor, buildSHAPExplanation } from "../../data/dataUtils";
+import { formatCurrency, getRiskLevel, buildSHAPExplanation } from "../../data/dataUtils";
 
 const STATUS_OPTIONS = ['All', 'Submitted', 'Under Review', 'AI Scored', 'Approved', 'Rejected', 'Fraud Confirmed', 'Closed'];
 
@@ -20,19 +19,37 @@ const ALL_COLUMNS = [
   { key: 'service_name', label: 'Service', icon: FileText },
   { key: 'diagnosis_code', label: 'Diagnosis', icon: FileText },
   { key: 'claim_amount', label: 'Amount', icon: DollarSign },
-  { key: 'fraud_score', label: 'Fraud Score', icon: AlertTriangle },
+  { key: 'fraud_score', label: 'Risk Score', icon: AlertTriangle },
   { key: 'status', label: 'Status', icon: CheckCircle },
+  { key: 'investigator', label: 'Investigator', icon: User },
   { key: 'claim_date', label: 'Date', icon: Clock },
   { key: 'actions', label: 'Actions', icon: Eye },
 ];
 
-export default function ReviewClaims() {
-  const navigate = useNavigate();
+function RiskBadge({ score }) {
+  const risk = getRiskLevel(score);
+  const pct = ((score || 0) * 100).toFixed(0);
+  return (
+    <div className="flex items-center gap-2">
+      <div className="flex-1 max-w-[70px] bg-bg/60 rounded-full h-1.5 overflow-hidden">
+        <div
+          className={`h-full rounded-full transition-all ${
+            (score || 0) >= 0.65 ? 'bg-danger' : (score || 0) >= 0.45 ? 'bg-warning' : 'bg-success'
+          }`}
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+      <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-black border ${risk.bg} ${risk.color} ${risk.border}`}>
+        {risk.label}
+      </span>
+      <span className="text-[10px] font-mono font-bold text-textSecondary">{pct}%</span>
+    </div>
+  );
+}
 
-  const [claims, setClaims] = useState([]);
+export default function ReviewClaims() {
+  const [allClaims, setAllClaims] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [total, setTotal] = useState(0);
-  const [totalPages, setTotalPages] = useState(1);
 
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
@@ -70,31 +87,40 @@ export default function ReviewClaims() {
     const fetchClaims = async () => {
       setLoading(true);
       try {
-        const params = { page, page_size: pageSize };
-        if (search) params.search = search;
-        if (statusFilter !== 'All') params.status = statusFilter;
-        if (minScore) params.min_fraud_score = parseFloat(minScore);
-        if (maxScore) params.max_fraud_score = parseFloat(maxScore);
-        if (sortField) params.sort_by = sortField;
-        if (sortDir) params.sort_order = sortDir;
-
-        const res = await api.getClaims(params);
-        const data = Array.isArray(res) ? res : (res.data || res?.results || []);
-        setClaims(data);
-        setTotal(res.total || data.length);
-        setTotalPages(res.total_pages || Math.ceil((res.total || data.length) / pageSize));
+        const res = await api.getClaims({ page_size: 500 });
+        const data = Array.isArray(res) ? res : (res.claims || res.data || res?.results || []);
+        setAllClaims(data);
       } catch (err) {
         console.error("Failed to load claims", err);
-        setClaims([]);
+        setAllClaims([]);
       } finally {
         setLoading(false);
       }
     };
     fetchClaims();
-  }, [page, pageSize, search, statusFilter, minScore, maxScore, sortField, sortDir]);
+  }, []);
 
   const filteredClaims = useMemo(() => {
-    let result = [...claims];
+    let result = [...allClaims];
+    if (search) {
+      const q = search.toLowerCase();
+      result = result.filter(c =>
+        (c.claim_id || '').toLowerCase().includes(q) ||
+        (c.patient_name || '').toLowerCase().includes(q) ||
+        (c.provider_name || '').toLowerCase().includes(q)
+      );
+    }
+    if (statusFilter !== 'All') {
+      result = result.filter(c => c.status === statusFilter);
+    }
+    if (minScore) {
+      const min = parseFloat(minScore);
+      if (!isNaN(min)) result = result.filter(c => (c.fraud_score || 0) >= min);
+    }
+    if (maxScore) {
+      const max = parseFloat(maxScore);
+      if (!isNaN(max)) result = result.filter(c => (c.fraud_score || 0) <= max);
+    }
     if (dateFrom) {
       const from = new Date(dateFrom);
       result = result.filter(c => c.claim_date && new Date(c.claim_date) >= from);
@@ -104,8 +130,33 @@ export default function ReviewClaims() {
       to.setHours(23, 59, 59, 999);
       result = result.filter(c => c.claim_date && new Date(c.claim_date) <= to);
     }
+    result.sort((a, b) => {
+      let aVal = a[sortField] ?? '';
+      let bVal = b[sortField] ?? '';
+      if (sortField === 'fraud_score' || sortField === 'claim_amount') {
+        aVal = Number(aVal) || 0;
+        bVal = Number(bVal) || 0;
+      } else {
+        aVal = String(aVal).toLowerCase();
+        bVal = String(bVal).toLowerCase();
+      }
+      if (aVal < bVal) return sortDir === 'asc' ? -1 : 1;
+      if (aVal > bVal) return sortDir === 'asc' ? 1 : -1;
+      return 0;
+    });
     return result;
-  }, [claims, dateFrom, dateTo]);
+  }, [allClaims, search, statusFilter, minScore, maxScore, dateFrom, dateTo, sortField, sortDir]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredClaims.length / pageSize));
+  const safePage = Math.min(page, totalPages);
+  const paginatedClaims = useMemo(() => {
+    const start = (safePage - 1) * pageSize;
+    return filteredClaims.slice(start, start + pageSize);
+  }, [filteredClaims, safePage, pageSize]);
+
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [totalPages, page]);
 
   const handleSort = (field) => {
     if (sortField === field) {
@@ -138,12 +189,15 @@ export default function ReviewClaims() {
   };
 
   const exportCSV = () => {
-    const headers = ['Claim ID', 'Patient', 'Provider', 'Service', 'Diagnosis', 'Amount', 'Fraud Score', 'Status', 'Date'];
-    const rows = filteredClaims.map(c => [
-      c.claim_id, c.patient_name, c.provider_name, c.service_name,
-      c.diagnosis_code, c.claim_amount, (c.fraud_score * 100).toFixed(1) + '%',
-      c.status, c.claim_date
-    ]);
+    const headers = ['Claim ID', 'Patient', 'Provider', 'Service', 'Diagnosis', 'Amount', 'Risk Score', 'Risk Level', 'Status', 'Investigator', 'Date'];
+    const rows = filteredClaims.map(c => {
+      const risk = getRiskLevel(c.fraud_score);
+      return [
+        c.claim_id, c.patient_name, c.provider_name, c.service_name || '',
+        c.diagnosis_code || '', c.claim_amount, `${((c.fraud_score || 0) * 100).toFixed(0)}%`,
+        risk.label, c.status, c.investigator || '', c.claim_date
+      ];
+    });
     const csvContent = [headers, ...rows].map(r => r.map(v => `"${v || ''}"`).join(',')).join('\n');
     const blob = new Blob([csvContent], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
@@ -154,30 +208,13 @@ export default function ReviewClaims() {
     URL.revokeObjectURL(url);
   };
 
-  const renderFraudBar = (score) => {
-    const s = score || 0;
-    const pct = (s * 100).toFixed(0);
-    let colorClass = 'bg-success';
-    let textClass = 'text-success';
-    if (s >= 0.7) { colorClass = 'bg-danger'; textClass = 'text-danger'; }
-    else if (s >= 0.4) { colorClass = 'bg-warning'; textClass = 'text-warning'; }
-    return (
-      <div className="flex items-center gap-2">
-        <div className="flex-1 max-w-[80px] bg-bg/60 rounded-full h-1.5 overflow-hidden">
-          <div className={`h-full rounded-full transition-all ${colorClass}`} style={{ width: `${pct}%` }} />
-        </div>
-        <span className={`text-[10px] font-black ${textClass}`}>{pct}%</span>
-      </div>
-    );
-  };
-
   const renderSortIcon = (field) => (
     <ArrowUpDown size={10} className={sortField === field ? 'text-primary' : 'text-textSecondary/40'} />
   );
 
   const colVisible = (key) => visibleColumns.includes(key);
 
-  if (loading && claims.length === 0) {
+  if (loading && allClaims.length === 0) {
     return (
       <div className="space-y-6 animate-in fade-in duration-300">
         <div className="flex items-center justify-between">
@@ -206,11 +243,10 @@ export default function ReviewClaims() {
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
-      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-black text-textPrimary tracking-tight">All Claims</h1>
-          <p className="text-sm text-textSecondary font-medium">{total} total claims</p>
+          <p className="text-sm text-textSecondary font-medium">{allClaims.length} total claims</p>
         </div>
         <div className="flex items-center gap-2">
           <div className="relative">
@@ -247,7 +283,6 @@ export default function ReviewClaims() {
         </div>
       </div>
 
-      {/* Filter Bar */}
       <div className="bg-surface rounded-2xl border border-border/80 p-4 shadow-sm">
         <div className="flex flex-wrap items-center gap-3">
           <div className="relative flex-1 min-w-[220px]">
@@ -322,7 +357,7 @@ export default function ReviewClaims() {
 
         <div className="flex items-center justify-between mt-3 pt-3 border-t border-border/40">
           <span className="text-[10px] text-textSecondary font-mono">
-            Showing {filteredClaims.length} of {total} claims
+            Showing {paginatedClaims.length} of {filteredClaims.length} filtered claims {filteredClaims.length !== allClaims.length ? `(from ${allClaims.length} total)` : ''}
           </span>
           {hasActiveFilters && (
             <span className="text-[10px] text-primary font-semibold">Filters active</span>
@@ -330,7 +365,6 @@ export default function ReviewClaims() {
         </div>
       </div>
 
-      {/* Data Table */}
       <div className="bg-surface rounded-2xl border border-border/80 shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           <table className="enterprise-table w-full text-sm text-left">
@@ -376,6 +410,11 @@ export default function ReviewClaims() {
                     <span className="flex items-center gap-1">Status {renderSortIcon('status')}</span>
                   </th>
                 )}
+                {colVisible('investigator') && (
+                  <th className="px-5 py-3.5 cursor-pointer hover:text-primary whitespace-nowrap" onClick={() => handleSort('investigator')}>
+                    <span className="flex items-center gap-1"><User size={10} /> Investigator {renderSortIcon('investigator')}</span>
+                  </th>
+                )}
                 {colVisible('claim_date') && (
                   <th className="px-5 py-3.5 cursor-pointer hover:text-primary whitespace-nowrap" onClick={() => handleSort('claim_date')}>
                     <span className="flex items-center gap-1"><Clock size={10} /> Date {renderSortIcon('claim_date')}</span>
@@ -387,55 +426,57 @@ export default function ReviewClaims() {
               </tr>
             </thead>
             <tbody className="divide-y divide-border/60">
-              {filteredClaims.map((c) => {
-                const risk = getRiskLevel(c.fraud_score);
-                return (
-                  <tr key={c.claim_id} className="hover:bg-bg/30 transition-colors group">
-                    {colVisible('claim_id') && (
-                      <td className="px-5 py-4 font-mono text-xs font-bold text-primary cursor-pointer hover:underline" onClick={() => openDetail(c.claim_id)}>
-                        #{c.claim_id}
-                      </td>
-                    )}
-                    {colVisible('patient_name') && (
-                      <td className="px-5 py-4 font-semibold text-textPrimary text-sm max-w-[160px] truncate">{c.patient_name}</td>
-                    )}
-                    {colVisible('provider_name') && (
-                      <td className="px-5 py-4 text-textSecondary text-xs max-w-[160px] truncate">{c.provider_name}</td>
-                    )}
-                    {colVisible('service_name') && (
-                      <td className="px-5 py-4 text-textSecondary text-xs max-w-[140px] truncate">{c.service_name || '—'}</td>
-                    )}
-                    {colVisible('diagnosis_code') && (
-                      <td className="px-5 py-4 font-mono text-xs text-textPrimary">{c.diagnosis_code || '—'}</td>
-                    )}
-                    {colVisible('claim_amount') && (
-                      <td className="px-5 py-4 font-mono text-sm font-bold text-textPrimary text-right">{formatCurrency(c.claim_amount)}</td>
-                    )}
-                    {colVisible('fraud_score') && (
-                      <td className="px-5 py-4">{renderFraudBar(c.fraud_score)}</td>
-                    )}
-                    {colVisible('status') && (
-                      <td className="px-5 py-4"><StatusBadge status={c.status || 'Submitted'} /></td>
-                    )}
-                    {colVisible('claim_date') && (
-                      <td className="px-5 py-4 text-[11px] text-textSecondary font-mono whitespace-nowrap">
-                        {c.claim_date ? new Date(c.claim_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}
-                      </td>
-                    )}
-                    {colVisible('actions') && (
-                      <td className="px-5 py-4">
-                        <button
-                          onClick={() => openDetail(c.claim_id)}
-                          className="text-xs font-bold text-primary hover:underline opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1"
-                        >
-                          <Eye size={12} /> View
-                        </button>
-                      </td>
-                    )}
-                  </tr>
-                );
-              })}
-              {filteredClaims.length === 0 && (
+              {paginatedClaims.map((c) => (
+                <tr key={c.claim_id} className="hover:bg-bg/30 transition-colors group">
+                  {colVisible('claim_id') && (
+                    <td className="px-5 py-4 font-mono text-xs font-bold text-primary cursor-pointer hover:underline" onClick={() => openDetail(c.claim_id)}>
+                      #{c.claim_id}
+                    </td>
+                  )}
+                  {colVisible('patient_name') && (
+                    <td className="px-5 py-4 font-semibold text-textPrimary text-sm max-w-[160px] truncate">{c.patient_name}</td>
+                  )}
+                  {colVisible('provider_name') && (
+                    <td className="px-5 py-4 text-textSecondary text-xs max-w-[160px] truncate">{c.provider_name}</td>
+                  )}
+                  {colVisible('service_name') && (
+                    <td className="px-5 py-4 text-textSecondary text-xs max-w-[140px] truncate">{c.service_name || '—'}</td>
+                  )}
+                  {colVisible('diagnosis_code') && (
+                    <td className="px-5 py-4 font-mono text-xs text-textPrimary">{c.diagnosis_code || '—'}</td>
+                  )}
+                  {colVisible('claim_amount') && (
+                    <td className="px-5 py-4 font-mono text-sm font-bold text-textPrimary text-right">{formatCurrency(c.claim_amount)}</td>
+                  )}
+                  {colVisible('fraud_score') && (
+                    <td className="px-5 py-4"><RiskBadge score={c.fraud_score} /></td>
+                  )}
+                  {colVisible('status') && (
+                    <td className="px-5 py-4"><StatusBadge status={c.status || 'Submitted'} /></td>
+                  )}
+                  {colVisible('investigator') && (
+                    <td className="px-5 py-4 text-[11px] text-textSecondary max-w-[140px] truncate">
+                      {c.investigator || <span className="text-textSecondary/40">—</span>}
+                    </td>
+                  )}
+                  {colVisible('claim_date') && (
+                    <td className="px-5 py-4 text-[11px] text-textSecondary font-mono whitespace-nowrap">
+                      {c.claim_date ? new Date(c.claim_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}
+                    </td>
+                  )}
+                  {colVisible('actions') && (
+                    <td className="px-5 py-4">
+                      <button
+                        onClick={() => openDetail(c.claim_id)}
+                        className="text-xs font-bold text-primary hover:underline opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1"
+                      >
+                        <Eye size={12} /> View
+                      </button>
+                    </td>
+                  )}
+                </tr>
+              ))}
+              {paginatedClaims.length === 0 && (
                 <tr>
                   <td colSpan={ALL_COLUMNS.filter(c => colVisible(c.key)).length || 1} className="px-5 py-16 text-center">
                     <AlertTriangle size={32} className="mx-auto text-textSecondary/30 mb-3" />
@@ -451,7 +492,6 @@ export default function ReviewClaims() {
           </table>
         </div>
 
-        {/* Pagination */}
         <div className="border-t border-border/60 px-5 py-3 flex flex-col sm:flex-row items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <span className="text-[10px] text-textSecondary font-semibold">Rows per page:</span>
@@ -466,22 +506,22 @@ export default function ReviewClaims() {
               <option value={100}>100</option>
             </select>
             <span className="text-[10px] text-textSecondary font-mono">
-              Page {page} of {totalPages}
+              Page {safePage} of {totalPages}
             </span>
           </div>
           <div className="flex items-center gap-2">
             <span className="text-[10px] text-textSecondary font-mono">
-              {((page - 1) * pageSize) + 1}–{Math.min(page * pageSize, total)} of {total}
+              {filteredClaims.length === 0 ? '0' : `${(safePage - 1) * pageSize + 1}–${Math.min(safePage * pageSize, filteredClaims.length)} of ${filteredClaims.length}`}
             </span>
             <button
-              disabled={page <= 1}
+              disabled={safePage <= 1}
               onClick={() => setPage(p => Math.max(1, p - 1))}
               className="enterprise-btn-ghost p-2 disabled:opacity-30"
             >
               <ChevronLeft size={14} />
             </button>
             <button
-              disabled={page >= totalPages}
+              disabled={safePage >= totalPages}
               onClick={() => setPage(p => Math.min(totalPages, p + 1))}
               className="enterprise-btn-ghost p-2 disabled:opacity-30"
             >
@@ -491,7 +531,6 @@ export default function ReviewClaims() {
         </div>
       </div>
 
-      {/* Claim Detail Modal */}
       <Modal open={!!selectedClaim} onClose={() => { setSelectedClaim(null); setClaimDetail(null); }} title="Claim Details" wide>
         {detailLoading && (
           <div className="space-y-4">
@@ -511,7 +550,7 @@ export default function ReviewClaims() {
 
 
 function ClaimDetailContent({ claimDetail, onClose }) {
-  const { claim, patient_history, shap_contributions, base_value } = claimDetail;
+  const { claim, patient_history, shap_contributions, base_value, audit_log } = claimDetail;
   const [actionLoading, setActionLoading] = useState(null);
 
   const risk = getRiskLevel(claim.fraud_score);
@@ -532,144 +571,137 @@ function ClaimDetailContent({ claimDetail, onClose }) {
 
   return (
     <div className="space-y-6">
-      {/* Patient Profile */}
-      <Section icon={User} title="Patient Profile">
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          <InfoCell label="Name" value={claim.patient_name} />
-          <InfoCell label="Age" value={claim.patient_age ? `${claim.patient_age} yrs` : '—'} />
-          <InfoCell label="Gender" value={claim.patient_gender || '—'} />
-          <InfoCell label="Location" value={claim.patient_city || '—'} />
-        </div>
-      </Section>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 bg-bg/40 rounded-xl p-4 border border-border/40">
+        <InfoCell label="Patient" value={claim.patient_name} />
+        <InfoCell label="Age" value={claim.patient_age ? `${claim.patient_age} yrs` : '—'} />
+        <InfoCell label="Gender" value={claim.patient_gender || '—'} />
+        <InfoCell label="Location" value={claim.patient_city ? `${claim.patient_city}, ${claim.patient_state}` : '—'} />
+      </div>
 
-      {/* Provider Profile */}
-      <Section icon={Building2} title="Provider Profile">
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          <InfoCell label="Name" value={claim.provider_name} />
-          <InfoCell label="Type" value={claim.provider_type || '—'} />
-          <InfoCell label="Specialty" value={claim.provider_specialty || '—'} />
-          <InfoCell label="ID" value={claim.provider_id ? `#${claim.provider_id}` : '—'} />
-        </div>
-      </Section>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 bg-bg/40 rounded-xl p-4 border border-border/40">
+        <InfoCell label="Provider" value={claim.provider_name} />
+        <InfoCell label="Type" value={claim.provider_type || '—'} />
+        <InfoCell label="Specialty" value={claim.provider_specialty || '—'} />
+        <InfoCell label="Provider ID" value={claim.provider_id ? `#${claim.provider_id}` : '—'} />
+      </div>
 
-      {/* Claim Details */}
-      <Section icon={FileText} title="Claim Details">
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          <InfoCell label="Amount" value={formatCurrency(claim.claim_amount)} highlight />
-          <InfoCell label="Diagnosis Code" value={claim.diagnosis_code || '—'} mono />
-          <InfoCell label="Procedure Code" value={claim.procedure_code || '—'} mono />
-          <InfoCell label="Status">
-            <StatusBadge status={claim.status} />
-          </InfoCell>
-          <InfoCell label="Claim Date" value={claim.claim_date ? new Date(claim.claim_date).toLocaleDateString() : '—'} />
-          <InfoCell label="Service Date" value={claim.service_date ? new Date(claim.service_date).toLocaleDateString() : '—'} />
-        </div>
-      </Section>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 bg-bg/40 rounded-xl p-4 border border-border/40">
+        <InfoCell label="Amount" value={formatCurrency(claim.claim_amount)} highlight />
+        <InfoCell label="ICD Code" value={claim.diagnosis_code || '—'} mono />
+        <InfoCell label="CPT Code" value={claim.procedure_code || '—'} mono />
+        <InfoCell label="Status">
+          <StatusBadge status={claim.status} />
+        </InfoCell>
+        <InfoCell label="Claim Date" value={claim.claim_date ? new Date(claim.claim_date).toLocaleDateString() : '—'} />
+        <InfoCell label="Service Date" value={claim.service_date ? new Date(claim.service_date).toLocaleDateString() : '—'} />
+        <InfoCell label="Procedures" value={claim.number_of_procedures || '—'} />
+        <InfoCell label="Late Submission" value={claim.claim_submitted_late ? 'Yes' : 'No'} />
+      </div>
 
-      {/* AI Fraud Explanation */}
-      <Section icon={BrainCircuit} title="AI Fraud Analysis">
-        <div className="space-y-4">
-          {/* Risk Score Visual */}
-          <div className="bg-bg/50 rounded-xl p-4 border border-border/40">
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-xs font-black text-textPrimary">Fraud Probability</span>
-              <span className={`text-lg font-black ${risk.color}`}>{((claim.fraud_score || 0) * 100).toFixed(1)}%</span>
-            </div>
-            <div className="w-full bg-bg rounded-full h-3 overflow-hidden">
-              <div
-                className={`h-full rounded-full transition-all ${
-                  (claim.fraud_score || 0) >= 0.7 ? 'bg-danger' : (claim.fraud_score || 0) >= 0.4 ? 'bg-warning' : 'bg-success'
-                }`}
-                style={{ width: `${((claim.fraud_score || 0) * 100)}%` }}
-              />
-            </div>
-            <div className="flex items-center justify-between mt-2">
-              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black border ${risk.bg} ${risk.color} ${risk.border}`}>
-                {risk.label} Risk
-              </span>
-              <span className="text-[10px] text-textSecondary font-mono">
-                Base: {((base_value || shap.base_value || 0) * 100).toFixed(1)}%
-              </span>
-            </div>
+      <div className="space-y-3">
+        <div className="flex items-center gap-2 pb-2 border-b border-border/40">
+          <BrainCircuit size={14} className="text-primary" />
+          <h3 className="text-xs font-black text-textPrimary uppercase tracking-widest">AI Fraud Analysis</h3>
+        </div>
+        <div className="bg-bg/50 rounded-xl p-4 border border-border/40">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-xs font-black text-textPrimary">Fraud Probability</span>
+            <span className={`text-lg font-black ${risk.color}`}>{((claim.fraud_score || 0) * 100).toFixed(1)}%</span>
           </div>
-
-          {/* SHAP Summary */}
-          <div className="text-xs text-textSecondary leading-relaxed bg-bg/30 rounded-lg p-3 border border-border/30">
-            {shap.summary}
+          <div className="w-full bg-bg rounded-full h-3 overflow-hidden">
+            <div
+              className={`h-full rounded-full transition-all ${
+                (claim.fraud_score || 0) >= 0.65 ? 'bg-danger' : (claim.fraud_score || 0) >= 0.45 ? 'bg-warning' : 'bg-success'
+              }`}
+              style={{ width: `${((claim.fraud_score || 0) * 100)}%` }}
+            />
           </div>
+          <div className="flex items-center justify-between mt-2">
+            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black border ${risk.bg} ${risk.color} ${risk.border}`}>
+              {risk.label} Risk
+            </span>
+            <span className="text-[10px] text-textSecondary font-mono">
+              Base: {((base_value || shap.base_value || 0) * 100).toFixed(1)}%
+            </span>
+          </div>
+        </div>
 
-          {/* SHAP Factors */}
-          {shap.top_factors && shap.top_factors.length > 0 && (
-            <div className="space-y-2">
-              <p className="text-[10px] font-black text-textSecondary uppercase tracking-widest">Contributing Factors</p>
-              {shap.top_factors.map((factor, i) => (
-                <div key={i} className="flex items-center gap-3 bg-bg/30 rounded-lg px-3 py-2 border border-border/30">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-bold text-textPrimary">{factor.feature}</span>
-                      <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-full ${
-                        factor.impact === 'high' ? 'bg-danger/10 text-danger' :
-                        factor.impact === 'medium' ? 'bg-warning/10 text-warning' :
-                        'bg-primary/10 text-primary'
-                      }`}>
-                        {factor.impact}
-                      </span>
-                    </div>
-                    <p className="text-[10px] text-textSecondary mt-0.5">
-                      {factor.direction === 'increases' ? '↑' : factor.direction === 'decreases' ? '↓' : '—'} {factor.value}
-                    </p>
-                  </div>
-                  <div className="w-16">
-                    <div className="w-full bg-bg/60 rounded-full h-1.5 overflow-hidden">
-                      <div
-                        className={`h-full rounded-full ${
-                          factor.impact === 'high' ? 'bg-danger' :
-                          factor.impact === 'medium' ? 'bg-warning' : 'bg-primary'
-                        }`}
-                        style={{ width: `${(factor.weight * 100)}%` }}
-                      />
-                    </div>
-                    <span className="text-[9px] text-textSecondary font-mono block text-right mt-0.5">
-                      {(factor.weight * 100).toFixed(0)}%
+        <div className="text-xs text-textSecondary leading-relaxed bg-bg/30 rounded-lg p-3 border border-border/30">
+          {shap.summary}
+        </div>
+
+        {shap.top_factors && shap.top_factors.length > 0 && (
+          <div className="space-y-2">
+            <p className="text-[10px] font-black text-textSecondary uppercase tracking-widest">Feature Contributions</p>
+            {shap.top_factors.map((factor, i) => (
+              <div key={i} className="flex items-center gap-3 bg-bg/30 rounded-lg px-3 py-2 border border-border/30">
+                <div className="flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-textPrimary">{factor.feature}</span>
+                    <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-full ${
+                      factor.impact === 'high' ? 'bg-danger/10 text-danger' :
+                      factor.impact === 'medium' ? 'bg-warning/10 text-warning' :
+                      'bg-primary/10 text-primary'
+                    }`}>
+                      {factor.impact}
                     </span>
                   </div>
+                  <p className="text-[10px] text-textSecondary mt-0.5">
+                    {factor.direction === 'increases' ? '↑' : factor.direction === 'decreases' ? '↓' : '—'} {factor.value}
+                  </p>
                 </div>
-              ))}
-            </div>
-          )}
-
-          {/* SHAP Contributions (if available) */}
-          {shap_contributions && shap_contributions.length > 0 && (
-            <div className="space-y-2">
-              <p className="text-[10px] font-black text-textSecondary uppercase tracking-widest">SHAP Feature Contributions</p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {shap_contributions.slice(0, 10).map((item, i) => {
-                  const val = item.value || item.contribution || 0;
-                  const isPositive = val >= 0;
-                  return (
-                    <div key={i} className="flex items-center gap-2 bg-bg/30 rounded-lg px-3 py-2 border border-border/30">
-                      <span className="text-[10px] text-textPrimary font-medium flex-1 truncate">{item.feature || item.name}</span>
-                      <div className="w-12 h-1.5 bg-bg/60 rounded-full overflow-hidden">
-                        <div
-                          className={`h-full rounded-full ${isPositive ? 'bg-danger' : 'bg-success'}`}
-                          style={{ width: `${Math.min(Math.abs(val) * 500, 100)}%` }}
-                        />
-                      </div>
-                      <span className={`text-[10px] font-mono font-bold ${isPositive ? 'text-danger' : 'text-success'}`}>
-                        {isPositive ? '+' : ''}{(val * 100).toFixed(1)}
-                      </span>
-                    </div>
-                  );
-                })}
+                <div className="w-16">
+                  <div className="w-full bg-bg/60 rounded-full h-1.5 overflow-hidden">
+                    <div
+                      className={`h-full rounded-full ${
+                        factor.impact === 'high' ? 'bg-danger' :
+                        factor.impact === 'medium' ? 'bg-warning' : 'bg-primary'
+                      }`}
+                      style={{ width: `${(factor.weight * 100)}%` }}
+                    />
+                  </div>
+                  <span className="text-[9px] text-textSecondary font-mono block text-right mt-0.5">
+                    {(factor.weight * 100).toFixed(0)}%
+                  </span>
+                </div>
               </div>
-            </div>
-          )}
-        </div>
-      </Section>
+            ))}
+          </div>
+        )}
 
-      {/* Patient Medical History */}
+        {shap_contributions && shap_contributions.length > 0 && (
+          <div className="space-y-2">
+            <p className="text-[10px] font-black text-textSecondary uppercase tracking-widest">SHAP Feature Contributions</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {shap_contributions.slice(0, 10).map((item, i) => {
+                const val = item.value || item.contribution || 0;
+                const isPositive = val >= 0;
+                return (
+                  <div key={i} className="flex items-center gap-2 bg-bg/30 rounded-lg px-3 py-2 border border-border/30">
+                    <span className="text-[10px] text-textPrimary font-medium flex-1 truncate">{item.feature || item.name}</span>
+                    <div className="w-12 h-1.5 bg-bg/60 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full rounded-full ${isPositive ? 'bg-danger' : 'bg-success'}`}
+                        style={{ width: `${Math.min(Math.abs(val) * 500, 100)}%` }}
+                      />
+                    </div>
+                    <span className={`text-[10px] font-mono font-bold ${isPositive ? 'text-danger' : 'text-success'}`}>
+                      {isPositive ? '+' : ''}{(val * 100).toFixed(1)}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+
       {patient_history && patient_history.length > 0 && (
-        <Section icon={Clock} title="Patient Medical History">
+        <div className="space-y-3">
+          <div className="flex items-center gap-2 pb-2 border-b border-border/40">
+            <History size={14} className="text-primary" />
+            <h3 className="text-xs font-black text-textPrimary uppercase tracking-widest">Patient Medical History</h3>
+          </div>
           <div className="space-y-3">
             {patient_history.map((item, i) => (
               <div key={i} className="flex items-start gap-3 relative">
@@ -694,11 +726,43 @@ function ClaimDetailContent({ claimDetail, onClose }) {
               </div>
             ))}
           </div>
-        </Section>
+        </div>
       )}
 
-      {/* Investigation Actions */}
-      <Section icon={AlertTriangle} title="Investigation Actions">
+      {audit_log && audit_log.length > 0 && (
+        <div className="space-y-3">
+          <div className="flex items-center gap-2 pb-2 border-b border-border/40">
+            <Clock size={14} className="text-primary" />
+            <h3 className="text-xs font-black text-textPrimary uppercase tracking-widest">Audit Log</h3>
+          </div>
+          <div className="space-y-2">
+            {audit_log.map((entry, i) => (
+              <div key={i} className="flex items-start gap-3 relative">
+                {i < audit_log.length - 1 && (
+                  <div className="absolute left-[7px] top-5 bottom-0 w-px bg-border/40" />
+                )}
+                <div className="w-3.5 h-3.5 rounded-full bg-accent/20 border-2 border-accent mt-0.5 shrink-0 z-10" />
+                <div className="flex-1 bg-bg/30 rounded-lg px-3 py-2 border border-border/30">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-textPrimary">{entry.action}</span>
+                    <span className="text-[10px] text-textSecondary font-mono">
+                      {entry.timestamp ? new Date(entry.timestamp).toLocaleString() : '—'}
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-textSecondary mt-0.5">{entry.details}</p>
+                  <p className="text-[9px] text-textSecondary/60 mt-0.5">by {entry.user}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="space-y-3">
+        <div className="flex items-center gap-2 pb-2 border-b border-border/40">
+          <ShieldCheck size={14} className="text-primary" />
+          <h3 className="text-xs font-black text-textPrimary uppercase tracking-widest">Investigation Actions</h3>
+        </div>
         <div className="flex flex-wrap gap-3">
           <button
             disabled={actionLoading === 'approve'}
@@ -725,20 +789,7 @@ function ClaimDetailContent({ claimDetail, onClose }) {
             {actionLoading === 'audit' ? 'Processing...' : 'Send to Audit'}
           </button>
         </div>
-      </Section>
-    </div>
-  );
-}
-
-
-function Section({ icon: Icon, title, children }) {
-  return (
-    <div className="space-y-3">
-      <div className="flex items-center gap-2 pb-2 border-b border-border/40">
-        <Icon size={14} className="text-primary" />
-        <h3 className="text-xs font-black text-textPrimary uppercase tracking-widest">{title}</h3>
       </div>
-      {children}
     </div>
   );
 }

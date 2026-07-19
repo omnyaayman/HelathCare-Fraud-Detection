@@ -13,8 +13,20 @@ function getToken() {
 }
 
 function getMock(path, params) {
-  const fallback = MOCK_DATA[path] || MOCK_DATA[path.split('?')[0]];
+  const cleanPath = path.split('?')[0];
+  const fallback = MOCK_DATA[path] || MOCK_DATA[cleanPath] || MOCK_DATA[`${cleanPath}/`];
   if (fallback) return typeof fallback === 'function' ? fallback(params) : JSON.parse(JSON.stringify(fallback));
+  if (cleanPath.startsWith('/api/claims/')) {
+    const id = cleanPath.replace('/api/claims/', '');
+    const handler = MOCK_DATA['/api/claims/'];
+    if (handler) return typeof handler === 'function' ? handler(id) : JSON.parse(JSON.stringify(handler));
+  }
+  if (cleanPath.startsWith('/api/notifications/')) {
+    const id = cleanPath.replace('/api/notifications/', '').replace('/read', '');
+    if (cleanPath.endsWith('/read')) return {};
+    const handler = MOCK_DATA['/api/notifications'];
+    if (handler) return typeof handler === 'function' ? handler() : JSON.parse(JSON.stringify(handler));
+  }
   return null;
 }
 
@@ -74,6 +86,47 @@ import {
   CANONICAL_TOP_RISKY_PROVIDERS, CANONICAL_TOP_RISKY_PATIENTS, CANONICAL_CUMULATIVE_SAVINGS,
   CANONICAL_GENDER_DISTRIBUTION, CANONICAL_SPECIALTY_DISTRIBUTION
 } from './data/canonicalData';
+
+let _cachedClaims = null;
+function generateClaims() {
+  if (_cachedClaims) return _cachedClaims;
+  const patients = CANONICAL_PATIENTS.map(p => p.name);
+  const providerNames = CANONICAL_PROVIDERS.map(p => p.name);
+  const investigators = ['Dr. Sarah Mitchell', 'James Rodriguez, CFE', 'Dr. Emily Chen', 'Mark Thompson, CPA', 'Lisa Park, CPC', null, null, null];
+  const services = ['Office Visit', 'Lab Work', 'Imaging', 'Surgery Consultation', 'Physical Therapy', 'Prescription', 'Emergency Visit', 'Ambulance', 'Specialist Referral', 'Diagnostic Test'];
+  const procedures = ['99213', '99214', '99215', '99203', '99204', '80053', '71046', '97110', '99283', '99291'];
+  const statuses = ['Submitted', 'AI Scored', 'Under Review', 'Approved', 'Rejected', 'Fraud Confirmed', 'Closed'];
+  const claims = [];
+  for (let i = 0; i < 200; i++) {
+    const score = Math.round((Math.random() * 0.96 + 0.01) * 100) / 100;
+    const raw = Math.exp(Math.log(1250) + 0.7 * (Math.random() + Math.random() + Math.random() - 1.5));
+    const amount = Math.round(Math.max(150, Math.min(raw, 50000)) * 100) / 100;
+    const riskLevel = score >= 0.85 ? 'critical' : score >= 0.65 ? 'high' : score >= 0.45 ? 'medium' : 'low';
+    const status = statuses[Math.floor(Math.random() * statuses.length)];
+    const month = String(Math.floor(Math.random() * 12) + 1).padStart(2, '0');
+    const day = String(Math.floor(Math.random() * 28) + 1).padStart(2, '0');
+    const year = Math.random() > 0.3 ? '2025' : '2026';
+    const investigator = (status === 'Under Review' || status === 'Fraud Confirmed')
+      ? investigators[Math.floor(Math.random() * (investigators.length - 3))]
+      : null;
+    claims.push({
+      id: `CLM-${year}-${String(200000 + i).padStart(6, '0')}`,
+      claim_id: `CLM-${year}-${String(200000 + i).padStart(6, '0')}`,
+      patient_name: patients[i % patients.length],
+      provider_name: providerNames[i % providerNames.length],
+      service_name: services[i % services.length],
+      procedure_code: procedures[i % procedures.length],
+      amount, status, fraud_score: score, risk_level: riskLevel,
+      claim_date: `${year}-${month}-${day}`,
+      diagnosis_code: CANONICAL_FRAUD_DIAGNOSES[i % CANONICAL_FRAUD_DIAGNOSES.length].code,
+      flagged: score >= 0.65,
+      claim_amount: amount,
+      investigator,
+    });
+  }
+  _cachedClaims = claims;
+  return claims;
+}
 
 const MOCK_DATA = {
   '/api/stats': {
@@ -210,33 +263,42 @@ const MOCK_DATA = {
     amount: d.amount,
   })),
   '/api/claims': () => {
-    const patients = CANONICAL_PATIENTS.map(p => p.name);
-    const providerNames = CANONICAL_PROVIDERS.map(p => p.name);
-    const statuses = ['Submitted', 'AI Scored', 'Under Review', 'Approved', 'Rejected', 'Fraud Confirmed', 'Closed'];
-    const claims = [];
-    for (let i = 0; i < 200; i++) {
-      const score = Math.round((Math.random() * 0.96 + 0.01) * 100) / 100;
-      // Realistic claim amounts: log-normal centered ~$1,250, tail up to $150K
-      const raw = Math.exp(Math.log(1250) + 0.8 * (Math.random() + Math.random() + Math.random() - 1.5));
-      const amount = Math.round(Math.max(150, Math.min(raw, 150000)) * 100) / 100;
-      const riskLevel = score >= 0.85 ? 'critical' : score >= 0.65 ? 'high' : score >= 0.45 ? 'medium' : 'low';
-      const status = statuses[Math.floor(Math.random() * statuses.length)];
-      const month = String(Math.floor(Math.random() * 12) + 1).padStart(2, '0');
-      const day = String(Math.floor(Math.random() * 28) + 1).padStart(2, '0');
-      const year = Math.random() > 0.3 ? '2025' : '2026';
-      claims.push({
-        id: `CLM-${year}-${String(200000 + i).padStart(6, '0')}`,
-        claim_id: `CLM-${year}-${String(200000 + i).padStart(6, '0')}`,
-        patient_name: patients[i % patients.length],
-        provider_name: providerNames[i % providerNames.length],
-        amount, status, fraud_score: score, risk_level: riskLevel,
-        date: `${year}-${month}-${day}`,
-        diagnosis_code: CANONICAL_FRAUD_DIAGNOSES[i % CANONICAL_FRAUD_DIAGNOSES.length].code,
-        flagged: score >= 0.65,
-        claim_amount: amount,
-      });
-    }
-    return { claims, total: 200 };
+    const claims = generateClaims();
+    return { claims, total: 200, total_pages: 1 };
+  },
+  '/api/claims/': (id) => {
+    const allClaims = generateClaims();
+    const c = allClaims.find(cl => cl.claim_id === id || cl.id === id) || allClaims[0];
+    const provider = CANONICAL_PROVIDERS[Math.floor(Math.random() * CANONICAL_PROVIDERS.length)];
+    return {
+      claim: {
+        ...c,
+        patient_id: 'PAT-' + String(Math.floor(Math.random() * 900) + 100),
+        patient_age: 35 + Math.floor(Math.random() * 45),
+        patient_gender: Math.random() > 0.5 ? 'Male' : 'Female',
+        patient_city: provider.city,
+        patient_state: provider.state,
+        provider_type: provider.type,
+        provider_specialty: provider.specialty,
+        service_date: c.claim_date,
+        claim_submitted_late: Math.random() > 0.85,
+        number_of_previous_claims_patient: Math.floor(Math.random() * 12) + 1,
+        number_of_procedures: Math.floor(Math.random() * 4) + 1,
+        deductible_amount: Math.round((c.claim_amount || 0) * 0.1),
+        claim_copay: Math.round((c.claim_amount || 0) * 0.05),
+        investigator: c.investigator,
+      },
+      patient_history: [],
+      shap_contributions: [],
+      base_value: 0.15,
+      audit_log: [
+        { timestamp: `${c.claim_date}T08:15:00Z`, action: 'Claim Submitted', user: 'System', details: `Claim submitted for ${c.service_name || 'services rendered'}` },
+        { timestamp: `${c.claim_date}T08:16:00Z`, action: 'AI Scoring', user: 'ML Engine v3.2.1', details: `Fraud score assigned: ${((c.fraud_score || 0) * 100).toFixed(1)}%` },
+        ...(c.status !== 'Submitted' ? [{ timestamp: `${c.claim_date}T09:00:00Z`, action: 'Status Updated', user: 'System', details: `Status changed to ${c.status}` }] : []),
+        ...(c.investigator ? [{ timestamp: `${c.claim_date}T14:30:00Z`, action: 'Investigator Assigned', user: 'Case Manager', details: `Assigned to ${c.investigator}` }] : []),
+        ...(c.flagged ? [{ timestamp: `${c.claim_date}T09:05:00Z`, action: 'Flagged for Review', user: 'AI Engine', details: 'Claim flagged: score exceeds threshold' }] : []),
+      ],
+    };
   },
   '/api/patients': () => {
     return CANONICAL_PATIENTS.map(p => ({
