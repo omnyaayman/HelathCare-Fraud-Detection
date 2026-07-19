@@ -98,7 +98,14 @@ function generateClaims() {
   const statuses = ['Submitted', 'AI Scored', 'Under Review', 'Approved', 'Rejected', 'Fraud Confirmed', 'Closed'];
   const claims = [];
   for (let i = 0; i < 200; i++) {
-    const score = Math.round((Math.random() * 0.96 + 0.01) * 100) / 100;
+    const r = Math.random();
+    const score = r < 0.62
+      ? Math.round((Math.random() * 0.48 + 0.01) * 100) / 100
+      : r < 0.75
+        ? Math.round((Math.random() * 0.14 + 0.50) * 100) / 100
+        : r < 0.88
+          ? Math.round((Math.random() * 0.19 + 0.65) * 100) / 100
+          : Math.round((Math.random() * 0.12 + 0.85) * 100) / 100;
     const raw = Math.exp(Math.log(1250) + 0.7 * (Math.random() + Math.random() + Math.random() - 1.5));
     const amount = Math.round(Math.max(150, Math.min(raw, 50000)) * 100) / 100;
     const riskLevel = score >= 0.85 ? 'critical' : score >= 0.65 ? 'high' : score >= 0.45 ? 'medium' : 'low';

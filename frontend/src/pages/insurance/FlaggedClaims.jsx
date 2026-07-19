@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import {
   Search, Filter, AlertTriangle, ShieldCheck, X, ArrowUpRight, DollarSign,
   User, Building2, FileText, BrainCircuit, Clock, ThumbsUp, ThumbsDown, Send,
-  Download, ChevronDown, Activity, Eye, Zap, MapPin
+  Download, ChevronDown, Activity, Eye, Zap, MapPin, CheckSquare, Square, Trash2
 } from "lucide-react";
 import api from "../../api";
 import Modal from "../../components/Modal";
@@ -56,12 +56,14 @@ function getRecommendedAction(score, subScores) {
 }
 
 function exportToCSV(claims) {
-  const headers = ["Claim ID", "Patient", "Provider", "Amount", "Fraud Score", "Risk Level", "Diagnosis", "Procedure", "Date", "Status"];
+  const headers = ["Claim ID", "Patient", "Provider", "Amount", "Fraud Score", "Severity", "Diagnosis", "Procedure", "Date", "Status", "Priority", "Investigator"];
   const rows = claims.map(c => [
     c.claim_id, c.patient_name, c.provider_name, c.claim_amount,
     (c.fraud_score || 0).toFixed(4),
-    (c.fraud_score || 0) >= 0.85 ? "Critical" : (c.fraud_score || 0) >= 0.65 ? "High" : "Elevated",
-    c.diagnosis_code, c.procedure_code, c.service_date, c.status
+    getRiskLevel(c.fraud_score || 0).label,
+    c.diagnosis_code, c.procedure_code, c.service_date, c.status,
+    getInvestigationPriority(c.fraud_score || 0).label,
+    c._assignedInvestigator || "Unassigned"
   ]);
   const csv = [headers.join(","), ...rows.map(r => r.map(v => `"${v ?? ""}"`).join(","))].join("\n");
   const blob = new Blob([csv], { type: "text/csv" });
@@ -92,6 +94,7 @@ export default function FlaggedClaims() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [filterRisk, setFilterRisk] = useState("All");
+  const [assignedFilter, setAssignedFilter] = useState("All");
   const [sortBy, setSortBy] = useState("risk_desc");
   const [selectedClaim, setSelectedClaim] = useState(null);
   const [showModal, setShowModal] = useState(false);
@@ -101,6 +104,8 @@ export default function FlaggedClaims() {
   const [investigationNotes, setInvestigationNotes] = useState("");
   const [workflowStatus, setWorkflowStatus] = useState({});
   const [updateLoading, setUpdateLoading] = useState(false);
+  const [selectedClaims, setSelectedClaims] = useState(new Set());
+  const [bulkInvestigator, setBulkInvestigator] = useState("");
 
   useEffect(() => {
     const fetchClaims = async () => {
@@ -131,12 +136,15 @@ export default function FlaggedClaims() {
     else if (filterRisk === "High") result = result.filter(c => (c.fraud_score || 0) >= 0.65 && (c.fraud_score || 0) < 0.85);
     else if (filterRisk === "Elevated") result = result.filter(c => (c.fraud_score || 0) >= 0.5 && (c.fraud_score || 0) < 0.65);
 
+    if (assignedFilter === "Assigned") result = result.filter(c => investigatorMap[c.claim_id]);
+    else if (assignedFilter === "Unassigned") result = result.filter(c => !investigatorMap[c.claim_id]);
+
     if (sortBy === "risk_desc") result.sort((a, b) => (b.fraud_score || 0) - (a.fraud_score || 0));
     else if (sortBy === "amount_desc") result.sort((a, b) => (b.claim_amount || 0) - (a.claim_amount || 0));
     else if (sortBy === "date_desc") result.sort((a, b) => new Date(b.service_date || 0) - new Date(a.service_date || 0));
 
     return result;
-  }, [claims, search, filterRisk, sortBy]);
+  }, [claims, search, filterRisk, assignedFilter, sortBy, investigatorMap]);
 
   const stats = useMemo(() => {
     const flagged = claims;
@@ -172,6 +180,31 @@ export default function FlaggedClaims() {
 
   const assignInvestigator = (claimId, investigator) => {
     setInvestigatorMap(prev => ({ ...prev, [claimId]: investigator }));
+  };
+
+  const toggleClaimSelection = (claimId) => {
+    setSelectedClaims(prev => {
+      const next = new Set(prev);
+      if (next.has(claimId)) next.delete(claimId);
+      else next.add(claimId);
+      return next;
+    });
+  };
+
+  const toggleAllVisible = () => {
+    setSelectedClaims(prev => {
+      if (prev.size === filtered.length) return new Set();
+      return new Set(filtered.map(c => c.claim_id));
+    });
+  };
+
+  const bulkAssign = () => {
+    if (!bulkInvestigator) return;
+    const updates = {};
+    selectedClaims.forEach(id => { updates[id] = bulkInvestigator; });
+    setInvestigatorMap(prev => ({ ...prev, ...updates }));
+    setSelectedClaims(new Set());
+    setBulkInvestigator("");
   };
 
   const handleStatusUpdate = async (claimId, newStatus) => {
@@ -242,10 +275,10 @@ export default function FlaggedClaims() {
           </p>
         </div>
         <button
-          onClick={() => exportToCSV(filtered)}
+          onClick={() => exportToCSV(selectedClaims.size > 0 ? filtered.filter(c => selectedClaims.has(c.claim_id)) : filtered)}
           className="enterprise-btn-ghost py-2 px-4 text-xs flex items-center gap-2 border border-border/60"
         >
-          <Download size={14} /> Export CSV
+          <Download size={14} /> {selectedClaims.size > 0 ? `Export Selected (${selectedClaims.size})` : "Export CSV"}
         </button>
       </div>
 
@@ -297,12 +330,21 @@ export default function FlaggedClaims() {
               onChange={e => setFilterRisk(e.target.value)}
               className="enterprise-select text-xs pl-8 pr-8"
             >
-              <option value="All">All Risk Levels</option>
+              <option value="All">All Severity Levels</option>
               <option value="Critical">Critical (85%+)</option>
               <option value="High">High (65-85%)</option>
               <option value="Elevated">Elevated (50-65%)</option>
             </select>
           </div>
+          <select
+            value={assignedFilter}
+            onChange={e => setAssignedFilter(e.target.value)}
+            className="enterprise-select text-xs"
+          >
+            <option value="All">All Assignments</option>
+            <option value="Assigned">Assigned</option>
+            <option value="Unassigned">Unassigned</option>
+          </select>
           <select
             value={sortBy}
             onChange={e => setSortBy(e.target.value)}
@@ -320,21 +362,32 @@ export default function FlaggedClaims() {
         {filtered.map((c, idx) => {
           const risk = getRiskLevel(c.fraud_score || 0);
           const sub = computeSubScores(c);
-          const investigator = investigatorMap[c.claim_id] || getInvestigationPriority(c.fraud_score || 0).label;
+          const assignedInv = investigatorMap[c.claim_id] || null;
           const dupScore = sub.duplicateBilling;
           const provScore = sub.providerAnomaly;
           const codeScore = sub.codingAnomaly;
           const outScore = sub.outlierDetection;
+          const isSelected = selectedClaims.has(c.claim_id);
 
           return (
             <div
               key={c.claim_id}
-              className="group bg-surface rounded-2xl border border-border/80 p-5 hover:border-danger/30 hover:shadow-[0_4px_20px_rgb(239_68_68_/_0.06)] transition-all duration-200 animate-fade-in-up"
+              className={`group bg-surface rounded-2xl border p-5 transition-all duration-200 animate-fade-in-up ${
+                isSelected ? 'border-indigo-500/40 bg-indigo-500/5' : 'border-border/80 hover:border-danger/30 hover:shadow-[0_4px_20px_rgb(239_68_68_/_0.06)]'
+              }`}
               style={{ animationDelay: `${idx * 40}ms` }}
             >
               <div className="flex items-start gap-4">
-                <div className={`p-2.5 rounded-xl shrink-0 ${(c.fraud_score || 0) >= 0.85 ? 'bg-red-500/10 text-red-500' : (c.fraud_score || 0) >= 0.65 ? 'bg-orange-500/10 text-orange-500' : 'bg-amber-500/10 text-amber-500'}`}>
-                  <AlertTriangle size={18} />
+                <div className="flex flex-col items-center gap-2 pt-1">
+                  <button
+                    onClick={() => toggleClaimSelection(c.claim_id)}
+                    className="text-textSecondary hover:text-indigo-400 transition-colors"
+                  >
+                    {isSelected ? <CheckSquare size={16} className="text-indigo-400" /> : <Square size={16} />}
+                  </button>
+                  <div className={`p-2.5 rounded-xl ${(c.fraud_score || 0) >= 0.85 ? 'bg-red-500/10 text-red-500' : (c.fraud_score || 0) >= 0.65 ? 'bg-orange-500/10 text-orange-500' : 'bg-amber-500/10 text-amber-500'}`}>
+                    <AlertTriangle size={18} />
+                  </div>
                 </div>
 
                 <div className="flex-1 min-w-0">
@@ -353,7 +406,7 @@ export default function FlaggedClaims() {
                     <div className="flex items-center gap-3">
                       <span className="text-xs font-mono font-bold text-textPrimary">{formatCurrency(c.claim_amount)}</span>
                       <span className="text-xs font-bold font-mono" style={{ color: (c.fraud_score || 0) >= 0.85 ? '#ef4444' : (c.fraud_score || 0) >= 0.65 ? '#f97316' : '#f59e0b' }}>
-                        {((c.fraud_score || 0) * 100).toFixed(0)}% risk
+                        {((c.fraud_score || 0) * 100).toFixed(1)}%
                       </span>
                     </div>
                   </div>
@@ -365,21 +418,6 @@ export default function FlaggedClaims() {
                     {c.number_of_procedures > 1 && (
                       <span className="flex items-center gap-1"><Zap size={10} /> {c.number_of_procedures} procedures</span>
                     )}
-                  </div>
-
-                  <div className="mt-3">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-[10px] text-textSecondary">Fraud Probability</span>
-                      <span className="text-[10px] font-mono font-bold" style={{ color: (c.fraud_score || 0) >= 0.85 ? '#ef4444' : (c.fraud_score || 0) >= 0.65 ? '#f97316' : '#f59e0b' }}>
-                        {((c.fraud_score || 0) * 100).toFixed(1)}%
-                      </span>
-                    </div>
-                    <div className="bg-bg/60 rounded-full h-1.5 overflow-hidden w-full">
-                      <div
-                        className={`h-full rounded-full ${(c.fraud_score || 0) >= 0.85 ? 'bg-red-500' : (c.fraud_score || 0) >= 0.65 ? 'bg-orange-500' : 'bg-amber-500'}`}
-                        style={{ width: `${Math.min((c.fraud_score || 0) * 100, 100)}%` }}
-                      />
-                    </div>
                   </div>
 
                   <div className="flex flex-wrap gap-2 mt-3">
@@ -413,12 +451,26 @@ export default function FlaggedClaims() {
 
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mt-3 pt-3 border-t border-border/40">
                     <div className="flex items-center gap-3 flex-wrap">
+                      <span className="text-[9px] font-bold text-textSecondary uppercase tracking-wider">Severity:</span>
+                      <span className={`px-2 py-0.5 rounded text-[9px] font-bold border ${risk.bg} ${risk.color} ${risk.border}`}>
+                        {risk.label}
+                      </span>
+                      <span className="text-[9px] font-bold text-textSecondary uppercase tracking-wider">Priority:</span>
                       <span className={`px-2 py-0.5 rounded text-[9px] font-bold border ${getInvestigationPriority(c.fraud_score || 0).color}`}>
                         {getInvestigationPriority(c.fraud_score || 0).label}
                       </span>
+                      <span className="text-[9px] font-bold text-textSecondary uppercase tracking-wider">Status:</span>
                       <span className={`px-2 py-0.5 rounded text-[9px] font-bold border ${getStatusColor(c.status || 'Submitted')}`}>
                         {c.status || "Submitted"}
                       </span>
+                      {assignedInv && (
+                        <>
+                          <span className="text-[9px] font-bold text-textSecondary uppercase tracking-wider">Investigator:</span>
+                          <span className="px-2 py-0.5 rounded text-[9px] font-bold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 flex items-center gap-1">
+                            <User size={8} /> {assignedInv}
+                          </span>
+                        </>
+                      )}
                     </div>
                     <div className="flex items-center gap-2">
                       <div className="relative">
@@ -456,6 +508,39 @@ export default function FlaggedClaims() {
           </div>
         )}
       </div>
+
+      {selectedClaims.size > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-surface border border-indigo-500/30 rounded-2xl shadow-2xl p-4 flex items-center gap-4 animate-in fade-in slide-in-from-bottom-4 duration-200">
+          <span className="text-sm font-bold text-textPrimary">{selectedClaims.size} selected</span>
+          <div className="h-6 w-px bg-border/60" />
+          <div className="relative">
+            <select
+              value={bulkInvestigator}
+              onChange={e => setBulkInvestigator(e.target.value)}
+              className="enterprise-select text-xs py-1.5 pl-2 pr-8 min-w-[180px]"
+            >
+              <option value="">Choose investigator...</option>
+              {INVESTIGATORS.map(inv => (
+                <option key={inv} value={inv}>{inv}</option>
+              ))}
+            </select>
+            <ChevronDown size={10} className="absolute right-2 top-1/2 -translate-y-1/2 text-textSecondary pointer-events-none" />
+          </div>
+          <button
+            onClick={bulkAssign}
+            disabled={!bulkInvestigator}
+            className={`enterprise-btn-primary py-1.5 px-4 text-xs flex items-center gap-1 ${!bulkInvestigator ? 'opacity-40 cursor-not-allowed' : ''}`}
+          >
+            <Send size={12} /> Assign
+          </button>
+          <button
+            onClick={() => setSelectedClaims(new Set())}
+            className="enterprise-btn-ghost py-1.5 px-3 text-xs flex items-center gap-1 border border-border/60"
+          >
+            <X size={12} /> Clear
+          </button>
+        </div>
+      )}
 
       <Modal isOpen={showModal} onClose={() => setShowModal(false)} title={`Investigation: Claim #${detail.claim_id}`} wide>
         {detailLoading ? (
@@ -536,7 +621,7 @@ export default function FlaggedClaims() {
               </p>
               <div className="mb-4">
                 <div className="flex justify-between text-xs mb-1.5">
-                  <span className="text-textSecondary">Fraud Probability</span>
+                  <span className="text-textSecondary">Risk Score</span>
                   <span className={`font-bold ${(detail.fraud_score || 0) >= 0.85 ? 'text-red-500' : (detail.fraud_score || 0) >= 0.65 ? 'text-orange-500' : 'text-amber-500'}`}>
                     {((detail.fraud_score || 0) * 100).toFixed(1)}%
                   </span>
@@ -551,7 +636,7 @@ export default function FlaggedClaims() {
 
               <p className="text-[9px] font-black uppercase tracking-widest text-textSecondary mb-2">Risk Score Breakdown</p>
               <div className="space-y-2">
-                <ScoreBar label="Overall Fraud" score={detail.fraud_score || 0}
+                <ScoreBar label="Overall Risk" score={detail.fraud_score || 0}
                   color={(detail.fraud_score || 0) >= 0.85 ? 'bg-red-500' : (detail.fraud_score || 0) >= 0.65 ? 'bg-orange-500' : 'bg-amber-500'} />
                 <ScoreBar label="Duplicate Billing" score={subScores.duplicateBilling} color="bg-red-400" />
                 <ScoreBar label="Provider Anomaly" score={subScores.providerAnomaly} color="bg-orange-400" />
