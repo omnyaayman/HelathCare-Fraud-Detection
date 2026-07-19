@@ -1,9 +1,24 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Search, Users, Download, Eye, AlertTriangle, ShieldCheck, TrendingUp, ChevronLeft, ChevronRight, Filter, Activity, Heart, MapPin, Calendar, DollarSign } from 'lucide-react';
+import {
+  Search, Users, Download, Eye, AlertTriangle, ShieldCheck, TrendingUp,
+  ChevronLeft, ChevronRight, Filter, Activity, Heart, MapPin, Calendar,
+  DollarSign, Stethoscope, UserX, Zap, ArrowRight
+} from 'lucide-react';
 import api from '../../api';
 import Skeleton from '../../components/Skeleton';
 import PlotlyChart from '../../components/PlotlyChart';
 import { formatCurrency, formatPercent, formatNumber, getRiskLevel, getStatusColor } from '../../data/dataUtils';
+
+function computePatientRisk(p) {
+  const totalClaims = p.total_claims || p.claim_count || 0;
+  const fraudCount = p.fraud_count || 0;
+  const providersVisited = p.providers_visited || 1;
+  if (totalClaims === 0) return 0;
+  const fraudRate = fraudCount / totalClaims;
+  const multiProviderPenalty = providersVisited >= 4 ? (providersVisited - 3) * 0.08 : 0;
+  const volumePenalty = totalClaims >= 10 ? Math.min((totalClaims - 10) * 0.015, 0.2) : 0;
+  return Math.min(0.99, fraudRate * 1.4 + multiProviderPenalty + volumePenalty);
+}
 
 export default function PatientManagement() {
   const [patients, setPatients] = useState([]);
@@ -12,17 +27,23 @@ export default function PatientManagement() {
   const [genderFilter, setGenderFilter] = useState('All');
   const [riskFilter, setRiskFilter] = useState('All');
   const [cityFilter, setCityFilter] = useState('All');
+  const [providerFilter, setProviderFilter] = useState('All');
   const [selectedPatient, setSelectedPatient] = useState(null);
   const [patientClaims, setPatientClaims] = useState([]);
   const [claimsLoading, setClaimsLoading] = useState(false);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const [suspiciousPatterns, setSuspiciousPatterns] = useState([]);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const res = await api.getPatients();
-        setPatients(res || []);
+        const [patientsRes, patternsRes] = await Promise.all([
+          api.getPatients(),
+          api.getPatientSuspiciousPatterns().catch(() => [])
+        ]);
+        setPatients(patientsRes || []);
+        setSuspiciousPatterns(patternsRes || []);
       } catch (err) {
         console.error('Failed to load patients', err);
       } finally {
@@ -41,11 +62,11 @@ export default function PatientManagement() {
       setClaimsLoading(true);
       try {
         const res = await api.getClaims({ page_size: 500 });
-        const allClaims = res?.data || res || [];
+        const allClaims = res?.claims || res?.data || res || [];
         const filtered = Array.isArray(allClaims)
-          ? allClaims.filter(c => c.patient_id === selectedPatient.patient_id)
+          ? allClaims.filter(c => c.patient_name === selectedPatient.name || c.patient_id === selectedPatient.patient_id)
           : [];
-        setPatientClaims(filtered.slice(0, 20));
+        setPatientClaims(filtered.slice(0, 30));
       } catch (err) {
         console.error('Failed to load patient claims', err);
         setPatientClaims([]);
@@ -63,21 +84,29 @@ export default function PatientManagement() {
 
   const filtered = useMemo(() => {
     return patients.filter(p => {
+      const q = searchTerm.toLowerCase();
       const matchesSearch =
-        p.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        p.city?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        p.state?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        p.patient_id?.toString().includes(searchTerm);
+        p.name?.toLowerCase().includes(q) ||
+        p.city?.toLowerCase().includes(q) ||
+        p.state?.toLowerCase().includes(q) ||
+        p.patient_id?.toString().includes(q);
       const matchesGender = genderFilter === 'All' || p.gender === genderFilter;
-      const isHighRisk = (p.fraud_count || 0) > 0;
+      const riskScore = computePatientRisk(p);
+      const isHighRisk = riskScore >= 0.35;
       const matchesRisk =
         riskFilter === 'All' ||
         (riskFilter === 'High Risk' && isHighRisk) ||
         (riskFilter === 'Normal' && !isHighRisk);
       const matchesCity = cityFilter === 'All' || p.city === cityFilter;
-      return matchesSearch && matchesGender && matchesRisk && matchesCity;
+      const pv = p.providers_visited || 1;
+      const matchesProvider =
+        providerFilter === 'All' ||
+        (providerFilter === '1' && pv === 1) ||
+        (providerFilter === '2-3' && pv >= 2 && pv <= 3) ||
+        (providerFilter === '4+' && pv >= 4);
+      return matchesSearch && matchesGender && matchesRisk && matchesCity && matchesProvider;
     });
-  }, [patients, searchTerm, genderFilter, riskFilter, cityFilter]);
+  }, [patients, searchTerm, genderFilter, riskFilter, cityFilter, providerFilter]);
 
   const totalPages = Math.ceil(filtered.length / pageSize);
   const paginated = useMemo(() => {
@@ -87,15 +116,16 @@ export default function PatientManagement() {
 
   const stats = useMemo(() => {
     const total = patients.length;
-    const avgAge = total
-      ? Math.round(patients.reduce((sum, p) => sum + (p.age || 0), 0) / total)
-      : 0;
-    const highRisk = patients.filter(p => (p.fraud_count || 0) > 0).length;
+    const avgAge = total ? Math.round(patients.reduce((sum, p) => sum + (p.age || 0), 0) / total) : 0;
+    const highRisk = patients.filter(p => computePatientRisk(p) >= 0.35).length;
     const avgClaimCost = total
-      ? patients.reduce((sum, p) => sum + (p.avg_claim_amount || 0), 0) / total
+      ? Math.round(patients.reduce((sum, p) => sum + (p.avg_claim_amount || 0), 0) / total)
       : 0;
     const activeClaims = patients.filter(p => (p.claim_count || p.total_claims || 0) > 0).length;
-    return { total, avgAge, highRisk, avgClaimCost, activeClaims };
+    const avgProviders = total
+      ? (patients.reduce((sum, p) => sum + (p.providers_visited || 1), 0) / total).toFixed(1)
+      : 0;
+    return { total, avgAge, highRisk, avgClaimCost, activeClaims, avgProviders };
   }, [patients]);
 
   const ageChartData = useMemo(() => {
@@ -106,18 +136,11 @@ export default function PatientManagement() {
       else if (p.age < 70) ranges['50-69'] += 1;
       else ranges['70+'] += 1;
     });
-    return [
-      {
-        x: Object.keys(ranges),
-        y: Object.values(ranges),
-        type: 'bar',
-        marker: {
-          color: ['#818cf8', '#6366f1', '#4f46e5', '#4338ca'],
-          line: { width: 0 }
-        },
-        hovertemplate: '%{x}<br>%{y} patients<extra></extra>'
-      }
-    ];
+    return [{
+      x: Object.keys(ranges), y: Object.values(ranges), type: 'bar',
+      marker: { color: ['#818cf8', '#6366f1', '#4f46e5', '#4338ca'], line: { width: 0 } },
+      hovertemplate: '%{x}<br>%{y} patients<extra></extra>'
+    }];
   }, [patients]);
 
   const genderChartData = useMemo(() => {
@@ -128,87 +151,77 @@ export default function PatientManagement() {
       else if (g === 'female') counts['Female'] += 1;
       else counts['Other'] += 1;
     });
-    return [
-      {
-        labels: Object.keys(counts),
-        values: Object.values(counts),
-        type: 'pie',
-        hole: 0.45,
-        marker: { colors: ['#6366f1', '#ec4899', '#a78bfa'] },
-        textinfo: 'percent+label',
-        textposition: 'inside',
-        textfont: { size: 11, color: '#fff' },
-        showlegend: true,
-        hovertemplate: '%{label}<br>%{value} patients (%{percent})<extra></extra>'
-      }
-    ];
+    return [{
+      labels: Object.keys(counts), values: Object.values(counts), type: 'pie', hole: 0.45,
+      marker: { colors: ['#6366f1', '#ec4899', '#a78bfa'] },
+      textinfo: 'percent+label', textposition: 'inside',
+      textfont: { size: 11, color: '#fff' }, showlegend: true,
+      hovertemplate: '%{label}<br>%{value} patients (%{percent})<extra></extra>'
+    }];
   }, [patients]);
 
   const claimsChartData = useMemo(() => {
-    const dist = { '1': 0, '2-4': 0, '5-9': 0, '10+': 0 };
+    const dist = { '1-3': 0, '4-7': 0, '8-15': 0, '16+': 0 };
     patients.forEach(p => {
       const c = p.total_claims || p.claim_count || 0;
-      if (c <= 1) dist['1'] += 1;
-      else if (c <= 4) dist['2-4'] += 1;
-      else if (c <= 9) dist['5-9'] += 1;
-      else dist['10+'] += 1;
+      if (c <= 3) dist['1-3'] += 1;
+      else if (c <= 7) dist['4-7'] += 1;
+      else if (c <= 15) dist['8-15'] += 1;
+      else dist['16+'] += 1;
     });
-    return [
-      {
-        x: Object.keys(dist),
-        y: Object.values(dist),
-        type: 'bar',
-        marker: {
-          color: ['#14b8a6', '#0d9488', '#0f766e', '#115e59'],
-          line: { width: 0 }
-        },
-        hovertemplate: '%{x} claims<br>%{y} patients<extra></extra>'
-      }
-    ];
+    return [{
+      x: Object.keys(dist), y: Object.values(dist), type: 'bar',
+      marker: { color: ['#14b8a6', '#0d9488', '#0f766e', '#115e59'], line: { width: 0 } },
+      hovertemplate: '%{x} claims<br>%{y} patients<extra></extra>'
+    }];
   }, [patients]);
 
   const riskDonutData = useMemo(() => {
     const high = stats.highRisk;
     const normal = stats.total - high;
-    return [
-      {
-        labels: ['High Risk', 'Normal'],
-        values: [high, normal],
-        type: 'pie',
-        hole: 0.6,
-        marker: { colors: ['#ef4444', '#10b981'] },
-        textinfo: 'percent',
-        textposition: 'inside',
-        textfont: { size: 12, color: '#fff' },
-        showlegend: true,
-        hovertemplate: '%{label}<br>%{value} patients (%{percent})<extra></extra>'
-      }
-    ];
+    return [{
+      labels: ['High Risk', 'Normal'], values: [high, normal], type: 'pie', hole: 0.6,
+      marker: { colors: ['#ef4444', '#10b981'] },
+      textinfo: 'percent', textposition: 'inside',
+      textfont: { size: 12, color: '#fff' }, showlegend: true,
+      hovertemplate: '%{label}<br>%{value} patients (%{percent})<extra></extra>'
+    }];
   }, [stats]);
+
+  const providerDistData = useMemo(() => {
+    const dist = { '1': 0, '2-3': 0, '4-5': 0, '6+': 0 };
+    patients.forEach(p => {
+      const pv = p.providers_visited || 1;
+      if (pv <= 1) dist['1'] += 1;
+      else if (pv <= 3) dist['2-3'] += 1;
+      else if (pv <= 5) dist['4-5'] += 1;
+      else dist['6+'] += 1;
+    });
+    return [{
+      x: Object.keys(dist), y: Object.values(dist), type: 'bar',
+      marker: { color: ['#f59e0b', '#f97316', '#ef4444', '#dc2626'], line: { width: 0 } },
+      hovertemplate: '%{x} providers<br>%{y} patients<extra></extra>'
+    }];
+  }, [patients]);
 
   const diagnosisTimelineData = useMemo(() => {
     if (!patientClaims.length) return [];
     const sorted = [...patientClaims].sort((a, b) => new Date(a.claim_date) - new Date(b.claim_date));
-    return [
-      {
-        x: sorted.map(c => c.claim_date),
-        y: sorted.map(c => c.claim_amount || 0),
-        type: 'scatter',
-        mode: 'lines+markers',
-        marker: {
-          color: sorted.map(c => c.is_fraudulent ? '#ef4444' : '#6366f1'),
-          size: 8
-        },
-        line: { color: '#6366f1', width: 2 },
-        hovertemplate: '%{x}<br>$%{y:,.0f}<extra></extra>'
-      }
-    ];
+    return [{
+      x: sorted.map(c => c.claim_date),
+      y: sorted.map(c => c.claim_amount || 0),
+      type: 'scatter', mode: 'lines+markers',
+      marker: { color: sorted.map(c => c.flagged ? '#ef4444' : '#6366f1'), size: 8 },
+      line: { color: '#6366f1', width: 2 },
+      hovertemplate: '%{x}<br>$%{y:,.0f}<extra></extra>'
+    }];
   }, [patientClaims]);
 
   const exportCSV = () => {
     const headers = [
       'Patient ID', 'Name', 'Age', 'Gender', 'City', 'State',
-      'Total Claims', 'Avg Claim Amount', 'Fraud Count', 'Policy ID'
+      'Total Claims', 'Avg Claim Amount', 'Fraud Count', 'Risk Score',
+      'Providers Visited', 'Risk Level'
     ];
     const csvContent = [
       headers.join(','),
@@ -222,10 +235,11 @@ export default function PatientManagement() {
         p.total_claims || 0,
         (p.avg_claim_amount || 0).toFixed(2),
         p.fraud_count || 0,
-        p.policy_id || ''
+        (computePatientRisk(p) * 100).toFixed(1),
+        p.providers_visited || 1,
+        computePatientRisk(p) >= 0.5 ? 'Critical' : computePatientRisk(p) >= 0.35 ? 'High' : computePatientRisk(p) >= 0.2 ? 'Medium' : 'Low'
       ].join(','))
     ].join('\n');
-
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -233,13 +247,6 @@ export default function PatientManagement() {
     link.setAttribute('download', 'patient_management_export.csv');
     link.click();
     URL.revokeObjectURL(url);
-  };
-
-  const getPatientRiskScore = (p) => {
-    const fraudCount = p.fraud_count || 0;
-    const claimCount = p.total_claims || p.claim_count || 0;
-    if (claimCount === 0) return 0;
-    return Math.min(1, (fraudCount / claimCount) * 1.5);
   };
 
   if (loading) {
@@ -252,8 +259,8 @@ export default function PatientManagement() {
           </div>
           <div className="h-10 w-32 skeleton-shimmer rounded-xl" />
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
-          {[...Array(5)].map((_, i) => <Skeleton key={i} type="card" />)}
+        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
+          {[...Array(6)].map((_, i) => <Skeleton key={i} type="card" />)}
         </div>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {[...Array(3)].map((_, i) => (
@@ -270,7 +277,6 @@ export default function PatientManagement() {
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
-      {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
           <h1 className="text-2xl font-black text-textPrimary flex items-center gap-3">
@@ -297,8 +303,7 @@ export default function PatientManagement() {
         </div>
       </div>
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
         <div className="bg-surface border border-border p-5 rounded-2xl shadow-sm flex items-center gap-4">
           <div className="p-3 bg-indigo-500/10 text-indigo-500 rounded-xl">
             <Users size={22} />
@@ -344,10 +349,18 @@ export default function PatientManagement() {
             <p className="text-2xl font-black text-textPrimary font-mono">{formatNumber(stats.activeClaims)}</p>
           </div>
         </div>
+        <div className="bg-surface border border-border p-5 rounded-2xl shadow-sm flex items-center gap-4">
+          <div className="p-3 bg-orange-500/10 text-orange-500 rounded-xl">
+            <Stethoscope size={22} />
+          </div>
+          <div>
+            <p className="text-[10px] uppercase font-bold text-textSecondary">Avg Providers</p>
+            <p className="text-2xl font-black text-textPrimary font-mono">{stats.avgProviders}</p>
+          </div>
+        </div>
       </div>
 
-      {/* Charts Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
         <div className="bg-surface border border-border rounded-2xl p-5 shadow-sm">
           <h3 className="text-sm font-bold text-textPrimary mb-1">Age Distribution</h3>
           <p className="text-xs text-textSecondary mb-4">Breakdown of policyholders by age group</p>
@@ -356,10 +369,9 @@ export default function PatientManagement() {
               data={ageChartData}
               layout={{
                 margin: { t: 10, r: 10, l: 35, b: 35 },
-                xaxis: { showgrid: false, title: '' },
+                xaxis: { showgrid: false },
                 yaxis: { gridcolor: 'rgba(226,232,240,0.5)', title: 'Patients' },
-                showlegend: false,
-                bargap: 0.35
+                showlegend: false, bargap: 0.35
               }}
             />
           </div>
@@ -386,22 +398,35 @@ export default function PatientManagement() {
               data={claimsChartData}
               layout={{
                 margin: { t: 10, r: 10, l: 35, b: 35 },
-                xaxis: { showgrid: false, title: '' },
+                xaxis: { showgrid: false },
                 yaxis: { gridcolor: 'rgba(226,232,240,0.5)', title: 'Patients' },
-                showlegend: false,
-                bargap: 0.35
+                showlegend: false, bargap: 0.35
+              }}
+            />
+          </div>
+        </div>
+        <div className="bg-surface border border-border rounded-2xl p-5 shadow-sm">
+          <h3 className="text-sm font-bold text-textPrimary mb-1">Providers per Patient</h3>
+          <p className="text-xs text-textSecondary mb-4">Doctor shopping indicator — high counts are suspicious</p>
+          <div className="h-56 bg-surface p-2">
+            <PlotlyChart
+              data={providerDistData}
+              layout={{
+                margin: { t: 10, r: 10, l: 35, b: 35 },
+                xaxis: { showgrid: false, title: 'Providers Visited' },
+                yaxis: { gridcolor: 'rgba(226,232,240,0.5)', title: 'Patients' },
+                showlegend: false, bargap: 0.35
               }}
             />
           </div>
         </div>
       </div>
 
-      {/* Risk Categories Donut */}
       <div className="bg-surface border border-border rounded-2xl p-5 shadow-sm">
         <div className="flex items-center justify-between mb-4">
           <div>
             <h3 className="text-sm font-bold text-textPrimary">Risk Categories</h3>
-            <p className="text-xs text-textSecondary">Distribution of patient risk ratings</p>
+            <p className="text-xs text-textSecondary">Distribution of patient risk ratings based on claim patterns, fraud history, and provider diversity</p>
           </div>
           <div className="flex items-center gap-4 text-[10px] font-bold">
             <span className="flex items-center gap-1.5">
@@ -429,26 +454,99 @@ export default function PatientManagement() {
         </div>
       </div>
 
-      {/* Directory Table */}
+      {suspiciousPatterns.length > 0 && (
+        <div className="bg-surface border border-border rounded-2xl p-5 shadow-sm">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="p-2 rounded-xl bg-red-500/10">
+              <UserX size={18} className="text-red-500" />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-textPrimary">Suspicious Patient Patterns</h3>
+              <p className="text-xs text-textSecondary">Detected behavioral patterns indicative of potential fraud</p>
+            </div>
+            <span className="ml-auto px-2.5 py-1 rounded-full bg-red-500/10 text-red-500 text-[10px] font-black border border-red-500/20">
+              {suspiciousPatterns.length} PATTERNS DETECTED
+            </span>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {suspiciousPatterns.map((pattern) => (
+              <div
+                key={pattern.id}
+                className={`p-4 rounded-xl border transition-all hover:shadow-md ${
+                  pattern.severity === 'critical'
+                    ? 'bg-red-500/5 border-red-500/20 hover:border-red-500/40'
+                    : 'bg-amber-500/5 border-amber-500/20 hover:border-amber-500/40'
+                }`}
+              >
+                <div className="flex items-start gap-3">
+                  <div className={`p-2 rounded-lg shrink-0 ${
+                    pattern.type === 'doctor_shopping' ? 'bg-orange-500/10 text-orange-500' :
+                    pattern.type === 'geographic_anomaly' ? 'bg-purple-500/10 text-purple-500' :
+                    pattern.type === 'rapid_filing' ? 'bg-amber-500/10 text-amber-500' :
+                    'bg-red-500/10 text-red-500'
+                  }`}>
+                    {pattern.type === 'doctor_shopping' ? <Stethoscope size={16} /> :
+                     pattern.type === 'geographic_anomaly' ? <MapPin size={16} /> :
+                     pattern.type === 'rapid_filing' ? <Zap size={16} /> :
+                     <AlertTriangle size={16} />}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <h4 className="text-xs font-bold text-textPrimary">{pattern.title}</h4>
+                      <span className={`px-1.5 py-0.5 rounded text-[8px] font-black uppercase ${
+                        pattern.severity === 'critical'
+                          ? 'bg-red-500/10 text-red-500 border border-red-500/20'
+                          : 'bg-amber-500/10 text-amber-500 border border-amber-500/20'
+                      }`}>
+                        {pattern.severity}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-textSecondary leading-relaxed">{pattern.description}</p>
+                    <div className="flex items-center gap-4 mt-2">
+                      <span className="text-[9px] font-bold text-textSecondary">
+                        Confidence: <span className="text-textPrimary font-mono">{pattern.confidence}%</span>
+                      </span>
+                      <span className="text-[9px] font-bold text-textSecondary">
+                        Providers: <span className="text-textPrimary font-mono">{pattern.providers_count}</span>
+                      </span>
+                      <span className="text-[9px] font-bold text-textSecondary">
+                        Claims: <span className="text-textPrimary font-mono">{pattern.claims_count}</span>
+                      </span>
+                      <button
+                        onClick={() => {
+                          const patient = patients.find(p => p.patient_id === pattern.patient_id);
+                          if (patient) setSelectedPatient(patient);
+                        }}
+                        className="ml-auto text-[9px] font-bold text-indigo-400 hover:text-indigo-300 flex items-center gap-1"
+                      >
+                        View Patient <ArrowRight size={10} />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="enterprise-card">
         <div className="flex items-center gap-3 border-b border-border p-4 flex-wrap">
-          <div className="flex flex-1 items-center gap-2 rounded-xl border border-border bg-surface px-3 py-2 text-sm min-w-[240px]">
-            <Search size={16} className="text-textSecondary" />
+          <div className="relative flex-1 min-w-[200px]">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-textSecondary" />
             <input
               type="text"
               placeholder="Search by ID, Name, City, or State..."
-              className="flex-1 bg-transparent outline-none text-textPrimary placeholder:text-textSecondary/60 text-sm"
+              className="enterprise-input pl-9 w-full text-xs"
               value={searchTerm}
               onChange={(e) => { setSearchTerm(e.target.value); setPage(1); }}
             />
           </div>
-          <div className="flex items-center gap-2">
-            <Filter size={14} className="text-textSecondary" />
-          </div>
+          <Filter size={14} className="text-textSecondary" />
           <select
             value={genderFilter}
             onChange={(e) => { setGenderFilter(e.target.value); setPage(1); }}
-            className="bg-bg border border-border rounded-xl px-3 py-2 text-xs font-bold text-textPrimary outline-none"
+            className="enterprise-select text-xs"
           >
             <option value="All">All Genders</option>
             <option value="Male">Male</option>
@@ -458,21 +556,32 @@ export default function PatientManagement() {
           <select
             value={riskFilter}
             onChange={(e) => { setRiskFilter(e.target.value); setPage(1); }}
-            className="bg-bg border border-border rounded-xl px-3 py-2 text-xs font-bold text-textPrimary outline-none"
+            className="enterprise-select text-xs"
           >
             <option value="All">All Risk</option>
             <option value="High Risk">High Risk</option>
             <option value="Normal">Normal</option>
           </select>
           <select
+            value={providerFilter}
+            onChange={(e) => { setProviderFilter(e.target.value); setPage(1); }}
+            className="enterprise-select text-xs"
+          >
+            <option value="All">All Providers</option>
+            <option value="1">1 Provider</option>
+            <option value="2-3">2-3 Providers</option>
+            <option value="4+">4+ Providers</option>
+          </select>
+          <select
             value={cityFilter}
             onChange={(e) => { setCityFilter(e.target.value); setPage(1); }}
-            className="bg-bg border border-border rounded-xl px-3 py-2 text-xs font-bold text-textPrimary outline-none"
+            className="enterprise-select text-xs"
           >
             {cities.map(c => (
               <option key={c} value={c}>{c === 'All' ? 'All Cities' : c}</option>
             ))}
           </select>
+          <span className="text-[10px] text-textSecondary font-mono">{filtered.length} results</span>
         </div>
 
         <div className="overflow-x-auto">
@@ -485,6 +594,7 @@ export default function PatientManagement() {
                 <th>Gender</th>
                 <th>City, State</th>
                 <th>Total Claims</th>
+                <th>Providers Visited</th>
                 <th>Avg Claim Amount</th>
                 <th>Risk Level</th>
                 <th>Actions</th>
@@ -493,15 +603,16 @@ export default function PatientManagement() {
             <tbody>
               {paginated.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="text-center py-10 text-textSecondary text-sm">
+                  <td colSpan={10} className="text-center py-10 text-textSecondary text-sm">
                     No patients found matching your filters.
                   </td>
                 </tr>
               ) : (
                 paginated.map((patient) => {
-                  const riskScore = getPatientRiskScore(patient);
+                  const riskScore = computePatientRisk(patient);
                   const risk = getRiskLevel(riskScore);
-                  const avgClaim = patient.avg_claim_amount || (patient.total_claims ? 0 : 0);
+                  const avgClaim = patient.avg_claim_amount || 0;
+                  const pv = patient.providers_visited || 1;
                   return (
                     <tr key={patient.patient_id} className="hover:bg-bg/50 transition-colors">
                       <td className="font-mono text-xs font-bold text-textSecondary">#{patient.patient_id}</td>
@@ -517,26 +628,32 @@ export default function PatientManagement() {
                       <td className="text-sm font-bold text-textPrimary font-mono">
                         {patient.total_claims || patient.claim_count || 0}
                       </td>
+                      <td>
+                        <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                          pv >= 4 ? 'bg-red-500/10 text-red-500 border border-red-500/20' :
+                          pv >= 2 ? 'bg-amber-500/10 text-amber-500 border border-amber-500/20' :
+                          'bg-green-500/10 text-green-500 border border-green-500/20'
+                        }`}>
+                          <Stethoscope size={9} />
+                          {pv}
+                        </span>
+                      </td>
                       <td className="text-sm font-mono text-textPrimary">
                         {formatCurrency(avgClaim)}
                       </td>
                       <td>
                         <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider ${risk.bg} ${risk.color} border ${risk.border}`}>
-                          {(patient.fraud_count || 0) > 0 ? (
-                            <AlertTriangle size={10} />
-                          ) : (
-                            <ShieldCheck size={10} />
-                          )}
+                          {riskScore >= 0.35 ? <AlertTriangle size={10} /> : <ShieldCheck size={10} />}
                           {risk.label}
                         </span>
                       </td>
                       <td>
                         <button
                           onClick={() => setSelectedPatient(patient)}
-                          className="flex items-center gap-1.5 h-8 px-3 items-center justify-center rounded-lg border border-border bg-surface text-textSecondary hover:border-primary hover:text-primary transition-colors text-xs font-bold"
+                          className="flex items-center gap-1.5 h-8 px-3 rounded-lg border border-border bg-surface text-textSecondary hover:border-primary hover:text-primary transition-colors text-xs font-bold"
                         >
                           <Eye size={14} />
-                          View
+                          View Profile
                         </button>
                       </td>
                     </tr>
@@ -547,14 +664,13 @@ export default function PatientManagement() {
           </table>
         </div>
 
-        {/* Pagination */}
         <div className="border-t border-border/60 px-5 py-3 flex items-center justify-between flex-wrap gap-3">
           <div className="flex items-center gap-3">
             <span className="text-[10px] text-textSecondary font-semibold">Rows per page:</span>
             <select
               value={pageSize}
               onChange={e => { setPageSize(Number(e.target.value)); setPage(1); }}
-              className="bg-bg border border-border rounded-lg px-2 py-1 text-[10px] font-bold text-textPrimary outline-none"
+              className="enterprise-select text-[10px]"
             >
               <option value={10}>10</option>
               <option value={25}>25</option>
@@ -584,14 +700,12 @@ export default function PatientManagement() {
         </div>
       </div>
 
-      {/* Patient Profile Modal */}
       {selectedPatient && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={() => setSelectedPatient(null)}>
           <div
             className="enterprise-card max-w-3xl w-full max-h-[90vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Modal Header */}
             <div className="border-b border-border px-6 py-4 flex items-center justify-between sticky top-0 bg-surface z-10">
               <h3 className="text-lg font-black text-textPrimary flex items-center gap-2">
                 <Activity size={18} className="text-primary" />
@@ -606,7 +720,6 @@ export default function PatientManagement() {
             </div>
 
             <div className="p-6 space-y-6">
-              {/* Avatar & Identity */}
               <div className="flex items-start gap-5">
                 <div className="flex h-20 w-20 items-center justify-center rounded-2xl bg-gradient-to-br from-primary to-secondary text-white text-3xl font-black shadow-lg shadow-primary/20 shrink-0">
                   {selectedPatient.name?.charAt(0) || 'P'}
@@ -614,14 +727,14 @@ export default function PatientManagement() {
                 <div className="flex-1">
                   <h4 className="text-xl font-black text-textPrimary">{selectedPatient.name}</h4>
                   <p className="text-sm text-textSecondary font-mono mt-0.5">Patient ID: #{selectedPatient.patient_id}</p>
-                  <div className="flex items-center gap-3 mt-2">
+                  <div className="flex items-center gap-3 mt-2 flex-wrap">
                     {(() => {
-                      const riskScore = getPatientRiskScore(selectedPatient);
+                      const riskScore = computePatientRisk(selectedPatient);
                       const risk = getRiskLevel(riskScore);
                       return (
                         <span className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-wider ${risk.bg} ${risk.color} border ${risk.border}`}>
-                          {(selectedPatient.fraud_count || 0) > 0 ? <AlertTriangle size={10} /> : <ShieldCheck size={10} />}
-                          {risk.label} Risk
+                          {riskScore >= 0.35 ? <AlertTriangle size={10} /> : <ShieldCheck size={10} />}
+                          {risk.label} Risk ({(riskScore * 100).toFixed(0)}%)
                         </span>
                       );
                     })()}
@@ -629,11 +742,14 @@ export default function PatientManagement() {
                       <MapPin size={12} />
                       {selectedPatient.city}, {selectedPatient.state}
                     </span>
+                    <span className="text-xs text-textSecondary flex items-center gap-1">
+                      <Stethoscope size={12} />
+                      {selectedPatient.providers_visited || 1} providers
+                    </span>
                   </div>
                 </div>
               </div>
 
-              {/* Demographics Grid */}
               <div className="bg-bg rounded-xl p-4 border border-border/50">
                 <h5 className="text-xs font-black uppercase text-textSecondary mb-3 flex items-center gap-2">
                   <Users size={14} />
@@ -653,13 +769,12 @@ export default function PatientManagement() {
                     <p className="font-bold text-textPrimary text-sm mt-0.5">{selectedPatient.city}</p>
                   </div>
                   <div>
-                    <p className="text-[10px] uppercase font-bold text-textSecondary">State</p>
-                    <p className="font-bold text-textPrimary text-sm mt-0.5">{selectedPatient.state}</p>
+                    <p className="text-[10px] uppercase font-bold text-textSecondary">Providers Visited</p>
+                    <p className="font-bold text-textPrimary text-sm mt-0.5">{selectedPatient.providers_visited || 1}</p>
                   </div>
                 </div>
               </div>
 
-              {/* Insurance Details */}
               <div className="bg-bg rounded-xl p-4 border border-border/50">
                 <h5 className="text-xs font-black uppercase text-textSecondary mb-3 flex items-center gap-2">
                   <ShieldCheck size={14} />
@@ -667,15 +782,19 @@ export default function PatientManagement() {
                 </h5>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                   <div>
+                    <p className="text-[10px] uppercase font-bold text-textSecondary">Plan</p>
+                    <p className="font-bold text-textPrimary text-sm mt-0.5">{selectedPatient.insurance_plan || 'N/A'}</p>
+                  </div>
+                  <div>
                     <p className="text-[10px] uppercase font-bold text-textSecondary">Policy ID</p>
                     <p className="font-bold text-textPrimary text-sm font-mono mt-0.5">{selectedPatient.policy_id || 'N/A'}</p>
                   </div>
                   <div>
-                    <p className="text-[10px] uppercase font-bold text-textSecondary">Annual Deductible</p>
+                    <p className="text-[10px] uppercase font-bold text-textSecondary">Deductible</p>
                     <p className="font-bold text-textPrimary text-sm mt-0.5">{formatCurrency(selectedPatient.annual_deductible)}</p>
                   </div>
                   <div>
-                    <p className="text-[10px] uppercase font-bold text-textSecondary">Copay Amount</p>
+                    <p className="text-[10px] uppercase font-bold text-textSecondary">Copay</p>
                     <p className="font-bold text-textPrimary text-sm mt-0.5">{formatCurrency(selectedPatient.copay_amount)}</p>
                   </div>
                   <div>
@@ -692,23 +811,9 @@ export default function PatientManagement() {
                       {selectedPatient.policy_end_date || 'N/A'}
                     </p>
                   </div>
-                  <div>
-                    <p className="text-[10px] uppercase font-bold text-textSecondary">Policy Active</p>
-                    <p className="font-bold text-sm mt-0.5">
-                      {(() => {
-                        const end = selectedPatient.policy_end_date;
-                        if (!end) return <span className="text-textSecondary">Unknown</span>;
-                        const isActive = new Date(end) >= new Date();
-                        return isActive
-                          ? <span className="text-success flex items-center gap-1"><ShieldCheck size={12} /> Active</span>
-                          : <span className="text-danger flex items-center gap-1"><AlertTriangle size={12} /> Expired</span>;
-                      })()}
-                    </p>
-                  </div>
                 </div>
               </div>
 
-              {/* Claims Statistics */}
               <div className="bg-bg rounded-xl p-4 border border-border/50">
                 <h5 className="text-xs font-black uppercase text-textSecondary mb-3 flex items-center gap-2">
                   <DollarSign size={14} />
@@ -745,16 +850,15 @@ export default function PatientManagement() {
                   </div>
                 </div>
 
-                {/* Risk Score Trend Indicator */}
                 <div className="mt-4 p-3 rounded-lg bg-surface border border-border/50">
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-[10px] uppercase font-bold text-textSecondary">Risk Score Trend</span>
+                    <span className="text-[10px] uppercase font-bold text-textSecondary">Composite Risk Score</span>
                     {(() => {
-                      const riskScore = getPatientRiskScore(selectedPatient);
+                      const riskScore = computePatientRisk(selectedPatient);
                       const risk = getRiskLevel(riskScore);
                       return (
                         <span className={`flex items-center gap-1 text-xs font-bold ${risk.color}`}>
-                          {riskScore > 0.5 ? <TrendingUp size={14} /> : <ShieldCheck size={14} />}
+                          {riskScore > 0.35 ? <TrendingUp size={14} /> : <ShieldCheck size={14} />}
                           {formatPercent(riskScore * 100)}
                         </span>
                       );
@@ -764,28 +868,30 @@ export default function PatientManagement() {
                     <div
                       className="h-full rounded-full transition-all duration-500"
                       style={{
-                        width: `${Math.min(100, getPatientRiskScore(selectedPatient) * 100)}%`,
-                        background: getPatientRiskScore(selectedPatient) > 0.65
+                        width: `${Math.min(100, computePatientRisk(selectedPatient) * 100)}%`,
+                        background: computePatientRisk(selectedPatient) > 0.5
                           ? 'linear-gradient(90deg, #f97316, #ef4444)'
-                          : getPatientRiskScore(selectedPatient) > 0.35
+                          : computePatientRisk(selectedPatient) > 0.25
                             ? 'linear-gradient(90deg, #eab308, #f97316)'
                             : 'linear-gradient(90deg, #10b981, #06b6d4)'
                       }}
                     />
                   </div>
+                  <p className="text-[9px] text-textSecondary mt-1.5 italic">
+                    Score based on: fraud rate ({((selectedPatient.fraud_count || 0) / Math.max(1, selectedPatient.total_claims || 1) * 100).toFixed(0)}%), provider diversity ({selectedPatient.providers_visited || 1} providers), claim volume ({selectedPatient.total_claims || 0} claims)
+                  </p>
                 </div>
               </div>
 
-              {/* Recent Claims Table */}
               <div className="bg-bg rounded-xl p-4 border border-border/50">
                 <h5 className="text-xs font-black uppercase text-textSecondary mb-3 flex items-center gap-2">
                   <Activity size={14} />
-                  Recent Claims
+                  Claims History
                 </h5>
                 {claimsLoading ? (
                   <Skeleton rows={5} />
                 ) : patientClaims.length === 0 ? (
-                  <p className="text-xs text-textSecondary py-4 text-center">No claims found for this patient.</p>
+                  <p className="text-xs text-textSecondary py-4 text-center">No claims found for this patient in the current dataset.</p>
                 ) : (
                   <div className="overflow-x-auto">
                     <table className="enterprise-table">
@@ -822,51 +928,11 @@ export default function PatientManagement() {
                 )}
               </div>
 
-              {/* Medical History Summary */}
-              <div className="bg-bg rounded-xl p-4 border border-border/50">
-                <h5 className="text-xs font-black uppercase text-textSecondary mb-3 flex items-center gap-2">
-                  <Heart size={14} />
-                  Medical History Summary
-                </h5>
-                {patientClaims.length === 0 ? (
-                  <p className="text-xs text-textSecondary py-4 text-center">No medical history data available.</p>
-                ) : (
-                  <div className="space-y-3">
-                    {(() => {
-                      const diagCounts = {};
-                      patientClaims.forEach(c => {
-                        if (c.diagnosis_code) {
-                          diagCounts[c.diagnosis_code] = (diagCounts[c.diagnosis_code] || 0) + 1;
-                        }
-                      });
-                      const sorted = Object.entries(diagCounts).sort((a, b) => b[1] - a[1]);
-                      return sorted.map(([code, count]) => (
-                        <div key={code} className="flex items-center justify-between p-2 rounded-lg bg-surface border border-border/50">
-                          <div className="flex items-center gap-3">
-                            <span className="font-mono text-xs font-bold text-primary bg-primary/10 px-2 py-1 rounded">{code}</span>
-                            <span className="text-xs text-textSecondary">
-                              {count} claim{count > 1 ? 's' : ''}
-                            </span>
-                          </div>
-                          <div className="w-24 h-1.5 bg-bg rounded-full overflow-hidden">
-                            <div
-                              className="h-full bg-primary rounded-full"
-                              style={{ width: `${(count / patientClaims.length) * 100}%` }}
-                            />
-                          </div>
-                        </div>
-                      ));
-                    })()}
-                  </div>
-                )}
-              </div>
-
-              {/* Diagnosis Timeline Chart */}
               {patientClaims.length > 1 && (
                 <div className="bg-bg rounded-xl p-4 border border-border/50">
                   <h5 className="text-xs font-black uppercase text-textSecondary mb-3 flex items-center gap-2">
                     <TrendingUp size={14} />
-                    Diagnosis Timeline
+                    Claim Amount Timeline
                   </h5>
                   <div className="h-56 bg-surface rounded-xl p-2">
                     <PlotlyChart
@@ -875,10 +941,26 @@ export default function PatientManagement() {
                         margin: { t: 10, r: 15, l: 50, b: 40 },
                         xaxis: { showgrid: false, title: 'Claim Date' },
                         yaxis: { gridcolor: 'rgba(226,232,240,0.5)', title: 'Amount ($)' },
-                        showlegend: false,
-                        hovermode: 'closest'
+                        showlegend: false, hovermode: 'closest'
                       }}
                     />
+                  </div>
+                </div>
+              )}
+
+              {selectedPatient.provider_names && selectedPatient.provider_names.length > 0 && (
+                <div className="bg-bg rounded-xl p-4 border border-border/50">
+                  <h5 className="text-xs font-black uppercase text-textSecondary mb-3 flex items-center gap-2">
+                    <Stethoscope size={14} />
+                    Providers Visited
+                  </h5>
+                  <div className="space-y-2">
+                    {selectedPatient.provider_names.map((prov, i) => (
+                      <div key={i} className="flex items-center gap-3 p-2 rounded-lg bg-surface border border-border/50">
+                        <span className="text-[10px] font-black text-textSecondary bg-bg rounded px-2 py-1">#{i + 1}</span>
+                        <span className="text-xs font-bold text-textPrimary">{prov}</span>
+                      </div>
+                    ))}
                   </div>
                 </div>
               )}

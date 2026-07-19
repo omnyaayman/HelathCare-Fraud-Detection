@@ -87,6 +87,143 @@ import {
   CANONICAL_GENDER_DISTRIBUTION, CANONICAL_SPECIALTY_DISTRIBUTION
 } from './data/canonicalData';
 
+let _cachedPatients = null;
+function generatePatients() {
+  if (_cachedPatients) return _cachedPatients;
+  const providerNames = CANONICAL_PROVIDERS.map(p => p.name);
+  const providerCities = CANONICAL_PROVIDERS.map(p => p.city);
+  const firstNames = ['James','Mary','Robert','Patricia','John','Jennifer','Michael','Linda','David','Elizabeth','William','Barbara','Richard','Susan','Joseph','Jessica','Thomas','Sarah','Charles','Karen','Christopher','Lisa','Daniel','Nancy','Matthew','Betty','Anthony','Margaret','Mark','Sandra','Donald','Ashley','Steven','Kimberly','Paul','Emily','Andrew','Donna','Joshua','Michelle','Kenneth','Dorothy','Kevin','Carol','Brian','Amanda','George','Melissa','Timothy','Deborah','Ronald','Stephanie','Edward','Rebecca','Jason','Sharon','Jeffrey','Laura','Ryan','Cynthia','Jacob','Kathleen','Gary','Amy','Nicholas','Angela','Eric','Shirley','Jonathan','Anna','Stephen','Brenda','Larry','Pamela','Justin','Emma','Scott','Nicole','Brandon','Helen','Benjamin','Samantha','Samuel','Katherine','Raymond','Christine','Gregory','Debra','Frank','Rachel','Alexander','Carolyn','Patrick','Janet','Jack','Catherine','Dennis','Maria','Jerry','Heather','Tyler','Diane','Aaron','Ruth','Jose','Julie','Nathan','Olivia','Henry','Joyce','Douglas','Virginia','Peter','Victoria','Adam','Kelly','Zachary','Lauren','Walter','Christina','Kyle','Joan','Harold','Ethan','Jeremy','Evelyn','Gerald','Judith','Keith','Megan','Roger','Andrea','Arthur','Cheryl','Terry','Hannah','Lawrence','Jacqueline','Jesse','Martha','Austin','Gloria','Dylan','Teresa','Bryan','Ann','Joe','Sara','Bruce','Madison','Gabriel','Frances','Logan','Kathryn','Albert','Janice','Willie','Jean','Alan','Abigail','Eugene','Alice','Russell','Judy','Vincent','Sophia','Philip','Grace','Bobby','Denise','Johnny','Amber','Bradley','Doris','Roy','Marilyn','Elijah','Danielle','Randy','Beverly','Wayne','Isabella','Howard','Theresa','Artur','Diana','Harry','Natalie','Francis','Brittany','Leonard','Charlotte','Peter','Marie','Scott','Kayla','Christian','Alexis','Austin','Lori'];
+  const lastNames = ['Smith','Johnson','Williams','Brown','Jones','Garcia','Miller','Davis','Rodriguez','Martinez','Hernandez','Lopez','Gonzalez','Wilson','Anderson','Thomas','Taylor','Moore','Jackson','Martin','Lee','Perez','Thompson','White','Harris','Sanchez','Clark','Ramirez','Lewis','Robinson','Walker','Young','Allen','King','Wright','Scott','Torres','Nguyen','Hill','Flores','Green','Adams','Nelson','Baker','Hall','Rivera','Campbell','Mitchell','Carter','Roberts','Gomez','Phillips','Evans','Turner','Diaz','Parker','Cruz','Edwards','Collins','Reyes','Stewart','Morris','Morales','Murphy','Cook','Rogers','Gutierrez','Ortiz','Morgan','Cooper','Peterson','Bailey','Reed','Kelly','Howard','Ramos','Kim','Cox','Ward','Richardson','Watson','Brooks','Chavez','Wood','James','Bennett','Gray','Mendoza','Ruiz','Hughes','Price','Alvarez','Castillo','Sanders','Patel','Myers','Long','Ross','Foster','Jimenez','Powell','Jenkins','Perry','Russell','Sullivan','Bell','Coleman','Butler','Henderson','Barnes','Gonzales','Fisher','Vasquez','Simmons','Patterson','Jordan','Reynolds','Hamilton','Graham','Wallace','Gibson','Bryant','Alexander','Tucker','Harvey','Marshall','Hunt','Dixon','Ramos','Reeves','Burns','Gordon','Shaw','Holmes','Rice','Robertson','Hunt','Black','Daniels','Palmer','Mills','Grant','Cunningham','Williamson','Morant','Stone','Bishop','Warren','Barnes','Ferguson','Rose','Stone','Hawkins','Dunn','Perkins','Hudson','Spencer','Wells','Webb','Simpson','Stevens','Tucker','Porter','Hunter','Hicks','Crawford','Henry','Boyd','Mason','Morales','Kennedy','Warren','Dixon','Ramos','Reeves','Burns'];
+  const diagnoses = CANONICAL_FRAUD_DIAGNOSES;
+  const cities = ['New York','Los Angeles','Chicago','Houston','Phoenix','Philadelphia','San Antonio','San Diego','Dallas','San Jose','Austin','Jacksonville','Fort Worth','Columbus','Charlotte','Indianapolis','San Francisco','Seattle','Denver','Washington','Nashville','Oklahoma City','El Paso','Boston','Portland','Las Vegas','Memphis','Louisville','Baltimore','Milwaukee','Tucson','Fresno','Sacramento','Mesa','Kansas City','Atlanta','Omaha','Colorado Springs','Raleigh','Long Beach','Virginia Beach','Miami','Oakland','Minneapolis','Tulsa','Tampa','Arlington','New Orleans','Wichita','Cleveland'];
+  const states = ['NY','CA','IL','TX','AZ','PA','TX','CA','TX','CA','TX','FL','TX','OH','NC','IN','CA','WA','CO','DC','TN','OK','TX','MA','OR','NV','TN','KY','MD','WI','AZ','CA','CA','AZ','MO','GA','NE','CO','NC','CA','VA','FL','CA','MN','OK','FL','TX','LA','KS','OH'];
+  const genderDist = [];
+  for (let i = 0; i < 490; i++) genderDist.push('Male');
+  for (let i = 0; i < 490; i++) genderDist.push('Female');
+  for (let i = 0; i < 20; i++) genderDist.push('Other');
+  for (let i = genderDist.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [genderDist[i], genderDist[j]] = [genderDist[j], genderDist[i]]; }
+  const patients = [];
+  for (let i = 0; i < 500; i++) {
+    const gender = genderDist[i % genderDist.length];
+    const claimRand = Math.random();
+    const totalClaims = claimRand < 0.45 ? Math.floor(Math.random() * 3) + 1 : claimRand < 0.70 ? Math.floor(Math.random() * 4) + 4 : claimRand < 0.88 ? Math.floor(Math.random() * 8) + 8 : Math.floor(Math.random() * 35) + 16;
+    const maxProviders = Math.min(totalClaims, 8);
+    const providersVisited = Math.max(1, Math.min(maxProviders, Math.floor(totalClaims * (0.25 + Math.random() * 0.45))));
+    const fraudRand = Math.random();
+    const fraudCount = fraudRand < 0.68 ? 0 : fraudRand < 0.88 ? Math.floor(Math.random() * 3) + 1 : Math.floor(Math.random() * 8) + 3;
+    const fraudRate = totalClaims > 0 ? fraudCount / totalClaims : 0;
+    const multiProviderPenalty = providersVisited > 3 ? (providersVisited - 3) * 0.06 : 0;
+    const claimVolumePenalty = totalClaims > 12 ? (totalClaims - 12) * 0.015 : 0;
+    const riskScore = Math.min(0.99, fraudRate * 1.4 + multiProviderPenalty + claimVolumePenalty + Math.random() * 0.05);
+    const avgClaimAmount = Math.round(600 + Math.random() * 1400);
+    const cityIdx = i % cities.length;
+    const patientProviders = [];
+    const usedProviders = new Set();
+    for (let p = 0; p < providersVisited; p++) {
+      let idx;
+      do { idx = Math.floor(Math.random() * providerNames.length); } while (usedProviders.has(idx) && usedProviders.size < providerNames.length);
+      usedProviders.add(idx);
+      patientProviders.push(providerNames[idx]);
+    }
+    patients.push({
+      patient_id: `PAT-${String(1000 + i).padStart(4, '0')}`,
+      name: `${firstNames[i % firstNames.length]} ${lastNames[(i * 7 + 13) % lastNames.length]}`,
+      age: Math.floor(Math.random() * 55) + 18,
+      gender,
+      city: cities[cityIdx],
+      state: states[cityIdx],
+      total_claims: totalClaims,
+      claim_count: totalClaims,
+      total_amount: totalClaims * avgClaimAmount,
+      avg_claim_amount: avgClaimAmount,
+      flagged_claims: fraudCount,
+      fraud_count: fraudCount,
+      fraud_score: Math.round(riskScore * 100),
+      risk_level: riskScore >= 0.5 ? 'critical' : riskScore >= 0.35 ? 'high' : riskScore >= 0.2 ? 'medium' : 'low',
+      providers_visited: providersVisited,
+      provider_names: patientProviders,
+      diagnosis_code: diagnoses[i % diagnoses.length].code,
+      insurance_plan: ['Medicare','Medicaid','Blue Cross PPO','Aetna HMO','UnitedHealth Choice','Cigna Open Access'][i % 6],
+      status: 'active',
+      policy_id: `POL-2025-${String(1000 + i).padStart(6, '0')}`,
+      annual_deductible: 1000 + Math.floor(Math.random() * 2000),
+      copay_amount: 20 + Math.floor(Math.random() * 40),
+      policy_start_date: '2025-01-01',
+      policy_end_date: '2025-12-31',
+    });
+  }
+  _cachedPatients = patients;
+  return patients;
+}
+
+let _cachedSuspiciousPatterns = null;
+function generateSuspiciousPatterns(patients) {
+  if (_cachedSuspiciousPatterns) return _cachedSuspiciousPatterns;
+  const patterns = [];
+  const highRiskPatients = patients.filter(p => p.providers_visited >= 3 && p.total_claims >= 5);
+  const multiDocPatients = patients.filter(p => p.providers_visited >= 4);
+  const rapidFirePatients = patients.filter(p => p.total_claims >= 10);
+  const upcodingSuspects = patients.filter(p => p.fraud_count >= 3);
+  highRiskPatients.slice(0, 3).forEach(p => {
+    patterns.push({
+      id: `PAT-${patterns.length + 1}`,
+      type: 'doctor_shopping',
+      severity: p.providers_visited >= 5 ? 'critical' : 'high',
+      title: 'Multi-Provider Pattern',
+      description: `${p.name} visited ${p.providers_visited} different providers for ${p.diagnosis_code || 'similar diagnoses'} within the review period. This pattern is consistent with doctor shopping.`,
+      patient_id: p.patient_id,
+      patient_name: p.name,
+      providers_count: p.providers_visited,
+      claims_count: p.total_claims,
+      confidence: Math.min(98, 60 + p.providers_visited * 7),
+    });
+  });
+  multiDocPatients.filter(p => !patterns.some(pa => pa.patient_id === p.patient_id)).slice(0, 2).forEach(p => {
+    patterns.push({
+      id: `PAT-${patterns.length + 1}`,
+      type: 'geographic_anomaly',
+      severity: 'high',
+      title: 'Geographic Anomaly',
+      description: `${p.name} received services from providers in ${p.providers_visited} different locations. Distance between providers suggests potential phantom billing network.`,
+      patient_id: p.patient_id,
+      patient_name: p.name,
+      providers_count: p.providers_visited,
+      claims_count: p.total_claims,
+      confidence: Math.min(95, 55 + p.providers_visited * 8),
+    });
+  });
+  rapidFirePatients.filter(p => !patterns.some(pa => pa.patient_id === p.patient_id)).slice(0, 2).forEach(p => {
+    patterns.push({
+      id: `PAT-${patterns.length + 1}`,
+      type: 'rapid_filing',
+      severity: p.total_claims >= 20 ? 'critical' : 'medium',
+      title: 'Rapid Claim Filing',
+      description: `${p.name} submitted ${p.total_claims} claims in the review period, averaging ${(p.total_claims / 12).toFixed(1)} claims/month. Normal average is 1-2 claims/month.`,
+      patient_id: p.patient_id,
+      patient_name: p.name,
+      providers_count: p.providers_visited,
+      claims_count: p.total_claims,
+      confidence: Math.min(92, 45 + p.total_claims * 2),
+    });
+  });
+  upcodingSuspects.filter(p => !patterns.some(pa => pa.patient_id === p.patient_id)).slice(0, 2).forEach(p => {
+    patterns.push({
+      id: `PAT-${patterns.length + 1}`,
+      type: 'upcoding',
+      severity: p.fraud_count >= 5 ? 'critical' : 'high',
+      title: 'Potential Upcoding Ring',
+      description: `${p.name} has ${p.fraud_count} flagged claims (${((p.fraud_count / p.total_claims) * 100).toFixed(0)}% fraud rate). Claims show consistent pattern of billed amounts above standard fee schedule.`,
+      patient_id: p.patient_id,
+      patient_name: p.name,
+      providers_count: p.providers_visited,
+      claims_count: p.total_claims,
+      confidence: Math.min(96, 50 + p.fraud_count * 6),
+    });
+  });
+  _cachedSuspiciousPatterns = patterns;
+  return patterns;
+}
+
 let _cachedClaims = null;
 function generateClaims() {
   if (_cachedClaims) return _cachedClaims;
@@ -308,17 +445,11 @@ const MOCK_DATA = {
     };
   },
   '/api/patients': () => {
-    return CANONICAL_PATIENTS.map(p => ({
-      id: p.id, name: p.name, age: p.age, gender: p.gender,
-      city: p.city, state: p.state,
-      total_claims: p.total_claims, total_amount: p.total_amount,
-      flagged_claims: p.flagged_claims, fraud_score: p.fraud_score / 100,
-      risk_level: p.fraud_score >= 80 ? 'critical' : p.fraud_score >= 60 ? 'high' : p.fraud_score >= 40 ? 'medium' : 'low',
-      insurance_plan: ['Medicare','Medicaid','Blue Cross','Aetna','UnitedHealth','Cigna'][parseInt(p.id.slice(-1)) % 6],
-      status: 'active',
-      claim_count: p.total_claims,
-      fraud_count: p.flagged_claims,
-    }));
+    return generatePatients();
+  },
+  '/api/patients/suspicious-patterns': () => {
+    const patients = generatePatients();
+    return generateSuspiciousPatterns(patients);
   },
   '/api/providers': () => CANONICAL_PROVIDERS,
   '/api/policies': () => CANONICAL_POLICIES,
@@ -440,6 +571,7 @@ const api = {
   updateClaimStatus: (id, status) => request('PATCH', `/api/claims/${id}/status`, { status }),
 
   getPatients: () => request('GET', '/api/patients'),
+  getPatientSuspiciousPatterns: () => request('GET', '/api/patients/suspicious-patterns'),
   getProviders: () => request('GET', '/api/providers'),
   getPolicies: () => request('GET', '/api/policies'),
   getServices: () => request('GET', '/api/services'),
