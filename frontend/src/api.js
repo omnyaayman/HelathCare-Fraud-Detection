@@ -79,7 +79,8 @@ const MOCK_DATA = {
   '/api/stats': {
     total_claims: CANONICAL_FUNNEL.totalClaims,
     total_fraud: CANONICAL_FUNNEL.aiScoredHighRisk,
-    flagged_claims: CANONICAL_FUNNEL.aiScoredHighRisk,
+    flagged_claims: CANONICAL_FUNNEL.formallyFlagged,
+    escalated_alerts: CANONICAL_FUNNEL.escalatedAlerts,
     total_amount: CANONICAL_FINANCIALS.totalClaimValue,
     fraud_amount: CANONICAL_FINANCIALS.fraudExposure,
     normal_claims: CANONICAL_FUNNEL.normalClaims,
@@ -100,7 +101,6 @@ const MOCK_DATA = {
     money_saved: CANONICAL_FINANCIALS.moneySaved,
     financial_exposure: CANONICAL_FINANCIALS.fraudExposure,
     total_claim_amount: CANONICAL_FINANCIALS.totalClaimValue,
-    claims_trend: '+5.2%', fraud_trend: '+3.8%', amount_trend: '+7.1%',
     monthly_data: CANONICAL_MONTHLY_TRENDS,
   },
   '/api/charts/claims-over-time': CANONICAL_CLAIMS_OVER_TIME.map(d => ({

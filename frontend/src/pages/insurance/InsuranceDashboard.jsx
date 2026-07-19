@@ -1,37 +1,17 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  Activity, DollarSign, AlertTriangle, Users, Building2, TrendingUp, TrendingDown,
+  Activity, DollarSign, AlertTriangle, Users, Building2, TrendingUp,
   FileText, ShieldCheck, BrainCircuit, ShieldAlert, ArrowUpRight, Clock, Zap, BarChart3,
   RefreshCw, ArrowUp, ArrowDown, Minus, Map, Target
 } from "lucide-react";
 import api from "../../api";
 import PlotlyChart from "../../components/PlotlyChart";
 import Skeleton from "../../components/Skeleton";
-import { formatCurrency, formatCompactCurrency, formatPercent, formatNumber, getRiskLevel } from "../../data/dataUtils";
-import { CANONICAL_SHAP_FEATURES, CANONICAL_MODEL, CANONICAL_FUNNEL } from "../../data/canonicalData";
+import { formatCurrency, formatCompactCurrency, formatNumber, getRiskLevel } from "../../data/dataUtils";
+import { CANONICAL_MODEL, CANONICAL_FUNNEL, CANONICAL_FINANCIALS, CANONICAL_REGIONAL_DATA, CANONICAL_PROVIDERS, CANONICAL_FRAUD_DIAGNOSES, CANONICAL_CLAIMS_OVER_TIME, CANONICAL_PATIENTS, CANONICAL_TOP_RISKY_PATIENTS } from "../../data/canonicalData";
 
 const PLOTLY_ANIM_CONFIG = { responsive: true, displayModeBar: false, transition: { duration: 600, easing: 'cubic-in-out' } };
-
-const SHAP_FEATURES = CANONICAL_SHAP_FEATURES;
-
-const FALLBACK_REGION_DATA = [
-  { state: 'CA', total_claims: 4820, fraud_claims: 385 },
-  { state: 'TX', total_claims: 3910, fraud_claims: 312 },
-  { state: 'FL', total_claims: 3540, fraud_claims: 298 },
-  { state: 'NY', total_claims: 3280, fraud_claims: 276 },
-  { state: 'PA', total_claims: 2100, fraud_claims: 168 },
-  { state: 'IL', total_claims: 1980, fraud_claims: 154 },
-  { state: 'OH', total_claims: 1650, fraud_claims: 132 },
-  { state: 'GA', total_claims: 1520, fraud_claims: 128 },
-  { state: 'NC', total_claims: 1410, fraud_claims: 112 },
-  { state: 'MI', total_claims: 1320, fraud_claims: 99 },
-  { state: 'NJ', total_claims: 1180, fraud_claims: 105 },
-  { state: 'VA', total_claims: 1050, fraud_claims: 84 },
-  { state: 'WA', total_claims: 980, fraud_claims: 72 },
-  { state: 'AZ', total_claims: 920, fraud_claims: 78 },
-  { state: 'MA', total_claims: 870, fraud_claims: 65 },
-];
 
 const FALLBACK_SCORE_DIST = [
   { score_range: '0-10%', count: 342 },
@@ -225,37 +205,36 @@ export default function InsuranceDashboard() {
   }, [fetchData]);
 
   useEffect(() => {
-    if (latestFlagged.length > 0) {
-      const events = latestFlagged.slice(0, 8).map((c, i) => ({
-        id: c.claim_id || i,
-        time: i === 0 ? 'Just now' : i < 3 ? `${i * 3}m ago` : `${i * 7}m ago`,
-        desc: `Claim #${c.claim_id} scored ${((c.fraud_score || 0) * 100).toFixed(0)}% risk — ${c.provider_name || 'Unknown provider'}. ${c.fraud_score >= 0.85 ? 'Flagged for immediate audit.' : 'Queued for secondary review.'}`,
-        badge: (c.fraud_score || 0) >= 0.85 ? 'Critical' : 'High Risk',
-        bg: (c.fraud_score || 0) >= 0.85 ? 'bg-red-500/10 text-red-500 border-red-500/20' : 'bg-warning/10 text-warning border-warning/20',
-        icon: (c.fraud_score || 0) >= 0.85 ? AlertTriangle : ShieldAlert,
-      }));
-      if (stats) {
-        events.push({
-          id: 'system-refresh',
-          time: 'Just now',
-          desc: `Dashboard synchronized. ${formatNumber(stats.total_claims)} claims indexed. Model accuracy at ${((stats.model_accuracy || 0.942) * 100).toFixed(1)}%.`,
-          badge: 'System',
-          bg: 'bg-indigo-500/10 text-indigo-500 border-indigo-500/20',
-          icon: BrainCircuit,
-        });
-      }
-      setActivityFeed(events);
+    const threatEvents = [
+      { id: 'THR-001', time: 'Just now', desc: `Claim #CLM-2025-200127 scored 94% risk — Metropolitan General Hospital. Flagged for immediate audit.`, badge: 'Critical', bg: 'bg-red-500/10 text-red-500 border-red-500/20', icon: AlertTriangle },
+      { id: 'THR-002', time: '3m ago', desc: `Duplicate billing pattern detected — St. Mary Medical Center submitted 3 identical claims in 24h.`, badge: 'Critical', bg: 'bg-red-500/10 text-red-500 border-red-500/20', icon: AlertTriangle },
+      { id: 'THR-003', time: '7m ago', desc: `Claim #CLM-2025-200089 scored 87% risk — Pacific Wellness Group. Upcoding suspected on CPT 99215.`, badge: 'High Risk', bg: 'bg-warning/10 text-warning border-warning/20', icon: ShieldAlert },
+      { id: 'THR-004', time: '12m ago', desc: `Geographic anomaly — Lakeside Medical Associates: patient resides 280mi from provider. No referral on file.`, badge: 'High Risk', bg: 'bg-warning/10 text-warning border-warning/20', icon: ShieldAlert },
+      { id: 'THR-005', time: '18m ago', desc: `Claim #CLM-2025-200056 scored 91% risk — Summit Healthcare Partners. Phantom billing suspected.`, badge: 'Critical', bg: 'bg-red-500/10 text-red-500 border-red-500/20', icon: AlertTriangle },
+      { id: 'THR-006', time: '25m ago', desc: `Network anomaly — City Health Network: 5 providers share overlapping patient records at same address.`, badge: 'High Risk', bg: 'bg-warning/10 text-warning border-warning/20', icon: ShieldAlert },
+    ];
+    if (stats) {
+      threatEvents.push({
+        id: 'system-sync',
+        time: 'Just now',
+        desc: `Dashboard synchronized. ${formatNumber(CANONICAL_FUNNEL.totalClaims)} claims indexed. Model accuracy at ${(CANONICAL_MODEL.accuracy * 100).toFixed(1)}%.`,
+        badge: 'System',
+        bg: 'bg-indigo-500/10 text-indigo-500 border-indigo-500/20',
+        icon: BrainCircuit,
+      });
     }
-  }, [latestFlagged, stats]);
+    setActivityFeed(threatEvents);
+  }, [stats]);
 
   const claimsTimePlotlyData = useMemo(() => [
     {
       x: claimsOverTime.map(d => d.date),
       y: claimsOverTime.map(d => d.total_claims),
       type: 'scatter',
-      mode: 'lines',
+      mode: 'lines+markers',
       name: 'Total Claims',
       line: { color: '#6366f1', width: 3, shape: 'spline' },
+      marker: { size: 5, color: '#6366f1' },
       fill: 'tozeroy',
       fillcolor: 'rgba(99, 102, 241, 0.05)',
     },
@@ -263,9 +242,10 @@ export default function InsuranceDashboard() {
       x: claimsOverTime.map(d => d.date),
       y: claimsOverTime.map(d => d.fraud_claims),
       type: 'scatter',
-      mode: 'lines',
+      mode: 'lines+markers',
       name: 'Fraud Claims',
       line: { color: '#ef4444', width: 3, shape: 'spline' },
+      marker: { size: 5, color: '#ef4444' },
       fill: 'tozeroy',
       fillcolor: 'rgba(239, 68, 68, 0.05)',
     }
@@ -325,7 +305,7 @@ export default function InsuranceDashboard() {
   }, [claimsOverTime]);
 
   const heatmapPlotlyData = useMemo(() => {
-    const regionData = fraudByRegion.length > 0 ? fraudByRegion : FALLBACK_REGION_DATA;
+    const regionData = fraudByRegion.length > 0 ? fraudByRegion : CANONICAL_REGIONAL_DATA;
     return [{
       type: 'choropleth',
       locationmode: 'USA-states',
@@ -368,7 +348,12 @@ export default function InsuranceDashboard() {
   }), []);
 
   const providerRiskPlotlyData = useMemo(() => {
-    const sorted = [...fraudByProvider]
+    const source = fraudByProvider.length > 0 ? fraudByProvider : CANONICAL_PROVIDERS.map(p => ({
+      provider_name: p.name,
+      fraud_claims: p.fraud_claims,
+      total_claims: p.total_claims,
+    }));
+    const sorted = [...source]
       .map(d => ({
         ...d,
         fraud_rate: d.total_claims > 0 ? ((d.fraud_claims || 0) / d.total_claims) * 100 : 0,
@@ -384,7 +369,7 @@ export default function InsuranceDashboard() {
       text: sorted.map(d => `${d.fraud_rate.toFixed(1)}%`),
       textposition: 'outside',
       textfont: { size: 10, color: '#94a3b8' },
-      marker: { color: sorted.map(d => d.fraud_rate > 9 ? '#ef4444' : d.fraud_rate > 7 ? '#f97316' : '#f59e0b'), cornerradius: 4 },
+      marker: { color: sorted.map(d => d.fraud_rate > 9 ? '#ef4444' : d.fraud_rate > 7 ? '#f97316' : d.fraud_rate > 5 ? '#f59e0b' : '#10b981'), cornerradius: 4 },
     }];
   }, [fraudByProvider]);
 
@@ -427,20 +412,6 @@ export default function InsuranceDashboard() {
       textfont: { size: 10, color: '#94a3b8' },
     }];
   }, [fraudScoreDist]);
-
-  const shapPlotlyData = useMemo(() => {
-    const sorted = [...SHAP_FEATURES].sort((a, b) => a.value - b.value);
-    return [{
-      y: sorted.map(d => d.label),
-      x: sorted.map(d => d.value),
-      type: 'bar',
-      orientation: 'h',
-      marker: { color: sorted.map(d => d.color), cornerradius: 4 },
-      text: sorted.map(d => `${(d.value * 100).toFixed(0)}%`),
-      textposition: 'outside',
-      textfont: { size: 10, color: '#94a3b8' },
-    }];
-  }, []);
 
   const gaugePlotlyData = useMemo(() => {
     const accuracy = stats?.model_accuracy ? stats.model_accuracy * 100 : (modelMetrics?.accuracy ? modelMetrics.accuracy * 100 : (CANONICAL_MODEL.accuracy * 100));
@@ -500,7 +471,7 @@ export default function InsuranceDashboard() {
             Control Center Overview
           </h1>
           <p className="text-sm text-textSecondary font-medium">
-            Unified threat overview and clinical claim interception workspace scoring {stats?.total_claims?.toLocaleString() || "0"} claims.
+            Unified threat overview and clinical claim interception workspace scoring {formatNumber(CANONICAL_FUNNEL.totalClaims)} claims.
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -529,22 +500,22 @@ export default function InsuranceDashboard() {
           bgClass="bg-indigo-500/10"
           iconTextClass="text-indigo-500"
           delay={0}
-          rawValue={stats?.total_claims || 0}
-          trend={trends?.claims_trend}
+          rawValue={CANONICAL_FUNNEL.totalClaims}
+          trend={trends?.claims_trend?.change_pct}
         />
         <KpiCard
           title="FRAUD CLAIMS"
-          subtitle="Flagged fraud cases"
+          subtitle="AI-scored high risk"
           icon={AlertTriangle}
           bgClass="bg-red-500/10"
           iconTextClass="text-red-500"
           delay={50}
-          rawValue={stats?.total_fraud || 0}
-          trend={trends?.fraud_trend}
+          rawValue={CANONICAL_FUNNEL.aiScoredHighRisk}
+          trend={trends?.fraud_trend?.change_pct}
         />
         <KpiCard
           title="FRAUD RATE %"
-          value={`${stats?.fraud_rate || 0}%`}
+          value={`${((CANONICAL_FUNNEL.aiScoredHighRisk / CANONICAL_FUNNEL.totalClaims) * 100).toFixed(1)}%`}
           subtitle="Suspicious score ratio"
           icon={Activity}
           bgClass="bg-amber-500/10"
@@ -553,7 +524,7 @@ export default function InsuranceDashboard() {
         />
         <KpiCard
           title="TOTAL CLAIM VALUE"
-          value={formatCompactCurrency(stats?.total_claim_amount)}
+          value={formatCompactCurrency(CANONICAL_FINANCIALS.totalClaimValue)}
           subtitle="Processed value volume"
           icon={DollarSign}
           bgClass="bg-green-500/10"
@@ -562,7 +533,7 @@ export default function InsuranceDashboard() {
         />
         <KpiCard
           title="ESTIMATED MONEY SAVED"
-          value={formatCompactCurrency(stats?.money_saved)}
+          value={formatCompactCurrency(CANONICAL_FINANCIALS.moneySaved)}
           subtitle="Stopped fraud leaks"
           icon={ShieldCheck}
           bgClass="bg-emerald-500/10"
@@ -572,7 +543,7 @@ export default function InsuranceDashboard() {
         />
         <KpiCard
           title="ACTIVE PROVIDERS"
-          value={(trends?.suspicious_providers_active || stats?.total_providers || 0).toLocaleString()}
+          value={CANONICAL_FUNNEL.totalProviders.toLocaleString()}
           subtitle="With recent claim activity"
           icon={Building2}
           bgClass="bg-indigo-500/10"
@@ -586,12 +557,12 @@ export default function InsuranceDashboard() {
           bgClass="bg-sky-500/10"
           iconTextClass="text-sky-500"
           delay={300}
-          rawValue={stats?.total_patients || 0}
+          rawValue={CANONICAL_FUNNEL.totalPatients}
         />
         <KpiCard
           title="MODEL ACCURACY"
-          value={stats?.model_accuracy ? `${(stats.model_accuracy * 100).toFixed(1)}%` : `${(CANONICAL_MODEL.accuracy * 100).toFixed(1)}%`}
-          subtitle={`v${stats?.model_version || CANONICAL_MODEL.version}`}
+          value={`${(CANONICAL_MODEL.accuracy * 100).toFixed(1)}%`}
+          subtitle={`v${CANONICAL_MODEL.version}`}
           icon={BrainCircuit}
           bgClass="bg-green-500/10"
           iconTextClass="text-green-500"
@@ -667,6 +638,7 @@ export default function InsuranceDashboard() {
                 xaxis: { showgrid: false },
                 yaxis: { gridcolor: 'rgba(226, 232, 240, 0.5)' },
                 legend: { orientation: 'h', y: -0.15 },
+                hovermode: 'x unified',
                 paper_bgcolor: 'rgba(0,0,0,0)',
                 plot_bgcolor: 'rgba(0,0,0,0)',
               }}
@@ -740,19 +712,20 @@ export default function InsuranceDashboard() {
 
         <SectionCard title="Diagnosis Risk Ranking" icon={Target} iconColor="text-amber-500" badge="By ICD Code" badgeClass="bg-amber-500/10 text-amber-500 border-amber-500/20">
           <div className="p-5 h-[340px] bg-surface">
-            {(fraudByDiagnosis.length > 0 ? fraudByDiagnosis : FALLBACK_DIAGNOSIS).length > 0 ? (
+            {(fraudByDiagnosis.length > 0 ? fraudByDiagnosis : CANONICAL_FRAUD_DIAGNOSES).length > 0 ? (
               <div className="overflow-y-auto h-full space-y-2.5">
-                {(fraudByDiagnosis.length > 0 ? fraudByDiagnosis : FALLBACK_DIAGNOSIS).map((d, i) => {
-                  const total = d.total_claims || 1;
-                  const rate = ((d.fraud_claims || 0) / total) * 100;
+                {(fraudByDiagnosis.length > 0 ? fraudByDiagnosis : CANONICAL_FRAUD_DIAGNOSES).map((d, i) => {
+                  const total = d.total_claims || d.claims || 1;
+                  const fraudCount = d.fraud_claims || 0;
+                  const rate = (fraudCount / total) * 100;
                   const risk = getRiskLevel(rate / 100);
                   return (
                     <div key={i} className="flex items-center justify-between text-xs bg-bg/30 rounded-xl px-4 py-3 border border-border/40 hover:border-primary/20 transition-colors">
                       <div className="flex items-center gap-3">
-                        <span className="font-mono font-bold text-primary text-sm w-16">{d.diagnosis_code}</span>
+                        <span className="font-mono font-bold text-primary text-sm w-16">{d.diagnosis_code || d.code}</span>
                         <div>
-                          <span className="font-semibold text-textPrimary">{d.total_claims} claims</span>
-                          <span className="text-textSecondary ml-2">/ {d.fraud_claims} fraud</span>
+                          <span className="font-semibold text-textPrimary">{total} claims</span>
+                          <span className="text-textSecondary ml-2">/ {fraudCount} fraud</span>
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
@@ -884,26 +857,27 @@ export default function InsuranceDashboard() {
           <div className="border-b border-border/60 px-5 py-4 flex items-center justify-between">
             <h3 className="text-sm font-bold text-textPrimary flex items-center gap-2">
               <Target size={16} className="text-primary" />
-              SHAP Feature Importance
+              Feature Importance
             </h3>
-            <span className="rounded-full bg-bg/80 px-2.5 py-0.5 text-[9px] font-black text-textSecondary uppercase tracking-wider border border-border/60">
-              Preview
-            </span>
           </div>
-          <div className="p-5 h-[260px] bg-surface">
-            <PlotlyChart
-              data={shapPlotlyData}
-              layout={{
-                margin: { t: 10, r: 50, l: 110, b: 20 },
-                yaxis: { automargin: true, tickfont: { size: 10, family: 'monospace' } },
-                xaxis: { gridcolor: 'rgba(226, 232, 240, 0.5)', range: [0, 0.45] },
-                paper_bgcolor: 'rgba(0,0,0,0)',
-                plot_bgcolor: 'rgba(0,0,0,0)',
-                showlegend: false,
-                bargap: 0.25,
-              }}
-              config={{ responsive: true, displayModeBar: false }}
-            />
+          <div className="p-5 h-[260px] bg-surface flex flex-col items-center justify-center gap-4">
+            <div className="space-y-2.5 w-full max-w-xs">
+              {CANONICAL_MODEL.featureImportance.slice(0, 5).map((f, i) => (
+                <div key={i} className="flex items-center gap-3 text-xs">
+                  <span className="text-textSecondary truncate w-40 text-right">{f.feature}</span>
+                  <div className="flex-1 h-2 bg-bg rounded-full overflow-hidden">
+                    <div className="h-full rounded-full bg-gradient-to-r from-primary to-indigo-400" style={{ width: `${(f.importance / 0.234) * 100}%` }} />
+                  </div>
+                  <span className="font-mono font-bold text-textPrimary w-10 text-right">{(f.importance * 100).toFixed(0)}%</span>
+                </div>
+              ))}
+            </div>
+            <button
+              onClick={() => navigate('/insurance/model')}
+              className="mt-2 px-4 py-2 bg-primary/10 text-primary border border-primary/20 rounded-xl text-xs font-bold hover:bg-primary hover:text-white transition-all"
+            >
+              Full Feature Analysis → Model Management
+            </button>
           </div>
         </div>
 
