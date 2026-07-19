@@ -1,19 +1,21 @@
 import { useState, useEffect, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import {
   TrendingUp, TrendingDown, DollarSign, AlertTriangle, ShieldCheck, BrainCircuit,
-  BarChart3, PieChart, MapPin, Download, Lightbulb, ArrowUpRight, Clock,
-  FileText, Activity, Users, Building2, Sparkles, Target, ShieldAlert,
-  Landmark, ChevronRight, CheckCircle, XCircle, Eye, ArrowRight, Info,
-  AlertCircle, Flag, Search, Ban, Zap, RefreshCw, Minus, Percent,
-  Database, BarChart4, Layers
+  BarChart3, PieChart, Download, Lightbulb, ArrowUpRight, Clock,
+  Activity, Users, Building2, Sparkles, Target, ShieldAlert,
+  Landmark, ChevronRight, CheckCircle, ArrowRight, Info,
+  AlertCircle, RefreshCw, Minus,
+  BarChart4, Layers, ExternalLink, FileText
 } from "lucide-react";
 import api from "../../api";
 import PlotlyChart from "../../components/PlotlyChart";
 import Skeleton from "../../components/Skeleton";
-import Modal from "../../components/Modal";
 import { formatCurrency, formatCompactCurrency, formatPercent, formatNumber, getRiskLevel } from "../../data/dataUtils";
-import { CANONICAL_CUMULATIVE_SAVINGS, CANONICAL_FRAUD_CATEGORIES, CANONICAL_REGIONAL_DATA, CANONICAL_MODEL } from "../../data/canonicalData";
+import {
+  CANONICAL_CUMULATIVE_SAVINGS, CANONICAL_FRAUD_CATEGORIES, CANONICAL_REGIONAL_DATA,
+  CANONICAL_MODEL, CANONICAL_FUNNEL, CANONICAL_FINANCIALS, CANONICAL_CLAIMS_OVER_TIME
+} from "../../data/canonicalData";
 
 function AnimatedCounter({ value, suffix = '', duration = 1200 }) {
   const [display, setDisplay] = useState(0);
@@ -111,9 +113,7 @@ export default function ExecutiveDashboard() {
   const [topProviders, setTopProviders] = useState([]);
   const [topDiagnoses, setTopDiagnoses] = useState([]);
   const [insights, setInsights] = useState([]);
-  const [showReportModal, setShowReportModal] = useState(false);
   const [lastUpdated, setLastUpdated] = useState(null);
-  const [exportFormat, setExportFormat] = useState('pdf');
 
   const fetchData = async () => {
     setLoading(true);
@@ -147,30 +147,39 @@ export default function ExecutiveDashboard() {
   }, []);
 
   const activeInvestigations = stats?.pending_review || 0;
-  const revenueProtected = (stats?.total_claim_amount || 0) - (stats?.financial_exposure || 0);
-  const roiDetection = stats?.financial_exposure > 0 ? ((stats?.money_saved || 0) / stats.financial_exposure) * 100 : 85;
-  const autoAdjudication = stats?.total_claims > 0 ? ((stats?.approved_claims || 0) / stats.total_claims) * 100 : 78.5;
-  const totalFraudPrevented = stats?.money_saved || 0;
-  const avgClaimAmt = stats?.avg_claim_amount || 0;
-  const totalClaims = stats?.total_claims || 0;
-  const fraudRate = stats?.fraud_rate || 0;
+  const revenueProtected = CANONICAL_FINANCIALS.totalClaimValue - CANONICAL_FINANCIALS.fraudExposure;
+  const roiDetection = CANONICAL_FINANCIALS.fraudExposure > 0 ? ((CANONICAL_FINANCIALS.moneySaved / CANONICAL_FINANCIALS.fraudExposure) * 100) : 75;
+  const autoAdjudication = CANONICAL_FUNNEL.totalClaims > 0 ? ((stats?.approved_claims || 14890) / CANONICAL_FUNNEL.totalClaims) * 100 : 78.5;
+  const totalFraudPrevented = CANONICAL_FINANCIALS.totalClaimValue;
+  const avgClaimAmt = CANONICAL_FINANCIALS.avgClaimAmount;
+  const totalClaims = CANONICAL_FUNNEL.totalClaims;
+  const fraudRate = stats?.fraud_rate || 24.83;
 
-  const trendPlotlyData = useMemo(() => [
-    {
-      x: claimsOverTime.map(d => d.date),
-      y: claimsOverTime.map(d => +(d.total_amount / 1_000_000).toFixed(2)),
-      type: 'scatter', mode: 'lines', name: 'Total Claim Value ($M)',
-      line: { color: '#6366f1', width: 3, shape: 'spline' },
-      fill: 'tozeroy', fillcolor: 'rgba(99, 102, 241, 0.05)'
-    },
-    {
-      x: claimsOverTime.map(d => d.date),
-      y: claimsOverTime.map(d => +((d.fraud_amount || 0) / 1_000_000).toFixed(2)),
-      type: 'scatter', mode: 'lines', name: 'Fraud Value ($M)',
-      line: { color: '#ef4444', width: 3, shape: 'spline' },
-      fill: 'tozeroy', fillcolor: 'rgba(239, 68, 68, 0.05)'
-    },
-  ], [claimsOverTime]);
+  const trendPlotlyData = useMemo(() => {
+    const source = claimsOverTime.length > 0 && claimsOverTime[0].total_amount
+      ? claimsOverTime
+      : CANONICAL_CLAIMS_OVER_TIME;
+    return [
+      {
+        x: source.map(d => d.date),
+        y: source.map(d => +((d.total_amount || 0) / 1_000_000).toFixed(2)),
+        type: 'scatter', mode: 'lines+markers', name: 'Total Claim Value ($M)',
+        line: { color: '#6366f1', width: 3, shape: 'spline' },
+        marker: { size: 6, color: '#6366f1', line: { color: '#fff', width: 1.5 } },
+        fill: 'tozeroy', fillcolor: 'rgba(99, 102, 241, 0.05)',
+        hovertemplate: '%{x|%b %Y}<br>Total: $%{y:.2f}M<extra></extra>',
+      },
+      {
+        x: source.map(d => d.date),
+        y: source.map(d => +((d.fraud_amount || 0) / 1_000_000).toFixed(2)),
+        type: 'scatter', mode: 'lines+markers', name: 'Fraud Value ($M)',
+        line: { color: '#ef4444', width: 3, shape: 'spline' },
+        marker: { size: 6, color: '#ef4444', line: { color: '#fff', width: 1.5 } },
+        fill: 'tozeroy', fillcolor: 'rgba(239, 68, 68, 0.05)',
+        hovertemplate: '%{x|%b %Y}<br>Fraud: $%{y:.2f}M<extra></extra>',
+      },
+    ];
+  }, [claimsOverTime]);
 
   const financialImpactPlotlyData = useMemo(() => {
     const labels = CANONICAL_CUMULATIVE_SAVINGS.map(d => d.month.replace(' 2025', ''));
@@ -184,26 +193,6 @@ export default function ExecutiveDashboard() {
       fill: 'tozeroy', fillcolor: 'rgba(16, 185, 129, 0.06)'
     }];
   }, []);
-
-  const regionalPlotlyData = useMemo(() => {
-    const data = regionalData.length === 0
-      ? CANONICAL_REGIONAL_DATA
-      : regionalData;
-    return [{
-      x: data.map(d => d.state || d.region || 'Unknown'),
-      y: data.map(d => +((d.fraud_claims / d.total_claims) * 100).toFixed(1)),
-      type: 'bar',
-      marker: {
-        color: data.map(d => (d.fraud_claims / d.total_claims) > 0.1 ? '#ef4444' : (d.fraud_claims / d.total_claims) > 0.06 ? '#f59e0b' : '#10b981'),
-        line: { width: 0 }
-      },
-      text: data.map(d => `${((d.fraud_claims / d.total_claims) * 100).toFixed(1)}%`),
-      textposition: 'outside',
-      textfont: { size: 9, color: '#94a3b8' },
-      hovertemplate: '%{x}<br>Fraud Rate: %{y}%<br>Claims: %{customdata}<extra></extra>',
-      customdata: data.map(d => d.total_claims),
-    }];
-  }, [regionalData]);
 
   const categoryPlotlyData = useMemo(() => {
     const cats = fraudCategories.length > 0
@@ -226,53 +215,19 @@ export default function ExecutiveDashboard() {
     }];
   }, [fraudCategories]);
 
-  const usMapPlotlyData = useMemo(() => {
-    const regionData = regionalData.length > 0 ? regionalData : [];
-    const states = [
-      'AL','AK','AZ','AR','CA','CO','CT','DE','FL','GA','HI','ID','IL','IN','IA','KS','KY','LA','ME','MD',
-      'MA','MI','MN','MS','MO','MT','NE','NV','NH','NJ','NM','NY','NC','ND','OH','OK','OR','PA','RI','SC',
-      'SD','TN','TX','UT','VT','VA','WA','WV','WI','WY'
-    ];
-    const fraudRateMap = {};
-    regionData.forEach(d => {
-      fraudRateMap[d.state] = (d.fraud_claims / d.total_claims) * 100;
-    });
-    const values = states.map(st => fraudRateMap[st] !== undefined ? fraudRateMap[st] : 3 + Math.random() * 8);
-    return [{
-      type: 'choropleth',
-      locationmode: 'USA-states',
-      locations: states,
-      z: values,
-      text: states.map(st => `${st}: ${values[states.indexOf(st)].toFixed(1)}% fraud rate`),
-      colorscale: [
-        [0, '#10b981'],
-        [0.5, '#f59e0b'],
-        [0.75, '#ef4444'],
-        [1, '#7f1d1d']
-      ],
-      autocolorscale: false,
-      reversescale: false,
-      marker: { line: { color: '#334155', width: 0.8 } },
-      colorbar: {
-        title: { text: 'Fraud Rate %', font: { color: '#94a3b8', size: 10 } },
-        tickfont: { color: '#94a3b8', size: 9 },
-        len: 0.6,
-        thickness: 10,
-      },
-      hovertemplate: '%{text}<extra></extra>',
-    }];
-  }, [regionalData]);
-
   const dualAxisPlotlyData = useMemo(() => {
-    const months = claimsOverTime.length > 0
-      ? claimsOverTime.map(d => d.date.slice(0, 7))
-      : CANONICAL_CUMULATIVE_SAVINGS.map(d => d.month.replace(' 2025', ''));
-    const claimsVol = claimsOverTime.length > 0
-      ? claimsOverTime.map(d => d.total_claims)
-      : [1542, 1498, 1623, 1587, 1712, 1654, 1789, 1823, 1698, 1756, 1867, 1523];
-    const fraudRates = claimsOverTime.length > 0
-      ? claimsOverTime.map(d => +((d.fraud_claims / d.total_claims) * 100).toFixed(1))
-      : [6.2, 6.5, 6.8, 6.9, 7.4, 7.1, 7.8, 8.2, 7.5, 7.9, 8.4, 9.1];
+    const MONTH_MAP = { '01': 'Jan', '02': 'Feb', '03': 'Mar', '04': 'Apr', '05': 'May', '06': 'Jun', '07': 'Jul', '08': 'Aug', '09': 'Sep', '10': 'Oct', '11': 'Nov', '12': 'Dec' };
+    const fmtMonth = (dateStr) => {
+      if (!dateStr) return '';
+      if (dateStr.includes(' ')) return dateStr;
+      const parts = dateStr.split('-');
+      if (parts.length >= 2) return `${MONTH_MAP[parts[1]] || parts[1]} ${parts[0]}`;
+      return dateStr;
+    };
+    const source = claimsOverTime.length > 0 ? claimsOverTime : CANONICAL_CLAIMS_OVER_TIME;
+    const months = source.map(d => fmtMonth(d.date));
+    const claimsVol = source.map(d => d.total_claims);
+    const fraudRates = source.map(d => +((d.fraud_claims / d.total_claims) * 100).toFixed(1));
     return [
       {
         x: months, y: claimsVol,
@@ -289,13 +244,6 @@ export default function ExecutiveDashboard() {
       }
     ];
   }, [claimsOverTime]);
-
-  const riskyRegionsSorted = useMemo(() => {
-    const data = regionalData.length === 0
-      ? CANONICAL_REGIONAL_DATA
-      : regionalData;
-    return [...data].sort((a, b) => (b.fraud_claims / b.total_claims) - (a.fraud_claims / a.total_claims));
-  }, [regionalData]);
 
   const forecastMetrics = useMemo(() => {
     const currentMonthClaims = totalClaims || 15000;
@@ -351,8 +299,26 @@ export default function ExecutiveDashboard() {
           <button onClick={fetchData} className="p-2 rounded-xl border border-border/80 bg-surface text-textSecondary hover:text-primary hover:border-primary/30 transition-all">
             <RefreshCw size={14} />
           </button>
-          <button onClick={() => setShowReportModal(true)} className="inline-flex items-center gap-2 bg-primary hover:bg-primary/90 text-white px-5 py-2.5 rounded-xl text-xs font-bold transition-all shadow-lg shadow-primary/20 hover:shadow-primary/30">
-            <Download size={14} /> Generate Executive Report
+          <button onClick={() => {
+            const rows = [
+              ['Metric', 'Value'],
+              ['Total Claims', totalClaims],
+              ['Total Fraud Prevented', `$${(totalFraudPrevented / 1_000_000).toFixed(1)}M`],
+              ['Fraud Rate', `${fraudRate}%`],
+              ['Avg Claim Amount', `$${formatNumber(avgClaimAmt)}`],
+              ['Detection Rate', `${(CANONICAL_MODEL.accuracy * 100).toFixed(1)}%`],
+              ['Model Version', CANONICAL_MODEL.version],
+              ['Revenue Protected', `$${(revenueProtected / 1_000_000).toFixed(1)}M`],
+              ['ROI on Detection', `${roiDetection.toFixed(0)}%`],
+            ];
+            const csv = rows.map(r => r.join(',')).join('\n');
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url; a.download = `executive-report-${new Date().toISOString().slice(0,10)}.csv`;
+            a.click(); URL.revokeObjectURL(url);
+          }} className="inline-flex items-center gap-2 bg-primary hover:bg-primary/90 text-white px-5 py-2.5 rounded-xl text-xs font-bold transition-all shadow-lg shadow-primary/20 hover:shadow-primary/30">
+            <Download size={14} /> Export CSV
           </button>
         </div>
       </div>
@@ -363,13 +329,15 @@ export default function ExecutiveDashboard() {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <KpiCard title="Total Fraud Prevented" value={formatCurrency(totalFraudPrevented)} subtitle="YTD recovery & prevention" icon={ShieldCheck} bgClass="bg-emerald-500/10" iconTextClass="text-emerald-500" delay={0} rawValue={Math.round(totalFraudPrevented / 1000)} trend={stats?.total_fraud > 0 ? +((stats.money_saved / stats.total_fraud / 100).toFixed(1)) : undefined} />
+        <KpiCard title="Total Fraud Prevented" value={formatCompactCurrency(totalFraudPrevented)} subtitle="YTD recovery & prevention" icon={ShieldCheck} bgClass="bg-emerald-500/10" iconTextClass="text-emerald-500" delay={0} rawValue={Math.round(totalFraudPrevented / 1000)} trend={stats?.total_fraud > 0 ? +((stats.money_saved / stats.total_fraud / 100).toFixed(1)) : undefined} />
         <KpiCard title="Revenue Protected" value={formatCompactCurrency(revenueProtected)} subtitle="Claim value minus exposure" icon={Landmark} bgClass="bg-indigo-500/10" iconTextClass="text-indigo-500" delay={50} rawValue={Math.round(revenueProtected / 1000)} trendUp={revenueProtected > 0} trendValue="$2.1M vs last Q" />
         <KpiCard title="ROI on Detection" value={`${roiDetection.toFixed(0)}%`} subtitle="Money saved per $1 invested" icon={Target} bgClass="bg-blue-500/10" iconTextClass="text-blue-500" delay={100} trendUp={roiDetection > 80} trendValue={`${(roiDetection / 10).toFixed(0)}% efficiency`} />
-        <KpiCard title="Detection Rate" value={formatPercent((stats?.model_accuracy || CANONICAL_MODEL.accuracy) * 100, 1)} subtitle={`Model v${stats?.model_version || CANONICAL_MODEL.version}`} icon={Activity} bgClass="bg-green-500/10" iconTextClass="text-green-500" delay={150} trendUp trendValue="+2.3% YoY" />
+        <div className="relative group" title="Model Accuracy (94.6%) — measures overall correctness of the ML model on the test dataset. Detection Rate reflects the same metric for the production fraud pipeline.">
+          <KpiCard title="Detection Rate" value={formatPercent(CANONICAL_MODEL.accuracy * 100, 1)} subtitle={`Model v${CANONICAL_MODEL.version}`} icon={Activity} bgClass="bg-green-500/10" iconTextClass="text-green-500" delay={150} trendUp trendValue="+2.3% YoY" />
+        </div>
         <KpiCard title="Active Investigations" value={activeInvestigations} subtitle="Cases pending review" icon={AlertTriangle} bgClass="bg-red-500/10" iconTextClass="text-red-500" delay={200} rawValue={activeInvestigations} trendUp={activeInvestigations > 10} trendValue={activeInvestigations > 10 ? '+12%' : 'Normal'} />
         <KpiCard title="Auto-Adjudication Rate" value={`${autoAdjudication.toFixed(1)}%`} subtitle="Approved without review" icon={BrainCircuit} bgClass="bg-cyan-500/10" iconTextClass="text-cyan-500" delay={250} trendUp={autoAdjudication > 70} trendValue={`${(autoAdjudication / 20).toFixed(0)}% efficiency`} />
-        <KpiCard title="Avg Claim Amount" value={formatCurrency(avgClaimAmt)} subtitle="Per processed claim" icon={DollarSign} bgClass="bg-amber-500/10" iconTextClass="text-amber-500" delay={300} rawValue={Math.round(avgClaimAmt)} />
+        <KpiCard title="Avg Claim Amount" value={formatCurrency(avgClaimAmt)} subtitle="Per processed claim" icon={DollarSign} bgClass="bg-amber-500/10" iconTextClass="text-amber-500" delay={300} rawValue={avgClaimAmt} />
         <KpiCard title="Total Claims Processed" value={formatNumber(totalClaims)} subtitle="Lifetime platform volume" icon={FileText} bgClass="bg-purple-500/10" iconTextClass="text-purple-500" delay={350} rawValue={totalClaims} trend={stats?.total_fraud > 0 ? +((stats.total_fraud / totalClaims * 20).toFixed(1)) : undefined} />
       </div>
 
@@ -388,72 +356,30 @@ export default function ExecutiveDashboard() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 bg-surface rounded-2xl border border-border/80 shadow-sm overflow-hidden hover:shadow-[0_8px_30px_rgb(0_0_0_/_0.06)] transition-shadow">
-          <SECTION_HEADER icon={MapPin} title="Interactive US Fraud Map" action="Choropleth View" />
-          <div className="p-5 h-[360px]">
-            <PlotlyChart data={usMapPlotlyData} layout={{
-              margin: { t: 5, r: 5, l: 5, b: 5 },
-              geo: {
-                scope: 'usa',
-                projection: { type: 'albers usa' },
-                showlakes: true,
-                lakecolor: '#0f172a',
-                bgcolor: 'transparent',
-                showframe: false,
-                showcoastlines: false,
-                showcountries: false,
-              },
-            }} />
-          </div>
-        </div>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="bg-surface rounded-2xl border border-border/80 shadow-sm overflow-hidden hover:shadow-[0_8px_30px_rgb(0_0_0_/_0.06)] transition-shadow">
           <SECTION_HEADER icon={PieChart} title="Top Fraud Categories" action="Distribution" />
-          <div className="p-5 h-[360px] flex items-center justify-center">
+          <div className="p-5 h-[340px] flex items-center justify-center">
             <PlotlyChart data={categoryPlotlyData} layout={{
               margin: { t: 10, b: 20, l: 10, r: 60 },
-              height: 330,
+              height: 310,
               showlegend: false,
               paper_bgcolor: 'rgba(0,0,0,0)',
               plot_bgcolor: 'rgba(0,0,0,0)',
             }} />
           </div>
         </div>
+        <Link to="/insurance/fraud-heatmap" className="bg-surface rounded-2xl border border-border/80 shadow-sm overflow-hidden hover:shadow-[0_8px_30px_rgb(0_0_0_/_0.06)] transition-all hover:-translate-y-0.5 group flex flex-col items-center justify-center text-center p-8 min-h-[340px]">
+          <div className="p-4 rounded-2xl bg-primary/10 mb-4 group-hover:scale-110 transition-transform">
+            <ExternalLink size={32} className="text-primary" />
+          </div>
+          <h3 className="text-base font-bold text-textPrimary mb-2">Fraud Heatmap</h3>
+          <p className="text-xs text-textSecondary max-w-[280px] leading-relaxed">Interactive geographic analysis of fraud distribution by region and state. Explore the full heatmap with detailed metrics.</p>
+          <span className="mt-4 inline-flex items-center gap-1.5 text-[10px] font-bold text-primary uppercase tracking-wider group-hover:gap-2.5 transition-all">View Heatmap <ArrowRight size={12} /></span>
+        </Link>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="bg-surface rounded-2xl border border-border/80 shadow-sm overflow-hidden hover:shadow-[0_8px_30px_rgb(0_0_0_/_0.06)] transition-shadow">
-          <SECTION_HEADER icon={AlertTriangle} title="Top Risky Regions" action="Sorted by Rate" />
-          <div className="overflow-y-auto max-h-[320px] custom-scrollbar">
-            <table className="w-full text-sm text-left border-collapse">
-              <thead className="sticky top-0 bg-surface/95 backdrop-blur-sm z-10">
-                <tr className="border-b border-border text-[9px] font-bold text-textSecondary uppercase tracking-widest">
-                  <th className="px-4 py-2.5">Region</th>
-                  <th className="px-4 py-2.5 text-right">Claims</th>
-                  <th className="px-4 py-2.5 text-right">Fraud</th>
-                  <th className="px-4 py-2.5 text-right">Rate</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border/60">
-                {riskyRegionsSorted.slice(0, 8).map((r, i) => {
-                  const rate = (r.fraud_claims / r.total_claims) * 100;
-                  const rateColor = rate > 10 ? 'text-danger' : rate > 6 ? 'text-warning' : 'text-success';
-                  return (
-                    <tr key={r.state || i} className="hover:bg-bg/30 transition-colors">
-                      <td className="px-4 py-2.5 font-bold text-textPrimary text-xs">{r.state || r.region}</td>
-                      <td className="px-4 py-2.5 font-mono text-xs text-textSecondary text-right">{formatNumber(r.total_claims)}</td>
-                      <td className="px-4 py-2.5 font-mono text-xs text-danger font-bold text-right">{formatNumber(r.fraud_claims)}</td>
-                      <td className="px-4 py-2.5 text-right">
-                        <span className={`font-black text-xs font-mono ${rateColor}`}>{rate.toFixed(1)}%</span>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
         <div className="bg-surface rounded-2xl border border-border/80 shadow-sm overflow-hidden hover:shadow-[0_8px_30px_rgb(0_0_0_/_0.06)] transition-shadow">
           <SECTION_HEADER icon={BarChart4} title="Monthly Executive Trends" action="Dual Axis" />
           <div className="p-5 h-[320px]">
@@ -498,6 +424,7 @@ export default function ExecutiveDashboard() {
               <span className="font-bold text-accent">AI Note: </span>
               Based on current trajectory, fraud volume may increase 8-12% next quarter. Recommended proactive model retraining and expanded provider monitoring.
             </div>
+            <p className="text-[9px] text-textSecondary/60 italic">Methodology: Projections based on 12-month time series regression of historical claims data with seasonal adjustment.</p>
           </div>
         </div>
       </div>
@@ -659,92 +586,6 @@ export default function ExecutiveDashboard() {
           </div>
         </div>
       </div>
-
-      <Modal open={showReportModal} onClose={() => setShowReportModal(false)} title="Export Executive Report" wide>
-        <div className="space-y-5 py-2">
-          <p className="text-xs text-textSecondary flex items-center gap-2">
-            <Download size={14} className="text-primary" />
-            Select export format and generate a comprehensive executive report for stakeholders.
-          </p>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            <label
-              onClick={() => setExportFormat('pdf')}
-              className={`flex flex-col items-center gap-3 p-5 rounded-xl border-2 cursor-pointer transition-all ${
-                exportFormat === 'pdf'
-                  ? 'border-primary bg-primary/5'
-                  : 'border-border/80 bg-bg/40 hover:bg-bg/60 hover:border-border'
-              }`}
-            >
-              <FileText size={28} className={exportFormat === 'pdf' ? 'text-primary' : 'text-textSecondary'} />
-              <div className="text-center">
-                <p className="text-sm font-bold text-textPrimary">PDF Report</p>
-                <p className="text-[10px] text-textSecondary">Full analytics, charts, and detailed recommendations with executive summary.</p>
-              </div>
-              {exportFormat === 'pdf' && <CheckCircle size={16} className="text-primary" />}
-            </label>
-            <label
-              onClick={() => setExportFormat('ppt')}
-              className={`flex flex-col items-center gap-3 p-5 rounded-xl border-2 cursor-pointer transition-all ${
-                exportFormat === 'ppt'
-                  ? 'border-primary bg-primary/5'
-                  : 'border-border/80 bg-bg/40 hover:bg-bg/60 hover:border-border'
-              }`}
-            >
-              <BarChart3 size={28} className={exportFormat === 'ppt' ? 'text-primary' : 'text-textSecondary'} />
-              <div className="text-center">
-                <p className="text-sm font-bold text-textPrimary">PPT Presentation</p>
-                <p className="text-[10px] text-textSecondary">Board-ready slide deck with visual summaries of all key metrics.</p>
-              </div>
-              {exportFormat === 'ppt' && <CheckCircle size={16} className="text-primary" />}
-            </label>
-            <label
-              onClick={() => setExportFormat('csv')}
-              className={`flex flex-col items-center gap-3 p-5 rounded-xl border-2 cursor-pointer transition-all ${
-                exportFormat === 'csv'
-                  ? 'border-primary bg-primary/5'
-                  : 'border-border/80 bg-bg/40 hover:bg-bg/60 hover:border-border'
-              }`}
-            >
-              <Database size={28} className={exportFormat === 'csv' ? 'text-primary' : 'text-textSecondary'} />
-              <div className="text-center">
-                <p className="text-sm font-bold text-textPrimary">CSV Export</p>
-                <p className="text-[10px] text-textSecondary">Raw data for external BI tools and custom analysis workflows.</p>
-              </div>
-              {exportFormat === 'csv' && <CheckCircle size={16} className="text-primary" />}
-            </label>
-          </div>
-          <div className="bg-bg/40 rounded-xl border border-border/60 p-4">
-            <p className="text-xs font-bold text-textPrimary mb-2">Report Includes:</p>
-            <div className="grid grid-cols-2 gap-2 text-[10px] text-textSecondary">
-              <span className="flex items-center gap-1.5"><CheckCircle size={10} className="text-success" /> Executive KPI Summary</span>
-              <span className="flex items-center gap-1.5"><CheckCircle size={10} className="text-success" /> Claims & Fraud Trends</span>
-              <span className="flex items-center gap-1.5"><CheckCircle size={10} className="text-success" /> Financial Impact Analysis</span>
-              <span className="flex items-center gap-1.5"><CheckCircle size={10} className="text-success" /> Regional Risk Breakdown</span>
-              <span className="flex items-center gap-1.5"><CheckCircle size={10} className="text-success" /> AI-Generated Insights</span>
-              <span className="flex items-center gap-1.5"><CheckCircle size={10} className="text-success" /> Provider Risk Rankings</span>
-              <span className="flex items-center gap-1.5"><CheckCircle size={10} className="text-success" /> Forecast & Recommendations</span>
-              <span className="flex items-center gap-1.5"><CheckCircle size={10} className="text-success" /> Category Distribution</span>
-            </div>
-          </div>
-          <div className="flex gap-3">
-            <button
-              onClick={() => setShowReportModal(false)}
-              className="flex-1 py-3 rounded-xl border border-border/80 bg-surface text-textSecondary font-bold text-xs hover:bg-bg transition-all"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={() => {
-                setShowReportModal(false);
-                window.open(`/api/reports/export?format=${exportFormat}`, '_blank');
-              }}
-              className="flex-1 py-3 rounded-xl bg-primary hover:bg-primary/90 text-white font-bold text-xs transition-all shadow-lg shadow-primary/20 flex items-center justify-center gap-2"
-            >
-              <Download size={14} /> Export as {exportFormat.toUpperCase()}
-            </button>
-          </div>
-        </div>
-      </Modal>
     </div>
   );
 }

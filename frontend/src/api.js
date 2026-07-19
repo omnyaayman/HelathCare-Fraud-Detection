@@ -110,6 +110,8 @@ const MOCK_DATA = {
     flagged: d.fraud_claims,
     total_claims: d.total_claims,
     fraud_claims: d.fraud_claims,
+    total_amount: d.total_amount,
+    fraud_amount: d.fraud_amount,
   })),
   '/api/charts/monthly-claims': CANONICAL_MONTHLY_TRENDS.map(d => ({
     month: d.month,
