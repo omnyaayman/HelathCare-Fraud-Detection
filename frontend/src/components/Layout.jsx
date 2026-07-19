@@ -19,8 +19,16 @@ export default function Layout({ role }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState(null);
   const [searching, setSearching] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
   const searchRef = useRef(null);
   const searchInputRef = useRef(null);
+
+  useEffect(() => {
+    api.getNotifications().then(res => {
+      const list = Array.isArray(res) ? res : [];
+      setUnreadCount(list.filter(n => !n.read).length);
+    }).catch(() => {});
+  }, []);
 
   useEffect(() => {
     const handler = setTimeout(async () => {
@@ -166,7 +174,7 @@ export default function Layout({ role }) {
                 aria-label="Notifications"
               >
                 <Bell size={17} />
-                <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-danger text-[8px] font-black text-white">3</span>
+                {unreadCount > 0 && <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-danger text-[8px] font-black text-white">{unreadCount > 9 ? '9+' : unreadCount}</span>}
               </button>
               <div className="flex items-center gap-3 rounded-xl border border-border/80 bg-surface px-3 py-2 shadow-sm hover:border-primary/30 transition-all cursor-pointer">
                 <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-primary to-accent text-xs font-black text-white shadow-sm">

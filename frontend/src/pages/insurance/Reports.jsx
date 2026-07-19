@@ -1,145 +1,89 @@
-import { useState, useMemo, useCallback, useRef } from 'react';
+import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import PlotlyChart from '../../components/PlotlyChart';
 import Skeleton from '../../components/Skeleton';
 import Pagination from '../../components/Pagination';
+import api from '../../api';
 import {
   BarChart3, Download, FileText, Filter, TrendingUp, AlertTriangle,
   Building2, Users, Activity, Calendar, ChevronDown, ChevronUp, Search,
   X, RefreshCw, ArrowUpDown, Loader2, CheckCircle2
 } from 'lucide-react';
+import { formatCurrency, formatCompactCurrency, formatNumber } from '../../data/dataUtils';
+import {
+  CANONICAL_MONTHLY_TRENDS, CANONICAL_FRAUD_DIAGNOSES, CANONICAL_FRAUD_CATEGORIES,
+  CANONICAL_PROVIDERS, CANONICAL_FUNNEL, CANONICAL_FINANCIALS, CANONICAL_STATUSES,
+  CANONICAL_REGIONAL_DATA, CANONICAL_CLAIMS_OVER_TIME
+} from '../../data/canonicalData';
 
 const fmt = new Intl.NumberFormat('en-US');
 const money = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
 
-const monthlyData = [
-  { month: 'Jan 2025', claims: 98450, fraud: 6892, amount: 18750000, loss: 2340000 },
-  { month: 'Feb 2025', claims: 95230, fraud: 6667, amount: 18100000, loss: 2210000 },
-  { month: 'Mar 2025', claims: 102800, fraud: 7196, amount: 19800000, loss: 2520000 },
-  { month: 'Apr 2025', claims: 108900, fraud: 7623, amount: 20900000, loss: 2780000 },
-  { month: 'May 2025', claims: 112400, fraud: 8430, amount: 21500000, loss: 3120000 },
-  { month: 'Jun 2025', claims: 106700, fraud: 7469, amount: 20100000, loss: 2650000 },
-  { month: 'Jul 2025', claims: 115800, fraud: 8685, amount: 22200000, loss: 3340000 },
-  { month: 'Aug 2025', claims: 118200, fraud: 8865, amount: 22800000, loss: 3450000 },
-  { month: 'Sep 2025', claims: 109500, fraud: 8213, amount: 20800000, loss: 2960000 },
-  { month: 'Oct 2025', claims: 113700, fraud: 8528, amount: 21600000, loss: 3210000 },
-  { month: 'Nov 2025', claims: 120100, fraud: 9008, amount: 23100000, loss: 3580000 },
-  { month: 'Dec 2025', claims: 146952, fraud: 10480, amount: 28250000, loss: 4120000 },
-];
+const monthlyData = CANONICAL_MONTHLY_TRENDS.map(m => ({
+  month: m.month,
+  claims: m.claims,
+  fraud: m.fraud_claims,
+  amount: m.amount,
+  loss: Math.round(m.amount * (m.fraud_rate / 100)),
+}));
 
 const statusData = [
-  { status: 'Approved', count: 845230, color: '#10b981' },
-  { status: 'Under Review', count: 198450, color: '#f59e0b' },
-  { status: 'Denied', count: 114696, color: '#ef4444' },
-  { status: 'Pending', count: 89456, color: '#6366f1' },
+  { status: 'Approved', count: Math.round(CANONICAL_FUNNEL.totalClaims * 0.52), color: '#10b981' },
+  { status: 'Under Review', count: Math.round(CANONICAL_FUNNEL.totalClaims * 0.12), color: '#f59e0b' },
+  { status: 'Rejected', count: CANONICAL_FUNNEL.formallyFlagged - Math.round(CANONICAL_FUNNEL.formallyFlagged * 0.6), color: '#ef4444' },
+  { status: 'Pending', count: CANONICAL_FUNNEL.aiScoredHighRisk - CANONICAL_FUNNEL.formallyFlagged - Math.round(CANONICAL_FUNNEL.totalClaims * 0.12), color: '#6366f1' },
 ];
 
-const providerFraud = [
-  { name: 'Metropolitan General Hospital', fraudCases: 4523, totalClaims: 38900, rate: 11.6 },
-  { name: 'St. Mary Medical Center', fraudCases: 3891, totalClaims: 35200, rate: 11.1 },
-  { name: 'City Health Network', fraudCases: 3456, totalClaims: 42100, rate: 8.2 },
-  { name: 'Pacific Wellness Group', fraudCases: 2987, totalClaims: 28700, rate: 10.4 },
-  { name: 'Summit Healthcare Partners', fraudCases: 2654, totalClaims: 31200, rate: 8.5 },
-  { name: 'Lakeside Medical Associates', fraudCases: 2345, totalClaims: 26800, rate: 8.8 },
-  { name: 'Valley Regional Hospital', fraudCases: 2198, totalClaims: 29500, rate: 7.5 },
-  { name: 'Northeast Health Services', fraudCases: 1987, totalClaims: 24100, rate: 8.2 },
-  { name: 'Premier Care Network', fraudCases: 1823, totalClaims: 22400, rate: 8.1 },
-  { name: 'Community Health Alliance', fraudCases: 1654, totalClaims: 21800, rate: 7.6 },
-];
+const providerFraud = CANONICAL_PROVIDERS.slice(0, 10).map(p => ({
+  name: p.name,
+  fraudCases: p.fraud_claims,
+  totalClaims: p.total_claims,
+  rate: +((p.fraud_claims / p.total_claims) * 100).toFixed(1),
+}));
 
-const diagnosisData = [
-  { code: 'M54.5', name: 'Low Back Pain', cases: 8945, amount: 12700000, rate: 14.2 },
-  { code: 'E11.9', name: 'Type 2 Diabetes', cases: 7832, amount: 11200000, rate: 9.8 },
-  { code: 'I10', name: 'Essential Hypertension', cases: 7234, amount: 8900000, rate: 8.4 },
-  { code: 'J06.9', name: 'Acute URI', cases: 6543, amount: 4300000, rate: 12.1 },
-  { code: 'Z00.00', name: 'General Exam', cases: 5987, amount: 3200000, rate: 6.7 },
-  { code: 'M79.3', name: 'Panniculitis', cases: 5234, amount: 7800000, rate: 15.8 },
-  { code: 'G43.909', name: 'Migraine', cases: 4876, amount: 6500000, rate: 11.3 },
-  { code: 'F32.1', name: 'Major Depression', cases: 4321, amount: 5900000, rate: 8.9 },
-  { code: 'N39.0', name: 'UTI', cases: 3987, amount: 3400000, rate: 7.2 },
-  { code: 'K21.0', name: 'GERD', cases: 3654, amount: 4100000, rate: 9.4 },
-];
+const diagnosisData = CANONICAL_FRAUD_DIAGNOSES.map(d => ({
+  code: d.code,
+  name: d.description,
+  cases: d.claims,
+  amount: d.amount,
+  rate: d.fraud_rate,
+}));
 
-const fraudCategories = [
-  { category: 'Upcoding', cases: 28450, percentage: 31.8 },
-  { category: 'Duplicate Claims', cases: 18230, percentage: 20.4 },
-  { category: 'Phantom Billing', cases: 14890, percentage: 16.6 },
-  { category: 'Unbundling', cases: 11230, percentage: 12.6 },
-  { category: 'Kickback Schemes', cases: 8940, percentage: 10.0 },
-  { category: 'Identity Fraud', cases: 4560, percentage: 5.1 },
-  { category: 'Other', cases: 3156, percentage: 3.5 },
-];
+const fraudCategories = CANONICAL_FRAUD_CATEGORIES.map(c => ({
+  category: c.category,
+  cases: c.count,
+  percentage: c.percentage,
+}));
 
-const regionData = [
-  { region: 'Northeast', fraud: 23400, percentage: 26.2 },
-  { region: 'Southeast', fraud: 21800, percentage: 24.4 },
-  { region: 'Midwest', fraud: 16500, percentage: 18.4 },
-  { region: 'West', fraud: 18900, percentage: 21.1 },
-  { region: 'Southwest', fraud: 8856, percentage: 9.9 },
-];
+const regionData = CANONICAL_REGIONAL_DATA.map(r => ({
+  region: r.state,
+  fraud: r.fraud_claims,
+  percentage: +((r.fraud_claims / r.total_claims) * 100).toFixed(1),
+}));
 
-const allClaims = [
-  { id: 'CLM-2025-089451', patient: 'Margaret Thompson', provider: 'Metropolitan General Hospital', amount: 45230, status: 'Approved', fraudScore: 12.3, riskLevel: 'low', date: '2025-12-15', insurance: 'Medicare' },
-  { id: 'CLM-2025-089452', patient: 'Robert Chen', provider: 'St. Mary Medical Center', amount: 89750, status: 'Under Review', fraudScore: 78.9, riskLevel: 'high', date: '2025-12-14', insurance: 'Blue Cross' },
-  { id: 'CLM-2025-089453', patient: 'Sarah Mitchell', provider: 'City Health Network', amount: 12340, status: 'Approved', fraudScore: 5.6, riskLevel: 'low', date: '2025-12-14', insurance: 'Aetna' },
-  { id: 'CLM-2025-089454', patient: 'James Wilson', provider: 'Pacific Wellness Group', amount: 156800, status: 'Denied', fraudScore: 92.1, riskLevel: 'critical', date: '2025-12-13', insurance: 'UnitedHealth' },
-  { id: 'CLM-2025-089455', patient: 'Linda Garcia', provider: 'Summit Healthcare Partners', amount: 23400, status: 'Pending', fraudScore: 34.7, riskLevel: 'medium', date: '2025-12-13', insurance: 'Cigna' },
-  { id: 'CLM-2025-089456', patient: 'William Brown', provider: 'Lakeside Medical Associates', amount: 67890, status: 'Approved', fraudScore: 18.9, riskLevel: 'low', date: '2025-12-12', insurance: 'Medicaid' },
-  { id: 'CLM-2025-089457', patient: 'Patricia Davis', provider: 'Metropolitan General Hospital', amount: 234500, status: 'Under Review', fraudScore: 87.3, riskLevel: 'critical', date: '2025-12-12', insurance: 'Medicare' },
-  { id: 'CLM-2025-089458', patient: 'Michael Johnson', provider: 'Valley Regional Hospital', amount: 8920, status: 'Approved', fraudScore: 7.2, riskLevel: 'low', date: '2025-12-11', insurance: 'Blue Cross' },
-  { id: 'CLM-2025-089459', patient: 'Jennifer Anderson', provider: 'Northeast Health Services', amount: 45670, status: 'Denied', fraudScore: 65.4, riskLevel: 'high', date: '2025-12-11', insurance: 'Aetna' },
-  { id: 'CLM-2025-089460', patient: 'David Martinez', provider: 'Premier Care Network', amount: 123400, status: 'Under Review', fraudScore: 96.4, riskLevel: 'critical', date: '2025-12-10', insurance: 'UnitedHealth' },
-  { id: 'CLM-2025-089461', patient: 'Barbara Robinson', provider: 'Community Health Alliance', amount: 19870, status: 'Approved', fraudScore: 14.5, riskLevel: 'low', date: '2025-12-10', insurance: 'Cigna' },
-  { id: 'CLM-2025-089462', patient: 'Thomas Clark', provider: 'City Health Network', amount: 78340, status: 'Pending', fraudScore: 42.1, riskLevel: 'medium', date: '2025-12-09', insurance: 'Medicare' },
-  { id: 'CLM-2025-089463', patient: 'Elizabeth Rodriguez', provider: 'Metropolitan General Hospital', amount: 167800, status: 'Denied', fraudScore: 89.7, riskLevel: 'critical', date: '2025-12-09', insurance: 'Medicaid' },
-  { id: 'CLM-2025-089464', patient: 'Richard Lewis', provider: 'St. Mary Medical Center', amount: 56780, status: 'Approved', fraudScore: 22.8, riskLevel: 'low', date: '2025-12-08', insurance: 'Blue Cross' },
-  { id: 'CLM-2025-089465', patient: 'Susan Walker', provider: 'Pacific Wellness Group', amount: 34560, status: 'Under Review', fraudScore: 58.3, riskLevel: 'medium', date: '2025-12-08', insurance: 'Aetna' },
-  { id: 'CLM-2025-089466', patient: 'Charles Hall', provider: 'Summit Healthcare Partners', amount: 89010, status: 'Approved', fraudScore: 11.4, riskLevel: 'low', date: '2025-12-07', insurance: 'UnitedHealth' },
-  { id: 'CLM-2025-089467', patient: 'Karen Allen', provider: 'Lakeside Medical Associates', amount: 12340, status: 'Pending', fraudScore: 28.9, riskLevel: 'low', date: '2025-12-07', insurance: 'Cigna' },
-  { id: 'CLM-2025-089468', patient: 'Daniel Young', provider: 'Metropolitan General Hospital', amount: 245600, status: 'Under Review', fraudScore: 94.2, riskLevel: 'critical', date: '2025-12-06', insurance: 'Medicare' },
-  { id: 'CLM-2025-089469', patient: 'Nancy King', provider: 'Valley Regional Hospital', amount: 23450, status: 'Approved', fraudScore: 9.8, riskLevel: 'low', date: '2025-12-06', insurance: 'Blue Cross' },
-  { id: 'CLM-2025-089470', patient: 'Matthew Wright', provider: 'Northeast Health Services', amount: 56780, status: 'Denied', fraudScore: 71.6, riskLevel: 'high', date: '2025-12-05', insurance: 'Aetna' },
-  { id: 'CLM-2025-089471', patient: 'Betty Lopez', provider: 'City Health Network', amount: 8920, status: 'Approved', fraudScore: 4.3, riskLevel: 'low', date: '2025-12-05', insurance: 'UnitedHealth' },
-  { id: 'CLM-2025-089472', patient: 'Andrew Hill', provider: 'Premier Care Network', amount: 123400, status: 'Under Review', fraudScore: 83.5, riskLevel: 'critical', date: '2025-12-04', insurance: 'Cigna' },
-  { id: 'CLM-2025-089473', patient: 'Dorothy Scott', provider: 'Community Health Alliance', amount: 34560, status: 'Approved', fraudScore: 16.7, riskLevel: 'low', date: '2025-12-04', insurance: 'Medicare' },
-  { id: 'CLM-2025-089474', patient: 'Joshua Green', provider: 'Metropolitan General Hospital', amount: 189700, status: 'Denied', fraudScore: 91.8, riskLevel: 'critical', date: '2025-12-03', insurance: 'Medicaid' },
-  { id: 'CLM-2025-089475', patient: 'Sandra Adams', provider: 'St. Mary Medical Center', amount: 67890, status: 'Pending', fraudScore: 45.2, riskLevel: 'medium', date: '2025-12-03', insurance: 'Blue Cross' },
-  { id: 'CLM-2025-089476', patient: 'Kevin Baker', provider: 'Pacific Wellness Group', amount: 23400, status: 'Approved', fraudScore: 8.1, riskLevel: 'low', date: '2025-12-02', insurance: 'Aetna' },
-  { id: 'CLM-2025-089477', patient: 'Donna Nelson', provider: 'Summit Healthcare Partners', amount: 156800, status: 'Under Review', fraudScore: 76.4, riskLevel: 'high', date: '2025-12-02', insurance: 'UnitedHealth' },
-  { id: 'CLM-2025-089478', patient: 'Mark Carter', provider: 'Lakeside Medical Associates', amount: 45230, status: 'Approved', fraudScore: 19.3, riskLevel: 'low', date: '2025-12-01', insurance: 'Cigna' },
-  { id: 'CLM-2025-089479', patient: 'Michelle Mitchell', provider: 'Metropolitan General Hospital', amount: 89750, status: 'Denied', fraudScore: 68.9, riskLevel: 'high', date: '2025-12-01', insurance: 'Medicare' },
-  { id: 'CLM-2025-089480', patient: 'Steven Perez', provider: 'Valley Regional Hospital', amount: 12340, status: 'Approved', fraudScore: 3.7, riskLevel: 'low', date: '2025-11-30', insurance: 'Blue Cross' },
-  { id: 'CLM-2025-089481', patient: 'Laura Roberts', provider: 'Northeast Health Services', amount: 234500, status: 'Under Review', fraudScore: 88.6, riskLevel: 'critical', date: '2025-11-30', insurance: 'Aetna' },
-  { id: 'CLM-2025-089482', patient: 'Brian Turner', provider: 'City Health Network', amount: 8920, status: 'Pending', fraudScore: 31.4, riskLevel: 'medium', date: '2025-11-29', insurance: 'UnitedHealth' },
-  { id: 'CLM-2025-089483', patient: 'Carol Phillips', provider: 'Premier Care Network', amount: 67890, status: 'Approved', fraudScore: 21.6, riskLevel: 'low', date: '2025-11-29', insurance: 'Cigna' },
-  { id: 'CLM-2025-089484', patient: 'George Campbell', provider: 'Community Health Alliance', amount: 167800, status: 'Denied', fraudScore: 85.3, riskLevel: 'critical', date: '2025-11-28', insurance: 'Medicare' },
-  { id: 'CLM-2025-089485', patient: 'Angela Parker', provider: 'Metropolitan General Hospital', amount: 34560, status: 'Under Review', fraudScore: 52.8, riskLevel: 'medium', date: '2025-11-28', insurance: 'Medicaid' },
-  { id: 'CLM-2025-089486', patient: 'Edward Evans', provider: 'St. Mary Medical Center', amount: 45230, status: 'Approved', fraudScore: 15.4, riskLevel: 'low', date: '2025-11-27', insurance: 'Blue Cross' },
-  { id: 'CLM-2025-089487', patient: 'Melissa Edwards', provider: 'Pacific Wellness Group', amount: 89750, status: 'Pending', fraudScore: 39.7, riskLevel: 'medium', date: '2025-11-27', insurance: 'Aetna' },
-  { id: 'CLM-2025-089488', patient: 'Ronald Collins', provider: 'Summit Healthcare Partners', amount: 123400, status: 'Denied', fraudScore: 93.1, riskLevel: 'critical', date: '2025-11-26', insurance: 'UnitedHealth' },
-  { id: 'CLM-2025-089489', patient: 'Deborah Stewart', provider: 'Lakeside Medical Associates', amount: 23400, status: 'Approved', fraudScore: 6.9, riskLevel: 'low', date: '2025-11-26', insurance: 'Cigna' },
-  { id: 'CLM-2025-089490', patient: 'Timothy Sanchez', provider: 'Metropolitan General Hospital', amount: 189700, status: 'Under Review', fraudScore: 82.4, riskLevel: 'critical', date: '2025-11-25', insurance: 'Medicare' },
-  { id: 'CLM-2025-089491', patient: 'Sharon Morris', provider: 'Valley Regional Hospital', amount: 56780, status: 'Approved', fraudScore: 17.2, riskLevel: 'low', date: '2025-11-25', insurance: 'Blue Cross' },
-  { id: 'CLM-2025-089492', patient: 'Jeffrey Rogers', provider: 'Northeast Health Services', amount: 34560, status: 'Denied', fraudScore: 63.8, riskLevel: 'high', date: '2025-11-24', insurance: 'Aetna' },
-  { id: 'CLM-2025-089493', patient: 'Cynthia Reed', provider: 'City Health Network', amount: 89010, status: 'Pending', fraudScore: 44.5, riskLevel: 'medium', date: '2025-11-24', insurance: 'UnitedHealth' },
-  { id: 'CLM-2025-089494', patient: 'Larry Cook', provider: 'Premier Care Network', amount: 19870, status: 'Approved', fraudScore: 10.8, riskLevel: 'low', date: '2025-11-23', insurance: 'Cigna' },
-  { id: 'CLM-2025-089495', patient: 'Kathleen Morgan', provider: 'Community Health Alliance', amount: 156800, status: 'Under Review', fraudScore: 79.2, riskLevel: 'high', date: '2025-11-23', insurance: 'Medicare' },
-  { id: 'CLM-2025-089496', patient: 'Jerry Bell', provider: 'Metropolitan General Hospital', amount: 45230, status: 'Denied', fraudScore: 72.5, riskLevel: 'high', date: '2025-11-22', insurance: 'Medicaid' },
-  { id: 'CLM-2025-089497', patient: 'Gloria Murphy', provider: 'St. Mary Medical Center', amount: 8920, status: 'Approved', fraudScore: 2.1, riskLevel: 'low', date: '2025-11-22', insurance: 'Blue Cross' },
-  { id: 'CLM-2025-089498', patient: 'Dennis Bailey', provider: 'Pacific Wellness Group', amount: 234500, status: 'Pending', fraudScore: 55.6, riskLevel: 'medium', date: '2025-11-21', insurance: 'Aetna' },
-  { id: 'CLM-2025-089499', patient: 'Beverly Rivera', provider: 'Summit Healthcare Partners', amount: 67890, status: 'Approved', fraudScore: 13.9, riskLevel: 'low', date: '2025-11-21', insurance: 'UnitedHealth' },
-  { id: 'CLM-2025-089500', patient: 'Arthur Cooper', provider: 'Lakeside Medical Associates', amount: 34560, status: 'Denied', fraudScore: 86.7, riskLevel: 'critical', date: '2025-11-20', insurance: 'Cigna' },
-];
+const allClaims = CANONICAL_CLAIMS_OVER_TIME.flatMap((m, i) =>
+  Array.from({ length: Math.min(m.fraud_claims, 5) }, (_, j) => ({
+    id: `CLM-2025-${String(i * 100 + j + 1).padStart(6, '0')}`,
+    patient: CANONICAL_PROVIDERS[j % CANONICAL_PROVIDERS.length] ? `Patient ${String.fromCharCode(65 + j)}-${i + 1}` : 'Unknown',
+    provider: CANONICAL_PROVIDERS[j % CANONICAL_PROVIDERS.length]?.name || 'Unknown',
+    amount: Math.round(150 + Math.random() * 150000),
+    status: ['Approved', 'Under Review', 'Rejected', 'Pending'][j % 4],
+    fraudScore: +(60 + Math.random() * 35).toFixed(1),
+    riskLevel: ['high', 'critical', 'medium', 'low'][j % 4],
+    date: m.date.replace('-01', `-${String(j + 1).padStart(2, '0')}`),
+    insurance: ['Medicare', 'Blue Cross', 'Aetna', 'UnitedHealth', 'Cigna'][j % 5],
+  }))
+);
 
 const kpis = [
-  { label: 'Total Claims Analyzed', value: '1,247,832', icon: BarChart3, color: 'from-indigo-500/20 to-indigo-600/5', iconColor: 'text-indigo-400', change: '+8.3%', up: true },
-  { label: 'Fraud Cases Detected', value: '89,456', icon: AlertTriangle, color: 'from-amber-500/20 to-amber-600/5', iconColor: 'text-amber-400', change: '+12.1%', up: true },
-  { label: 'Financial Impact', value: '$234.7M', icon: TrendingUp, color: 'from-red-500/20 to-red-600/5', iconColor: 'text-red-400', change: '+15.4%', up: true },
-  { label: 'Detection Rate', value: '7.17%', icon: Activity, color: 'from-emerald-500/20 to-emerald-600/5', iconColor: 'text-emerald-400', change: '+0.4%', up: true },
+  { label: 'Total Claims Analyzed', value: fmt.format(CANONICAL_FUNNEL.totalClaims), icon: BarChart3, color: 'from-indigo-500/20 to-indigo-600/5', iconColor: 'text-indigo-400', change: '+8.3%', up: true },
+  { label: 'Fraud Cases Detected', value: fmt.format(CANONICAL_FUNNEL.aiScoredHighRisk), icon: AlertTriangle, color: 'from-amber-500/20 to-amber-600/5', iconColor: 'text-amber-400', change: '+12.1%', up: true },
+  { label: 'Financial Impact', value: formatCompactCurrency(CANONICAL_FINANCIALS.totalClaimValue), icon: TrendingUp, color: 'from-red-500/20 to-red-600/5', iconColor: 'text-red-400', change: '+15.4%', up: true },
+  { label: 'Detection Rate', value: `${((CANONICAL_FUNNEL.aiScoredHighRisk / CANONICAL_FUNNEL.totalClaims) * 100).toFixed(1)}%`, icon: Activity, color: 'from-emerald-500/20 to-emerald-600/5', iconColor: 'text-emerald-400', change: '+0.4%', up: true },
 ];
 
 const dateRanges = ['All Time', 'Last 30 Days', 'Last 90 Days', 'Last 6 Months', 'This Year'];
-const providers = [...new Set(allClaims.map(c => c.provider))];
-const statuses = ['Approved', 'Under Review', 'Denied', 'Pending'];
+const providers = CANONICAL_PROVIDERS.map(p => p.name);
+const statuses = ['Approved', 'Under Review', 'Rejected', 'Pending'];
 const riskLevels = ['Low', 'Medium', 'High', 'Critical'];
 const insurancePlans = ['Medicare', 'Medicaid', 'Blue Cross', 'Aetna', 'UnitedHealth', 'Cigna'];
 
@@ -164,7 +108,7 @@ const statusBadge = (status) => {
   const map = {
     Approved: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30',
     'Under Review': 'bg-amber-500/15 text-amber-400 border-amber-500/30',
-    Denied: 'bg-red-500/15 text-red-400 border-red-500/30',
+    Rejected: 'bg-red-500/15 text-red-400 border-red-500/30',
     Pending: 'bg-indigo-500/15 text-indigo-400 border-indigo-500/30',
   };
   return map[status] || '';
@@ -199,6 +143,11 @@ export default function Reports() {
     risk: '',
     insurance: '',
   });
+
+  useEffect(() => {
+    const t = setTimeout(() => setLoading(false), 600);
+    return () => clearTimeout(t);
+  }, []);
 
   const toastTimer = useRef(null);
   const showToast = useCallback((msg) => {

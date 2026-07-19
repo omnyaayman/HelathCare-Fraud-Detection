@@ -10,68 +10,43 @@ import {
   ChevronRight
 } from 'lucide-react';
 import api from '../../api';
+import { CANONICAL_MODEL } from '../../data/canonicalData';
 
-const modelVersions = [
-  {
-    name: 'Primary Model',
-    version: 'v3.2.1',
-    status: 'active',
-    accuracy: '94.6%',
-    lastTrained: 'Jan 15, 2026',
-    color: '#818cf8',
-    icon: BrainCircuit
-  },
-  {
-    name: 'Secondary Model',
-    version: 'v3.1.0',
-    status: 'standby',
-    accuracy: '91.8%',
-    lastTrained: 'Dec 28, 2025',
-    color: '#38bdf8',
-    icon: Shield
-  },
-  {
-    name: 'Archive Model',
-    version: 'v3.0.0',
-    status: 'archived',
-    accuracy: '87.3%',
-    lastTrained: 'Nov 14, 2025',
-    color: '#94a3b8',
-    icon: Database
-  }
-];
+const modelVersions = CANONICAL_MODEL.versions.map(v => ({
+  name: v.label,
+  version: v.version,
+  status: v.status,
+  accuracy: `${(v.accuracy * 100).toFixed(1)}%`,
+  lastTrained: v.date === '2026-01-15' ? 'Jan 15, 2026' : v.date === '2025-12-28' ? 'Dec 28, 2025' : 'Nov 14, 2025',
+  color: v.status === 'active' ? '#818cf8' : v.status === 'standby' ? '#38bdf8' : '#94a3b8',
+  icon: v.status === 'active' ? BrainCircuit : v.status === 'standby' ? Shield : Database
+}));
 
 const performanceMetrics = [
-  { label: 'Accuracy', value: '94.6%', change: '+1.2%', up: true, icon: Target, color: '#818cf8' },
-  { label: 'Precision', value: '93.2%', change: '+0.8%', up: true, icon: Activity, color: '#38bdf8' },
-  { label: 'Recall', value: '95.1%', change: '+1.5%', up: true, icon: Eye, color: '#34d399' },
-  { label: 'F1 Score', value: '0.932', change: '+0.014', up: true, icon: BarChart3, color: '#fbbf24' },
-  { label: 'ROC AUC', value: '0.9647', change: '+0.008', up: true, icon: TrendingUp, color: '#a78bfa' },
-  { label: 'Prediction Time', value: '12ms', change: '-2ms', up: true, icon: Zap, color: '#fb923c' }
+  { label: 'Accuracy', value: `${(CANONICAL_MODEL.accuracy * 100).toFixed(1)}%`, change: '+1.2%', up: true, icon: Target, color: '#818cf8' },
+  { label: 'Precision', value: `${(CANONICAL_MODEL.precision * 100).toFixed(1)}%`, change: '+0.8%', up: true, icon: Activity, color: '#38bdf8' },
+  { label: 'Recall', value: `${(CANONICAL_MODEL.recall * 100).toFixed(1)}%`, change: '+1.5%', up: true, icon: Eye, color: '#34d399' },
+  { label: 'F1 Score', value: `${(CANONICAL_MODEL.f1Score * 100).toFixed(1)}%`, change: '+1.4%', up: true, icon: BarChart3, color: '#fbbf24' },
+  { label: 'ROC AUC', value: (CANONICAL_MODEL.rocAuc).toFixed(4), change: '+0.008', up: true, icon: TrendingUp, color: '#a78bfa' },
+  { label: 'Prediction Time', value: `${CANONICAL_MODEL.predictionTimeMs}ms`, change: '-2ms', up: true, icon: Zap, color: '#fb923c' }
 ];
 
 const additionalInfo = [
-  { label: 'Dataset Version', value: 'v4.2', icon: Database, color: '#818cf8' },
-  { label: 'Model Version', value: 'v3.2.1', icon: Cpu, color: '#38bdf8' },
+  { label: 'Dataset Version', value: CANONICAL_MODEL.datasetVersion, icon: Database, color: '#818cf8' },
+  { label: 'Model Version', value: CANONICAL_MODEL.version, icon: Cpu, color: '#38bdf8' },
   { label: 'Training Date', value: 'Jan 15, 2026', icon: Clock, color: '#34d399' },
-  { label: 'Data Drift %', value: '4.2%', icon: Activity, color: '#fbbf24' },
+  { label: 'Data Drift %', value: `${CANONICAL_MODEL.dataDrift}%`, icon: Activity, color: '#fbbf24' },
   { label: 'Last Retraining', value: '4 days ago', icon: RefreshCw, color: '#a78bfa' },
-  { label: 'Validation Accuracy', value: '93.8%', icon: CheckCircle2, color: '#fb923c' },
-  { label: 'Number of Features', value: '47', icon: FileText, color: '#f472b6' },
-  { label: 'Training Dataset Size', value: '128,459', icon: Database, color: '#22d3ee' }
+  { label: 'Validation Accuracy', value: `${(CANONICAL_MODEL.validationAccuracy * 100).toFixed(1)}%`, icon: CheckCircle2, color: '#fb923c' },
+  { label: 'Number of Features', value: CANONICAL_MODEL.numFeatures.toString(), icon: FileText, color: '#f472b6' },
+  { label: 'Training Dataset Size', value: CANONICAL_MODEL.trainingSize.toLocaleString(), icon: Database, color: '#22d3ee' }
 ];
 
-const trainingRuns = [
-  { runId: 'TRN-2847', date: 'Jan 15, 2026', dataset: 'v4.2 (128K records)', duration: '4h 32m', accuracy: '94.6%', f1: '0.932', auc: '0.9647', status: 'Completed' },
-  { runId: 'TRN-2831', date: 'Dec 28, 2025', dataset: 'v4.1 (125K records)', duration: '4h 18m', accuracy: '94.2%', f1: '0.928', auc: '0.9612', status: 'Completed' },
-  { runId: 'TRN-2819', date: 'Dec 12, 2025', dataset: 'v4.0 (122K records)', duration: '4h 45m', accuracy: '93.8%', f1: '0.921', auc: '0.9578', status: 'Completed' },
-  { runId: 'TRN-2805', date: 'Nov 28, 2025', dataset: 'v3.9 (119K records)', duration: '4h 12m', accuracy: '93.1%', f1: '0.914', auc: '0.9534', status: 'Completed' },
-  { runId: 'TRN-2791', date: 'Nov 14, 2025', dataset: 'v3.8 (116K records)', duration: '4h 28m', accuracy: '92.5%', f1: '0.908', auc: '0.9489', status: 'Completed' }
-];
+const trainingRuns = CANONICAL_MODEL.trainingRuns;
 
 const confusionMatrixData = [{
   type: 'heatmap',
-  z: [[8945, 152], [89, 1814]],
+  z: [[CANONICAL_MODEL.confusionMatrix.tn, CANONICAL_MODEL.confusionMatrix.fp], [CANONICAL_MODEL.confusionMatrix.fn, CANONICAL_MODEL.confusionMatrix.tp]],
   x: ['Predicted: Legitimate', 'Predicted: Fraud'],
   y: ['Actual: Legitimate', 'Actual: Fraud'],
   colorscale: [
@@ -81,7 +56,7 @@ const confusionMatrixData = [{
     [0.75, '#818cf8'],
     [1, '#c7d2fe']
   ],
-  text: [['8,945', '152'], ['89', '1,814']],
+  text: [[CANONICAL_MODEL.confusionMatrix.tn.toLocaleString(), CANONICAL_MODEL.confusionMatrix.fp.toLocaleString()], [CANONICAL_MODEL.confusionMatrix.fn.toLocaleString(), CANONICAL_MODEL.confusionMatrix.tp.toLocaleString()]],
   texttemplate: '%{text}',
   textfont: { size: 14, color: '#f8fafc' },
   hovertemplate: '%{y} → %{x}<br>Count: %{z:,}<extra></extra>',
@@ -106,13 +81,8 @@ const confusionMatrixLayout = {
   plot_bgcolor: 'transparent'
 };
 
-const featuresList = [
-  'Claim Amount Deviation', 'Provider Fraud History', 'Duplicate Procedure Flag',
-  'Unusual Hour of Service', 'Patient-Provider Distance', 'Claim Frequency Score',
-  'Diagnosis-Procedure Mismatch', 'Days Since Last Visit', 'Network Anomaly Score',
-  'Geographic Risk Index'
-];
-const importances = [0.234, 0.189, 0.156, 0.134, 0.098, 0.078, 0.054, 0.032, 0.018, 0.007];
+const featuresList = CANONICAL_MODEL.featureImportance.map(f => f.feature);
+const importances = CANONICAL_MODEL.featureImportance.map(f => f.importance);
 
 const barColors = importances.map((_, i) => {
   const opacity = 1 - (i * 0.08);
@@ -132,8 +102,8 @@ const featureImportanceData = [{
 }];
 
 const featureImportanceLayout = {
-  title: { text: 'Feature Importance', font: { size: 13, color: '#f8fafc' }, x: 0.5 },
-  xaxis: { title: { text: 'Importance', font: { size: 10, color: '#94a3b8' } }, tickfont: { size: 10, color: '#94a3b8' }, gridcolor: '#1e293b' },
+  title: { text: 'Feature Importance (Normalized)', font: { size: 13, color: '#f8fafc' }, x: 0.5 },
+  xaxis: { title: { text: 'Relative Importance', font: { size: 10, color: '#94a3b8' } }, tickfont: { size: 10, color: '#94a3b8' }, gridcolor: '#1e293b' },
   yaxis: { tickfont: { size: 10, color: '#94a3b8' }, automargin: true },
   margin: { t: 40, r: 20, l: 180, b: 40 },
   height: 280,
@@ -147,12 +117,12 @@ const accuracyHistoryData = [
   {
     x: months,
     y: [91.2, 91.5, 91.9, 92.1, 92.4, 92.8, 93.1, 93.5, 93.8, 94.0, 94.3, 94.6],
-    name: 'v3.2.1 (current)',
+    name: `${CANONICAL_MODEL.version} (current)`,
     type: 'scatter',
     mode: 'lines+markers',
     line: { color: '#818cf8', width: 2.5, shape: 'spline' },
     marker: { size: 5, color: '#818cf8' },
-    hovertemplate: 'v3.2.1<br>%{x}: %{y:.1f}%<extra></extra>'
+    hovertemplate: `${CANONICAL_MODEL.version}<br>%{x}: %{y:.1f}%<extra></extra>`
   },
   {
     x: months,
@@ -233,7 +203,7 @@ const predictionDistLayout = {
 
 const fpr = [0, 0.001, 0.005, 0.01, 0.02, 0.03, 0.05, 0.08, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1];
 const tpr = [0, 0.12, 0.35, 0.48, 0.62, 0.71, 0.78, 0.84, 0.88, 0.91, 0.93, 0.95, 0.96, 0.97, 0.975, 0.985, 0.99, 0.995, 0.998, 0.999, 1];
-const aucVal = 0.9647;
+const aucVal = CANONICAL_MODEL.rocAuc;
 
 const rocData = [
   {
@@ -637,7 +607,7 @@ export default function ModelManagement() {
             <CheckCircle2 size={18} className="text-emerald-400" />
             <div>
               <div className="text-sm font-medium text-emerald-400">Retraining Complete</div>
-              <div className="text-xs text-[#94a3b8]">Duration: 4h 32m | Accuracy achieved: 94.6%</div>
+              <div className="text-xs text-[#94a3b8]">Duration: 4h 32m | Accuracy achieved: {(CANONICAL_MODEL.accuracy * 100).toFixed(1)}%</div>
             </div>
           </div>
         )}

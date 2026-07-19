@@ -97,7 +97,8 @@ export default function FraudHeatmap() {
       totalHospitals += s.hospitals;
     });
     const avgRate = STATE_DATA.reduce((sum, s) => sum + s.fraudRate, 0) / STATE_DATA.length;
-    return { totalClaims, totalFlagged, totalCost, avgRate, totalProviders, totalHospitals };
+    const avgClaim = totalFlagged > 0 ? totalCost / totalFlagged : 1500;
+    return { totalClaims, totalFlagged, totalCost, avgRate, totalProviders, totalHospitals, avgClaim };
   }, []);
 
   const peakMonth = useMemo(() => {
@@ -196,7 +197,7 @@ export default function FraudHeatmap() {
             </div>
             <span className="text-xs font-bold text-[#94a3b8] uppercase tracking-wider">Average Claim Amount</span>
           </div>
-          <p className="text-3xl font-black text-[#f8fafc]">$1,500</p>
+          <p className="text-3xl font-black text-[#f8fafc]">{formatCurrency(totals.avgClaim)}</p>
           <p className="text-xs text-[#94a3b8] mt-1">Mean across all states</p>
         </div>
         <div className="bg-[#0f172a]/80 rounded-2xl border border-[#1e293b]/80 p-5">
@@ -320,7 +321,7 @@ export default function FraudHeatmap() {
                   </div>
                   <div className="flex items-center justify-between p-2.5 rounded-xl bg-[#1e293b]/40 border border-[#1e293b]/60">
                     <span className="text-[10px] font-bold text-[#94a3b8]">Avg Claim Amount</span>
-                    <span className="font-mono font-bold text-[#f8fafc] text-sm">${detail.avgClaim.toLocaleString()}</span>
+                    <span className="font-mono font-bold text-[#f8fafc] text-sm">{formatCurrency(detail.avgClaim)}</span>
                   </div>
                 </div>
 

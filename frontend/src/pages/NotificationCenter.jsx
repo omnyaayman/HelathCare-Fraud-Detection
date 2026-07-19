@@ -6,6 +6,8 @@ import {
 } from "lucide-react";
 import api from '../api';
 import Skeleton from '../components/Skeleton';
+import { formatCurrency } from '../data/dataUtils';
+import { CANONICAL_NOTIFICATIONS } from '../data/canonicalData';
 
 const SEVERITY_CONFIG = {
   critical: { bg: "border-red-500 bg-red-50 dark:bg-red-900/20 dark:border-red-500/50", icon: AlertTriangle, color: "text-red-600 dark:text-red-400", badge: "bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-300" },
@@ -59,9 +61,9 @@ export default function NotificationCenter() {
     setLoading(true);
     try {
       const res = await api.getNotifications();
-      setNotifications(Array.isArray(res) ? res : []);
+      setNotifications(Array.isArray(res) && res.length > 0 ? res : CANONICAL_NOTIFICATIONS);
     } catch {
-      setNotifications([]);
+      setNotifications(CANONICAL_NOTIFICATIONS);
     } finally { setLoading(false); }
   }, []);
 
@@ -85,6 +87,9 @@ export default function NotificationCenter() {
   const filtered = notifications.filter(n => {
     if (filter === "unread") return !n.read;
     if (filter === "critical") return n.severity === "critical" || n.severity === "high";
+    if (filter === "fraud") return n.type === "fraud_alert" || n.type === "fraud";
+    if (filter === "system") return n.type === "system_alert" || n.type === "model_alert" || n.type === "system";
+    if (filter === "policy") return n.type === "policy_alert" || n.type === "policy";
     if (filter !== "all") return n.type === filter;
     return true;
   }).filter(n => {
@@ -128,7 +133,7 @@ export default function NotificationCenter() {
             <div className="divide-y divide-border">
               {categoryFilters.map(cat => {
                 const Icon = cat.icon;
-                const count = cat.id === "all" ? notifications.length : cat.id === "unread" ? unreadCount : cat.id === "critical" ? notifications.filter(n => n.severity === "critical" || n.severity === "high").length : notifications.filter(n => n.type === cat.id).length;
+                const count = cat.id === "all" ? notifications.length : cat.id === "unread" ? unreadCount : cat.id === "critical" ? notifications.filter(n => n.severity === "critical" || n.severity === "high").length : cat.id === "fraud" ? notifications.filter(n => n.type === "fraud_alert" || n.type === "fraud").length : cat.id === "system" ? notifications.filter(n => n.type === "system_alert" || n.type === "model_alert" || n.type === "system").length : cat.id === "policy" ? notifications.filter(n => n.type === "policy_alert" || n.type === "policy").length : notifications.filter(n => n.type === cat.id).length;
                 return (
                   <button key={cat.id} onClick={() => setFilter(cat.id)}
                     className={`flex items-center justify-between w-full px-4 py-3 text-sm hover:bg-surfaceHover transition-colors ${filter === cat.id ? "bg-primary/10 text-primary" : "text-textSecondary"}`}>
@@ -241,7 +246,7 @@ export default function NotificationCenter() {
                     </div>
                     <div className="bg-surfaceHover rounded-xl p-3">
                       <div className="flex items-center gap-2 text-xs text-textSecondary mb-1"><DollarSign size={12} /> Amount</div>
-                      <p className="text-sm font-semibold text-white">${Number(selected.claim.Claim_Amount || 0).toLocaleString()}</p>
+                      <p className="text-sm font-semibold text-white">{formatCurrency(selected.claim.Claim_Amount || 0)}</p>
                     </div>
                     <div className="bg-surfaceHover rounded-xl p-3">
                       <div className="flex items-center gap-2 text-xs text-textSecondary mb-1"><User size={12} /> Patient</div>

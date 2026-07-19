@@ -13,6 +13,7 @@ import PlotlyChart from "../../components/PlotlyChart";
 import Skeleton from "../../components/Skeleton";
 import Modal from "../../components/Modal";
 import { formatCurrency, formatCompactCurrency, formatPercent, formatNumber, getRiskLevel } from "../../data/dataUtils";
+import { CANONICAL_CUMULATIVE_SAVINGS, CANONICAL_FRAUD_CATEGORIES, CANONICAL_REGIONAL_DATA, CANONICAL_MODEL } from "../../data/canonicalData";
 
 function AnimatedCounter({ value, suffix = '', duration = 1200 }) {
   const [display, setDisplay] = useState(0);
@@ -157,54 +158,36 @@ export default function ExecutiveDashboard() {
   const trendPlotlyData = useMemo(() => [
     {
       x: claimsOverTime.map(d => d.date),
-      y: claimsOverTime.map(d => d.total_claims),
-      type: 'scatter', mode: 'lines', name: 'Total Claims',
+      y: claimsOverTime.map(d => +(d.total_amount / 1_000_000).toFixed(2)),
+      type: 'scatter', mode: 'lines', name: 'Total Claim Value ($M)',
       line: { color: '#6366f1', width: 3, shape: 'spline' },
       fill: 'tozeroy', fillcolor: 'rgba(99, 102, 241, 0.05)'
     },
     {
       x: claimsOverTime.map(d => d.date),
-      y: claimsOverTime.map(d => d.fraud_claims),
-      type: 'scatter', mode: 'lines', name: 'Fraud Claims',
+      y: claimsOverTime.map(d => +((d.fraud_amount || 0) / 1_000_000).toFixed(2)),
+      type: 'scatter', mode: 'lines', name: 'Fraud Value ($M)',
       line: { color: '#ef4444', width: 3, shape: 'spline' },
       fill: 'tozeroy', fillcolor: 'rgba(239, 68, 68, 0.05)'
     },
   ], [claimsOverTime]);
 
   const financialImpactPlotlyData = useMemo(() => {
-    const n = claimsOverTime.length || 6;
-    const cumulative = [];
-    const monthlySaved = stats?.money_saved ? stats.money_saved / n : 500000;
-    for (let i = 0; i < n; i++) {
-      cumulative.push(monthlySaved * (i + 1));
-    }
-    const labels = claimsOverTime.length > 0
-      ? claimsOverTime.slice(0, n).map(d => d.date.slice(0, 7))
-      : ['Jan 2025','Feb 2025','Mar 2025','Apr 2025','May 2025','Jun 2025'];
+    const labels = CANONICAL_CUMULATIVE_SAVINGS.map(d => d.month.replace(' 2025', ''));
+    const values = CANONICAL_CUMULATIVE_SAVINGS.map(d => +(d.saved / 1_000_000).toFixed(2));
     return [{
       x: labels,
-      y: cumulative.map(v => +(v / 1000000).toFixed(2)),
+      y: values,
       type: 'scatter', mode: 'lines+markers', name: 'Cumulative Money Saved ($M)',
       line: { color: '#10b981', width: 3, shape: 'spline' },
       marker: { size: 7, color: '#10b981', line: { color: '#059669', width: 2 } },
       fill: 'tozeroy', fillcolor: 'rgba(16, 185, 129, 0.06)'
     }];
-  }, [claimsOverTime, stats]);
+  }, []);
 
   const regionalPlotlyData = useMemo(() => {
     const data = regionalData.length === 0
-      ? [
-          { state: 'CA', total_claims: 3450, fraud_claims: 382 },
-          { state: 'TX', total_claims: 2980, fraud_claims: 215 },
-          { state: 'FL', total_claims: 4120, fraud_claims: 514 },
-          { state: 'NY', total_claims: 3850, fraud_claims: 276 },
-          { state: 'IL', total_claims: 2100, fraud_claims: 146 },
-          { state: 'PA', total_claims: 1870, fraud_claims: 98 },
-          { state: 'OH', total_claims: 1640, fraud_claims: 112 },
-          { state: 'GA', total_claims: 1520, fraud_claims: 189 },
-          { state: 'NC', total_claims: 1310, fraud_claims: 78 },
-          { state: 'MI', total_claims: 1210, fraud_claims: 142 },
-        ]
+      ? CANONICAL_REGIONAL_DATA
       : regionalData;
     return [{
       x: data.map(d => d.state || d.region || 'Unknown'),
@@ -225,14 +208,7 @@ export default function ExecutiveDashboard() {
   const categoryPlotlyData = useMemo(() => {
     const cats = fraudCategories.length > 0
       ? fraudCategories
-      : [
-          { category: 'Upcoding', count: 28 },
-          { category: 'Phantom Billing', count: 22 },
-          { category: 'Identity Theft', count: 18 },
-          { category: 'Duplicate Claims', count: 15 },
-          { category: 'Unbundling', count: 11 },
-          { category: 'Other', count: 8 },
-        ];
+      : CANONICAL_FRAUD_CATEGORIES.map(c => ({ category: c.category, count: c.count }));
     return [{
       labels: cats.map(c => c.category),
       values: cats.map(c => c.count),
@@ -289,14 +265,14 @@ export default function ExecutiveDashboard() {
 
   const dualAxisPlotlyData = useMemo(() => {
     const months = claimsOverTime.length > 0
-      ? claimsOverTime.slice(0, 6).map(d => d.date.slice(0, 7))
-      : ['Jan','Feb','Mar','Apr','May','Jun'];
+      ? claimsOverTime.map(d => d.date.slice(0, 7))
+      : CANONICAL_CUMULATIVE_SAVINGS.map(d => d.month.replace(' 2025', ''));
     const claimsVol = claimsOverTime.length > 0
-      ? claimsOverTime.slice(0, 6).map(d => d.total_claims)
-      : [1200, 1350, 1280, 1420, 1510, 1480];
+      ? claimsOverTime.map(d => d.total_claims)
+      : [1542, 1498, 1623, 1587, 1712, 1654, 1789, 1823, 1698, 1756, 1867, 1523];
     const fraudRates = claimsOverTime.length > 0
-      ? claimsOverTime.slice(0, 6).map(d => +((d.fraud_claims / d.total_claims) * 100).toFixed(1))
-      : [4.2, 5.8, 6.1, 5.4, 7.2, 6.8];
+      ? claimsOverTime.map(d => +((d.fraud_claims / d.total_claims) * 100).toFixed(1))
+      : [6.2, 6.5, 6.8, 6.9, 7.4, 7.1, 7.8, 8.2, 7.5, 7.9, 8.4, 9.1];
     return [
       {
         x: months, y: claimsVol,
@@ -316,18 +292,7 @@ export default function ExecutiveDashboard() {
 
   const riskyRegionsSorted = useMemo(() => {
     const data = regionalData.length === 0
-      ? [
-          { state: 'CA', total_claims: 3450, fraud_claims: 382 },
-          { state: 'TX', total_claims: 2980, fraud_claims: 215 },
-          { state: 'FL', total_claims: 4120, fraud_claims: 514 },
-          { state: 'NY', total_claims: 3850, fraud_claims: 276 },
-          { state: 'IL', total_claims: 2100, fraud_claims: 146 },
-          { state: 'PA', total_claims: 1870, fraud_claims: 98 },
-          { state: 'OH', total_claims: 1640, fraud_claims: 112 },
-          { state: 'GA', total_claims: 1520, fraud_claims: 189 },
-          { state: 'NC', total_claims: 1310, fraud_claims: 78 },
-          { state: 'MI', total_claims: 1210, fraud_claims: 142 },
-        ]
+      ? CANONICAL_REGIONAL_DATA
       : regionalData;
     return [...data].sort((a, b) => (b.fraud_claims / b.total_claims) - (a.fraud_claims / a.total_claims));
   }, [regionalData]);
@@ -342,7 +307,7 @@ export default function ExecutiveDashboard() {
       projectedSavings: Math.round(totalFraudPrevented * 1.15),
       fraudRateForecast: +(fraudRate * 1.05).toFixed(1),
       expectedGrowth: `${(growthRate * 100).toFixed(1)}%`,
-      modelAccuracyForecast: +(((stats?.model_accuracy || 0.92) + 0.018).toFixed(3)),
+      modelAccuracyForecast: +Math.min(((stats?.model_accuracy || CANONICAL_MODEL.accuracy) + 0.018), 0.995).toFixed(3),
     };
   }, [stats, totalClaims, totalFraudPrevented, fraudRate, claimsOverTime]);
 
@@ -401,7 +366,7 @@ export default function ExecutiveDashboard() {
         <KpiCard title="Total Fraud Prevented" value={formatCurrency(totalFraudPrevented)} subtitle="YTD recovery & prevention" icon={ShieldCheck} bgClass="bg-emerald-500/10" iconTextClass="text-emerald-500" delay={0} rawValue={Math.round(totalFraudPrevented / 1000)} trend={stats?.total_fraud > 0 ? +((stats.money_saved / stats.total_fraud / 100).toFixed(1)) : undefined} />
         <KpiCard title="Revenue Protected" value={formatCompactCurrency(revenueProtected)} subtitle="Claim value minus exposure" icon={Landmark} bgClass="bg-indigo-500/10" iconTextClass="text-indigo-500" delay={50} rawValue={Math.round(revenueProtected / 1000)} trendUp={revenueProtected > 0} trendValue="$2.1M vs last Q" />
         <KpiCard title="ROI on Detection" value={`${roiDetection.toFixed(0)}%`} subtitle="Money saved per $1 invested" icon={Target} bgClass="bg-blue-500/10" iconTextClass="text-blue-500" delay={100} trendUp={roiDetection > 80} trendValue={`${(roiDetection / 10).toFixed(0)}% efficiency`} />
-        <KpiCard title="Detection Rate" value={formatPercent((stats?.model_accuracy || 0.92) * 100, 1)} subtitle={`Model v${stats?.model_version || '1.0'}`} icon={Activity} bgClass="bg-green-500/10" iconTextClass="text-green-500" delay={150} trendUp trendValue="+2.3% YoY" />
+        <KpiCard title="Detection Rate" value={formatPercent((stats?.model_accuracy || CANONICAL_MODEL.accuracy) * 100, 1)} subtitle={`Model v${stats?.model_version || CANONICAL_MODEL.version}`} icon={Activity} bgClass="bg-green-500/10" iconTextClass="text-green-500" delay={150} trendUp trendValue="+2.3% YoY" />
         <KpiCard title="Active Investigations" value={activeInvestigations} subtitle="Cases pending review" icon={AlertTriangle} bgClass="bg-red-500/10" iconTextClass="text-red-500" delay={200} rawValue={activeInvestigations} trendUp={activeInvestigations > 10} trendValue={activeInvestigations > 10 ? '+12%' : 'Normal'} />
         <KpiCard title="Auto-Adjudication Rate" value={`${autoAdjudication.toFixed(1)}%`} subtitle="Approved without review" icon={BrainCircuit} bgClass="bg-cyan-500/10" iconTextClass="text-cyan-500" delay={250} trendUp={autoAdjudication > 70} trendValue={`${(autoAdjudication / 20).toFixed(0)}% efficiency`} />
         <KpiCard title="Avg Claim Amount" value={formatCurrency(avgClaimAmt)} subtitle="Per processed claim" icon={DollarSign} bgClass="bg-amber-500/10" iconTextClass="text-amber-500" delay={300} rawValue={Math.round(avgClaimAmt)} />
@@ -410,7 +375,7 @@ export default function ExecutiveDashboard() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="bg-surface rounded-2xl border border-border/80 shadow-sm overflow-hidden hover:shadow-[0_8px_30px_rgb(0_0_0_/_0.06)] transition-shadow">
-          <SECTION_HEADER icon={BarChart3} title="Claims & Fraud Trend" action="Last 30 Days" />
+          <SECTION_HEADER icon={BarChart3} title="Financial Trend" action="Claim Value ($M)" />
           <div className="p-5 h-[300px]">
             <PlotlyChart data={trendPlotlyData} layout={{ margin: { t: 10, r: 10, l: 30, b: 30 }, xaxis: { showgrid: false }, yaxis: { gridcolor: 'rgba(226, 232, 240, 0.5)' }, legend: { orientation: 'h', y: -0.15 } }} />
           </div>
@@ -629,11 +594,11 @@ export default function ExecutiveDashboard() {
           <div className="p-5 max-h-[300px] overflow-y-auto custom-scrollbar">
             <div className="space-y-3">
               {(topProviders.length > 0 ? topProviders : [
-                { name: 'Southwest Medical Group', claim_count: 423, fraud_count: 47, total_amount: 1280000 },
-                { name: 'Advanced Care Physicians', claim_count: 356, fraud_count: 38, total_amount: 975000 },
-                { name: 'Premier Health Partners', claim_count: 512, fraud_count: 32, total_amount: 1450000 },
-                { name: 'Coastal Diagnostic Center', claim_count: 278, fraud_count: 29, total_amount: 812000 },
-                { name: 'Metro Surgical Associates', claim_count: 345, fraud_count: 24, total_amount: 1020000 },
+                { name: 'Metropolitan General Hospital', claim_count: 1842, fraud_count: 189, total_amount: 2302500 },
+                { name: 'St. Mary Medical Center', claim_count: 1687, fraud_count: 162, total_amount: 2108750 },
+                { name: 'City Health Network', claim_count: 2014, fraud_count: 145, total_amount: 2517500 },
+                { name: 'Pacific Wellness Group', claim_count: 1456, fraud_count: 128, total_amount: 1820000 },
+                { name: 'Summit Healthcare Partners', claim_count: 1523, fraud_count: 118, total_amount: 1903750 },
               ]).slice(0, 5).map((p, i) => {
                 const fraudPct = p.claim_count ? ((p.fraud_count / p.claim_count) * 100).toFixed(1) : '0.0';
                 return (

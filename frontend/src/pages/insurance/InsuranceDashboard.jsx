@@ -9,16 +9,11 @@ import api from "../../api";
 import PlotlyChart from "../../components/PlotlyChart";
 import Skeleton from "../../components/Skeleton";
 import { formatCurrency, formatCompactCurrency, formatPercent, formatNumber, getRiskLevel } from "../../data/dataUtils";
+import { CANONICAL_SHAP_FEATURES, CANONICAL_MODEL, CANONICAL_FUNNEL } from "../../data/canonicalData";
 
 const PLOTLY_ANIM_CONFIG = { responsive: true, displayModeBar: false, transition: { duration: 600, easing: 'cubic-in-out' } };
 
-const SHAP_FEATURES = [
-  { label: 'claim_amount', value: 0.34, color: '#ef4444' },
-  { label: 'distance_miles', value: 0.27, color: '#f97316' },
-  { label: 'previous_claims', value: 0.19, color: '#f59e0b' },
-  { label: 'procedure_count', value: 0.12, color: '#6366f1' },
-  { label: 'diagnosis_match', value: 0.08, color: '#8b5cf6' },
-];
+const SHAP_FEATURES = CANONICAL_SHAP_FEATURES;
 
 const FALLBACK_REGION_DATA = [
   { state: 'CA', total_claims: 4820, fraud_claims: 385 },
@@ -374,15 +369,22 @@ export default function InsuranceDashboard() {
 
   const providerRiskPlotlyData = useMemo(() => {
     const sorted = [...fraudByProvider]
-      .sort((a, b) => (b.fraud_claims || 0) - (a.fraud_claims || 0))
+      .map(d => ({
+        ...d,
+        fraud_rate: d.total_claims > 0 ? ((d.fraud_claims || 0) / d.total_claims) * 100 : 0,
+      }))
+      .sort((a, b) => b.fraud_rate - a.fraud_rate)
       .slice(0, 8);
     return [{
       y: sorted.map(d => d.provider_name),
-      x: sorted.map(d => d.fraud_claims || 0),
+      x: sorted.map(d => +d.fraud_rate.toFixed(1)),
       type: 'bar',
       orientation: 'h',
-      name: 'Fraud Claims',
-      marker: { color: sorted.map((_, i) => `rgba(239, 68, 68, ${1 - i * 0.08})`), cornerradius: 4 },
+      name: 'Fraud Rate %',
+      text: sorted.map(d => `${d.fraud_rate.toFixed(1)}%`),
+      textposition: 'outside',
+      textfont: { size: 10, color: '#94a3b8' },
+      marker: { color: sorted.map(d => d.fraud_rate > 9 ? '#ef4444' : d.fraud_rate > 7 ? '#f97316' : '#f59e0b'), cornerradius: 4 },
     }];
   }, [fraudByProvider]);
 
@@ -441,7 +443,7 @@ export default function InsuranceDashboard() {
   }, []);
 
   const gaugePlotlyData = useMemo(() => {
-    const accuracy = stats?.model_accuracy ? stats.model_accuracy * 100 : (modelMetrics?.accuracy ? modelMetrics.accuracy * 100 : 94.2);
+    const accuracy = stats?.model_accuracy ? stats.model_accuracy * 100 : (modelMetrics?.accuracy ? modelMetrics.accuracy * 100 : (CANONICAL_MODEL.accuracy * 100));
     return [{
       type: 'indicator',
       mode: 'gauge+number',
@@ -588,13 +590,61 @@ export default function InsuranceDashboard() {
         />
         <KpiCard
           title="MODEL ACCURACY"
-          value={stats?.model_accuracy ? `${(stats.model_accuracy * 100).toFixed(1)}%` : '94.2%'}
-          subtitle={`v${stats?.model_version || '1.0.0'}`}
+          value={stats?.model_accuracy ? `${(stats.model_accuracy * 100).toFixed(1)}%` : `${(CANONICAL_MODEL.accuracy * 100).toFixed(1)}%`}
+          subtitle={`v${stats?.model_version || CANONICAL_MODEL.version}`}
           icon={BrainCircuit}
           bgClass="bg-green-500/10"
           iconTextClass="text-green-500"
           delay={350}
         />
+      </div>
+
+      <div className="bg-surface rounded-2xl border border-border/80 shadow-sm overflow-hidden hover:shadow-[0_8px_30px_rgb(0,0,0,0.06)] transition-shadow">
+        <div className="border-b border-border/60 px-5 py-4 flex items-center justify-between">
+          <h3 className="text-sm font-bold text-textPrimary flex items-center gap-2">
+            <Target size={16} className="text-primary" />
+            Fraud Detection Funnel
+          </h3>
+          <span className="rounded-full bg-bg/80 px-2.5 py-0.5 text-[9px] font-black text-textSecondary uppercase tracking-wider border border-border/60">
+            End-to-End Pipeline
+          </span>
+        </div>
+        <div className="p-5">
+          {(() => {
+            const funnel = stats ? {
+              total: stats.total_claims || 0,
+              scored: stats.total_fraud || 0,
+              flagged: stats.flagged_claims || 0,
+              escalated: stats.escalated_alerts || 0,
+            } : {
+              total: CANONICAL_FUNNEL.totalClaims,
+              scored: CANONICAL_FUNNEL.aiScoredHighRisk,
+              flagged: CANONICAL_FUNNEL.formallyFlagged,
+              escalated: CANONICAL_FUNNEL.escalatedAlerts,
+            };
+            const stages = [
+              { label: 'Total Claims Processed', value: funnel.total, color: 'bg-indigo-500', textColor: 'text-indigo-500', width: '100%' },
+              { label: 'AI-Scored High Risk', value: funnel.scored, color: 'bg-amber-500', textColor: 'text-amber-500', width: '75%' },
+              { label: 'Formally Flagged (SIU)', value: funnel.flagged, color: 'bg-orange-500', textColor: 'text-orange-500', width: '42%' },
+              { label: 'Escalated Critical Alerts', value: funnel.escalated, color: 'bg-red-500', textColor: 'text-red-500', width: '18%' },
+            ];
+            return (
+              <div className="flex flex-col md:flex-row items-stretch gap-3">
+                {stages.map((s, i) => {
+                  const pct = funnel.total > 0 ? ((s.value / funnel.total) * 100).toFixed(1) : '0.0';
+                  return (
+                    <div key={i} className="flex-1 flex flex-col items-center">
+                      <div className={`w-full h-2 rounded-full ${s.color} opacity-80 mb-2`} style={{ maxWidth: s.width }} />
+                      <p className={`text-xl font-black ${s.textColor}`}>{s.value.toLocaleString()}</p>
+                      <p className="text-[10px] text-textSecondary font-semibold text-center mt-1 leading-tight">{s.label}</p>
+                      {i > 0 && <p className="text-[9px] text-textSecondary mt-1 font-mono">{pct}% of total</p>}
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -675,7 +725,7 @@ export default function InsuranceDashboard() {
                 config={PLOTLY_ANIM_CONFIG}
                 layout={{
                   margin: { t: 10, r: 40, l: 120, b: 30 },
-                  xaxis: { title: 'Fraud Claims', gridcolor: 'rgba(226, 232, 240, 0.5)' },
+                  xaxis: { title: 'Fraud Rate %', gridcolor: 'rgba(226, 232, 240, 0.5)', range: [0, 15], ticksuffix: '%' },
                   yaxis: { automargin: true, tickfont: { size: 10 } },
                   paper_bgcolor: 'rgba(0,0,0,0)',
                   plot_bgcolor: 'rgba(0,0,0,0)',
@@ -899,46 +949,6 @@ export default function InsuranceDashboard() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="bg-surface rounded-2xl border border-border/80 shadow-sm overflow-hidden flex flex-col hover:shadow-[0_8px_30px_rgb(0,0,0,0.06)] transition-shadow">
-          <div className="border-b border-border/60 px-5 py-4 flex items-center justify-between">
-            <h3 className="text-sm font-bold text-textPrimary flex items-center gap-1.5">
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
-              </span>
-              Live Threat Interceptions
-            </h3>
-            <span className="text-[10px] bg-red-500/10 text-red-500 font-bold px-2 py-0.5 rounded border border-red-500/20">Streaming</span>
-          </div>
-          <div className="p-5 flex-1 overflow-y-auto space-y-4 max-h-[420px] custom-scrollbar">
-            {activityFeed.map((item) => {
-              const ItemIcon = item.icon || AlertTriangle;
-              return (
-                <div key={item.id} className="flex gap-3 text-xs leading-relaxed border-b border-border/40 pb-3 last:border-0 last:pb-0 hover:bg-bg/20 -mx-1 px-1 rounded-lg transition-colors">
-                  <div className="mt-0.5 shrink-0">
-                    <span className={`inline-block px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wider rounded border ${item.bg}`}>
-                      {item.badge}
-                    </span>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-textPrimary font-medium">{item.desc}</p>
-                    <span className="text-[10px] text-textSecondary font-semibold mt-1 inline-flex items-center gap-1">
-                      <Clock size={10} />
-                      {item.time}
-                    </span>
-                  </div>
-                  <div className="shrink-0 mt-0.5">
-                    <ItemIcon size={14} className={item.badge === 'Critical' ? 'text-red-400' : item.badge === 'System' ? 'text-indigo-400' : 'text-amber-400'} />
-                  </div>
-                </div>
-              );
-            })}
-            {activityFeed.length === 0 && (
-              <div className="text-center py-8 text-xs text-textSecondary italic">Awaiting threat data...</div>
-            )}
-          </div>
-        </div>
-
         <div className="lg:col-span-2 bg-surface rounded-2xl border border-border/80 shadow-sm overflow-hidden flex flex-col hover:shadow-[0_8px_30px_rgb(0,0,0,0.06)] transition-shadow">
           <div className="border-b border-border/60 px-5 py-4 flex items-center justify-between">
             <h3 className="text-sm font-bold text-textPrimary">Latest Flagged Claims</h3>
@@ -1063,7 +1073,7 @@ export default function InsuranceDashboard() {
               <div className="space-y-3">
                 <div className="flex justify-between border-b border-border/40 pb-2">
                   <span className="text-textSecondary">Active Version</span>
-                  <span className="font-mono font-bold text-primary">v{modelMetrics.model_version || '2.4.2'}</span>
+                  <span className="font-mono font-bold text-primary">v{modelMetrics.model_version || CANONICAL_MODEL.version}</span>
                 </div>
                 <div className="flex justify-between border-b border-border/40 pb-2">
                   <span className="text-textSecondary">Accuracy</span>
@@ -1074,20 +1084,20 @@ export default function InsuranceDashboard() {
                 <div className="flex justify-between border-b border-border/40 pb-2">
                   <span className="text-textSecondary">F1-Score</span>
                   <span className="font-mono font-bold text-primary">
-                    {((modelMetrics.f1_score || stats?.model_f1 || 0.909) * 100).toFixed(1)}%
+                    {((modelMetrics.f1_score || stats?.model_f1 || CANONICAL_MODEL.f1Score) * 100).toFixed(1)}%
                   </span>
                 </div>
                 <div className="flex justify-between border-b border-border/40 pb-2">
                   <span className="text-textSecondary">ROC-AUC</span>
                   <span className="font-mono font-bold text-indigo-500">
-                    {((modelMetrics.roc_auc || modelMetrics.model_roc_auc || stats?.model_roc_auc || 0.967) * 100).toFixed(1)}%
+                    {((modelMetrics.roc_auc || modelMetrics.model_roc_auc || stats?.model_roc_auc || CANONICAL_MODEL.rocAuc) * 100).toFixed(1)}%
                   </span>
                 </div>
                 <div className="flex justify-between border-b border-border/40 pb-2">
                   <span className="text-textSecondary">Precision / Recall</span>
                   <span className="font-mono font-bold text-textPrimary">
-                    {((modelMetrics.precision || stats?.model_precision || 0.923) * 100).toFixed(1)}% /
-                    {((modelMetrics.recall || stats?.model_recall || 0.895) * 100).toFixed(1)}%
+                    {((modelMetrics.precision || stats?.model_precision || CANONICAL_MODEL.precision) * 100).toFixed(1)}% /
+                    {((modelMetrics.recall || stats?.model_recall || CANONICAL_MODEL.recall) * 100).toFixed(1)}%
                   </span>
                 </div>
                 <div className="flex justify-between">

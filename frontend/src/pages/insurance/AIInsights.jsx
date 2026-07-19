@@ -3,6 +3,8 @@ import { BrainCircuit, AlertTriangle, Target, ShieldCheck, DollarSign, Building2
 import api from '../../api';
 import Skeleton from '../../components/Skeleton';
 import PlotlyChart from '../../components/PlotlyChart';
+import { CANONICAL_MODEL } from '../../data/canonicalData';
+import { formatCompactCurrency } from '../../data/dataUtils';
 
 const SPECIALTIES = ['Cardiology', 'Orthopedics', 'Neurology', 'Oncology', 'Radiology', 'General Surgery', 'Internal Medicine', 'Dermatology'];
 const CITIES_FALLBACK = ['Dallas', 'Houston', 'Austin', 'San Antonio', 'Fort Worth', 'El Paso', 'Arlington', 'Plano'];
@@ -116,7 +118,7 @@ export default function AIInsights() {
         severity: regionSeverity,
         action: `Escalated Audit for ${cityName} Region`,
         reason: `${cityName} leads with ${highestFraudCityCount} flagged claims. AI clustering detected persistent billing anomalies. Recommend immediate on-site inspection.`,
-        impact: `$${(highestFraudCityCount * avgAmt / 1000).toFixed(0)}K at risk`,
+        impact: `${formatCompactCurrency(highestFraudCityCount * avgAmt)} at risk`,
       },
       {
         icon: Stethoscope,
@@ -142,9 +144,9 @@ export default function AIInsights() {
       {
         icon: DollarSign,
         severity: financialSeverity,
-        action: `Recover $${(totalFraudVal / 1000).toFixed(0)}K in Overpaid Claims`,
+        action: `Recover ${formatCompactCurrency(totalFraudVal)} in Overpaid Claims`,
         reason: `AI identified ${totalFraudAmt} claims matching known fraud signatures with >85% confidence. Largest concentration involves billing across ${cityName} network.`,
-        impact: `$${(totalFraudVal / 1000).toFixed(0)}K recoverable`,
+        impact: `${formatCompactCurrency(totalFraudVal)} recoverable`,
       },
       {
         icon: Lightbulb,
@@ -306,10 +308,10 @@ export default function AIInsights() {
           </div>
           <div className="mt-4 space-y-2.5">
             {[
-              { label: 'Model Accuracy', value: metrics?.model_accuracy ? (metrics.model_accuracy * 100).toFixed(1) + '%' : '94.2%', color: 'text-primary' },
-              { label: 'Precision', value: metrics?.model_precision ? (metrics.model_precision * 100).toFixed(1) + '%' : '91.7%', color: 'text-emerald-500' },
-              { label: 'Recall', value: metrics?.model_recall ? (metrics.model_recall * 100).toFixed(1) + '%' : '88.3%', color: 'text-amber-500' },
-              { label: 'F1 Score', value: metrics?.model_f1 ? (metrics.model_f1 * 100).toFixed(1) + '%' : '89.9%', color: 'text-sky-500' },
+              { label: 'Model Accuracy', value: metrics?.model_accuracy ? (metrics.model_accuracy * 100).toFixed(1) + '%' : `${(CANONICAL_MODEL.accuracy * 100).toFixed(1)}%`, color: 'text-primary' },
+              { label: 'Precision', value: metrics?.model_precision ? (metrics.model_precision * 100).toFixed(1) + '%' : `${(CANONICAL_MODEL.precision * 100).toFixed(1)}%`, color: 'text-emerald-500' },
+              { label: 'Recall', value: metrics?.model_recall ? (metrics.model_recall * 100).toFixed(1) + '%' : `${(CANONICAL_MODEL.recall * 100).toFixed(1)}%`, color: 'text-amber-500' },
+              { label: 'F1 Score', value: metrics?.model_f1 ? (metrics.model_f1 * 100).toFixed(1) + '%' : `${(CANONICAL_MODEL.f1Score * 100).toFixed(1)}%`, color: 'text-sky-500' },
             ].map((stat) => (
               <div key={stat.label} className="flex items-center justify-between">
                 <span className="text-xs text-textSecondary font-medium">{stat.label}</span>
