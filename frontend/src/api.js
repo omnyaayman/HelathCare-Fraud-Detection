@@ -224,6 +224,54 @@ function generateSuspiciousPatterns(patients) {
   return patterns;
 }
 
+let _cachedProviders = null;
+function generateProviders() {
+  if (_cachedProviders) return _cachedProviders;
+  const specialties = ['Cardiology','Orthopedics','Internal Medicine','Family Medicine','Emergency Medicine','Neurology','Pediatrics','Dermatology','Oncology','Gastroenterology','Radiology','General Surgery','Urgent Care','Pulmonology','Nephrology','Endocrinology','Rheumatology','Urology','Psychiatry','Ophthalmology'];
+  const types = ['Hospital','Clinic','Medical Group','Specialist','Diagnostic Center','Surgery Center','Urgent Care','Health System'];
+  const prefixes = ['Metropolitan','St. Mary','City','Pacific','Summit','Lakeside','Valley','Northeast','Premier','Community','Sunrise','Heartland','Coastal','Midwest','Southeast','Northwest','Golden','Heritage','Liberty','Central','Pinnacle','Horizon','Apex','Beacon','Cornerstone','Evergreen','Foundry','Gateway','Harbor','Keystone','Landmark','Meridian','Oak','Pinnacle','Ridge','Sterling','Summit','Trident','Unity','Victoria','Westwood','Zenith','Alpine','Brookfield','Cedar','Darwin','Elite','Frontier','Genesis','Harmony'];
+  const suffixes = ['Medical Center','Health Group','Clinic','Medical Associates','Healthcare Partners','Medical Plaza','Health Services','Physician Group','Medical Network','Wellness Center','Care Partners','Medical Solutions','Health Partners','Clinical Associates','Medical Care','Diagnostic Center','Surgical Institute','Specialty Clinic','Health Alliance','Medical Institute'];
+  const cities = ['New York','Los Angeles','Chicago','Houston','Phoenix','Philadelphia','San Antonio','San Diego','Dallas','San Jose','Austin','Jacksonville','Fort Worth','Columbus','Charlotte','Indianapolis','San Francisco','Seattle','Denver','Nashville','Portland','Las Vegas','Memphis','Baltimore','Milwaukee','Tucson','Fresno','Sacramento','Atlanta','Miami'];
+  const states = ['NY','CA','IL','TX','AZ','PA','TX','CA','TX','CA','TX','FL','TX','OH','NC','IN','CA','WA','CO','TN','OR','NV','TN','MD','WI','AZ','CA','CA','GA','FL'];
+  const usedNames = new Set();
+  const providers = [];
+  for (let i = 0; i < 200; i++) {
+    let name;
+    do {
+      name = `${prefixes[i % prefixes.length]} ${suffixes[i % suffixes.length]}`;
+      if (usedNames.has(name)) name = `${prefixes[(i * 7 + 3) % prefixes.length]} ${suffixes[(i * 3 + 5) % suffixes.length]}`;
+      if (usedNames.has(name)) name = `${prefixes[(i * 11 + 7) % prefixes.length]} ${suffixes[(i * 5 + 2) % suffixes.length]}`;
+    } while (usedNames.has(name));
+    usedNames.add(name);
+    const specialty = specialties[i % specialties.length];
+    const type = types[i % types.length];
+    const totalClaims = Math.floor(80 + Math.random() * 420);
+    const fraudRand = Math.random();
+    const fraudCount = fraudRand < 0.65 ? Math.floor(Math.random() * Math.floor(totalClaims * 0.05)) : Math.floor(Math.random() * Math.floor(totalClaims * 0.25)) + Math.floor(totalClaims * 0.05);
+    const approvedCount = Math.floor(totalClaims * (0.6 + Math.random() * 0.3));
+    const rejectedCount = Math.floor(totalClaims * (0.02 + Math.random() * 0.12));
+    const avgClaimAmount = Math.round(800 + Math.random() * 2200);
+    const networkStatus = Math.random() > 0.2 ? 'In-Network' : 'Out-of-Network';
+    providers.push({
+      provider_id: `PRV-${String(1000 + i).padStart(4, '0')}`,
+      name, type, specialty,
+      address: `${100 + Math.floor(Math.random() * 9900)} ${['Main','Oak','Elm','Pine','Cedar','Maple','Park','Lake','Hill','Valley'][i % 10]} ${['St','Ave','Blvd','Dr','Rd','Way','Ln','Ct','Pl','Cir'][i % 10]}`,
+      city: cities[i % cities.length], state: states[i % states.length],
+      phone: `(${200 + Math.floor(Math.random() * 800)}) 555-${String(1000 + i).padStart(4, '0')}`,
+      npi: String(1000000000 + i),
+      total_claims: totalClaims, claim_count: totalClaims,
+      fraud_claims: fraudCount, fraud_count: fraudCount,
+      total_amount: totalClaims * avgClaimAmount,
+      avg_claim_amount: avgClaimAmount,
+      flagged_amount: Math.round(fraudCount * avgClaimAmount),
+      approved_count: approvedCount, rejected_count: rejectedCount,
+      network_status: networkStatus,
+    });
+  }
+  _cachedProviders = providers;
+  return providers;
+}
+
 let _cachedClaims = null;
 function generateClaims() {
   if (_cachedClaims) return _cachedClaims;
@@ -451,7 +499,7 @@ const MOCK_DATA = {
     const patients = generatePatients();
     return generateSuspiciousPatterns(patients);
   },
-  '/api/providers': () => CANONICAL_PROVIDERS,
+  '/api/providers': () => generateProviders(),
   '/api/policies': () => CANONICAL_POLICIES,
   '/api/notifications': () => CANONICAL_NOTIFICATIONS,
   '/api/ai-insights': () => ({

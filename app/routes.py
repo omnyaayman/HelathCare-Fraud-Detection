@@ -9,7 +9,27 @@ from core.config import settings
 import datetime
 import decimal
 import random
+import logging
 from ML.predictor import predictor
+
+logger = logging.getLogger(__name__)
+
+try:
+    from services.email_service import send_email_notification, configure_smtp, is_smtp_configured
+    # Load SMTP config from env if available
+    import os
+    if os.getenv("SMTP_HOST"):
+        configure_smtp(
+            host=os.getenv("SMTP_HOST"),
+            port=int(os.getenv("SMTP_PORT", "587")),
+            username=os.getenv("SMTP_USER"),
+            password=os.getenv("SMTP_PASS"),
+            from_addr=os.getenv("SMTP_FROM"),
+        )
+    EMAIL_SERVICE_AVAILABLE = True
+except ImportError:
+    EMAIL_SERVICE_AVAILABLE = False
+    logger.info("Email service not available")
 
 router = APIRouter()
 security = HTTPBasic()
@@ -1157,7 +1177,8 @@ async def get_notifications(db: Session = Depends(get_db), user: dict = Depends(
 async def mark_notification_read(notif_id: int, db: Session = Depends(get_db), user: dict = Depends(get_current_user)):
     ensure_sample_data(db)
     try:
-        db.execute(text("UPDATE Notifications SET read = 1 WHERE id = :id"), {"id": notif_id})
+        now = datetime.datetime.now().isoformat()
+        db.execute(text("UPDATE Notifications SET read = 1, read_at = :ra WHERE id = :id"), {"id": notif_id, "ra": now})
         db.commit()
         log_audit(db, user, "MARK_NOTIF_READ", f"Notification {notif_id}")
         return {"status": "success"}
@@ -1170,7 +1191,8 @@ async def mark_notification_read(notif_id: int, db: Session = Depends(get_db), u
 async def mark_all_notifications_read(db: Session = Depends(get_db), user: dict = Depends(get_current_user)):
     ensure_sample_data(db)
     try:
-        db.execute(text("UPDATE Notifications SET read = 1"))
+        now = datetime.datetime.now().isoformat()
+        db.execute(text("UPDATE Notifications SET read = 1, read_at = :ra WHERE read = 0"), {"ra": now})
         db.commit()
         log_audit(db, user, "MARK_ALL_NOTIF_READ", "All notifications")
         return {"status": "success"}
@@ -1178,6 +1200,26 @@ async def mark_all_notifications_read(db: Session = Depends(get_db), user: dict 
         db.rollback()
         print(f"Mark all notifications read error: {e}")
         raise HTTPException(status_code=500, detail="Failed to update notifications")
+
+@router.get("/notifications/{notif_id}")
+async def get_notification_detail(notif_id: int, db: Session = Depends(get_db), user: dict = Depends(get_current_user)):
+    ensure_sample_data(db)
+    try:
+        n = db.execute(text("SELECT * FROM Notifications WHERE id = :id"), {"id": notif_id}).fetchone()
+        if not n:
+            raise HTTPException(status_code=404, detail="Notification not found")
+        result = format_row(n)
+        # Enrich with claim/provider/patient data if available
+        if result.get("claim_id"):
+            c = db.execute(text("""SELECT c.Claim_ID, c.Fraud_Score, c.Claim_Amount, c.Status, p.Name as provider_name, pt.Name as patient_name
+                FROM Claims c LEFT JOIN Provider p ON c.Provider_ID=p.Provider_ID LEFT JOIN Patient pt ON c.Patient_ID=pt.Patient_ID
+                WHERE c.Claim_ID=:cid"""), {"cid": result["claim_id"]}).fetchone()
+            if c:
+                result["claim"] = format_row(c)
+        return result
+    except SQLAlchemyError as e:
+        print(f"Notification detail error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to load notification")
 
 @router.get("/audit-logs")
 async def get_audit_logs(
@@ -1442,7 +1484,8 @@ async def submit_claim(data: dict, db: Session = Depends(get_db), user: dict = D
         provider = db.execute(text("SELECT Name, Type, Specialty, City, State FROM Provider WHERE Provider_ID = :prov_id"), {"prov_id": provider_id}).fetchone()
         
         # Get patient details
-        patient = db.execute(text("SELECT Age, Gender, City, State, Total_Claims FROM Patient WHERE Patient_ID = :pat_id"), {"pat_id": patient_id}).fetchone()
+        patient = db.execute(text("SELECT Age, Gender, City, State, Total_Claims, Name FROM Patient WHERE Patient_ID = :pat_id"), {"pat_id": patient_id}).fetchone()
+        patient_name = patient[5] if patient else "Unknown"
         
         # Build features dict for XGBoost prediction
         claim_amount = float(data.get("claim_amount", 500))
@@ -1553,17 +1596,42 @@ async def submit_claim(data: dict, db: Session = Depends(get_db), user: dict = D
             WHERE Patient_ID = :pat_id
         """), {"pat_id": patient_id})
         
-        # If fraudulent, create a system notification!
+        # If fraudulent, create an enterprise notification!
         if is_fraudulent:
+            sev = "critical" if fraud_score > 0.95 else ("high" if fraud_score > 0.8 else "medium")
+            chan = "dashboard,email" if sev in ("critical", "high") else "dashboard"
+            ds = "pending" if sev in ("critical", "high") else "sent"
+            now = datetime.datetime.now().isoformat()
+            score_pct = fraud_score * 100
             db.execute(text("""
-                INSERT INTO Notifications (title, message, type, created_at)
-                VALUES (:title, :message, :type, :created_at)
+                INSERT INTO Notifications (title, message, type, severity, channel, delivery_status, created_at, claim_id, description, recommended_action, recipient)
+                VALUES (:title, :message, :type, :severity, :channel, :delivery_status, :created_at, :claim_id, :description, :recommended_action, :recipient)
             """), {
                 "title": "High Risk Claim Detected",
-                "message": f"Claim #{claim_id} from {provider[0] if provider else 'provider'} has a high fraud probability score of {fraud_score * 100:.1f}%.",
+                "message": f"Claim #{claim_id} from {provider[0] if provider else 'provider'} has a high fraud probability score of {score_pct:.1f}%.",
                 "type": "fraud",
-                "created_at": datetime.datetime.now().isoformat()
+                "severity": sev,
+                "channel": chan,
+                "delivery_status": ds,
+                "created_at": now,
+                "claim_id": claim_id,
+                "description": f"AI model flagged claim #{claim_id} with {score_pct:.1f}% fraud probability. Patient: {patient_name}. Provider: {provider[0] if provider else 'Unknown'}.",
+                "recommended_action": "Immediate investigation required. Review patient history and provider credentials.",
+                "recipient": "Fraud Investigation Team, Compliance Officer, Risk Manager"
             })
+            
+            # Try to send email for critical/high
+            if EMAIL_SERVICE_AVAILABLE and sev in ("critical", "high"):
+                email_status = send_email_notification(
+                    "High Risk Claim Detected",
+                    f"Claim #{claim_id} flagged with {score_pct:.1f}% fraud probability",
+                    sev,
+                    claim_info={"claim_id": claim_id, "fraud_score": f"{score_pct:.1f}%",
+                               "provider": provider[0] if provider else "Unknown",
+                               "patient": patient_name}
+                )
+                db.execute(text("UPDATE Notifications SET delivery_status=:ds, sent_at=:sa WHERE id=last_insert_rowid()"),
+                          {"ds": email_status, "sa": now if email_status == "sent" else None})
             
         db.commit()
         log_audit(db, user, "SUBMIT_CLAIM", f"Claim {claim_id} processed by AI, score: {fraud_score}")
@@ -1604,18 +1672,73 @@ async def get_stats_trends(db: Session = Depends(get_db), user: dict = Depends(g
 @router.post("/notifications/generate")
 async def generate_notifications(db: Session = Depends(get_db), user: dict = Depends(get_current_user)):
     try:
-        db.execute(text("DELETE FROM Notifications WHERE id NOT IN (SELECT id FROM Notifications ORDER BY created_at DESC LIMIT 20)"))
-        now = datetime.datetime.now().isoformat(); td = datetime.date.today().isoformat()
+        now = datetime.datetime.now().isoformat()
+        td = datetime.date.today().isoformat()
+        recipients_default = "Fraud Investigation Team, Compliance Officer, Risk Manager"
+        
+        # 1. Fraud Claims Detected (High severity)
         rf = db.execute(text("SELECT COUNT(*) FROM Claims WHERE Is_Fraudulent=1 AND Claim_Date=:t AND Status IN ('Submitted','Under Review')"), {"t": td}).scalar() or 0
-        if rf > 0: db.execute(text("INSERT INTO Notifications(title,message,type,created_at) VALUES(:t,:m,:tp,:ca)"), {"t":"Fraud Claims Detected","m":f"{rf} high-risk claims flagged today","tp":"fraud","ca":now})
-        pb = db.execute(text("""SELECT p.Name,COUNT(c.Claim_ID) as c FROM Provider p JOIN Claims c ON p.Provider_ID=c.Provider_ID WHERE c.Is_Fraudulent=1 GROUP BY p.Provider_ID ORDER BY c DESC LIMIT 1""")).fetchone()
-        if pb: db.execute(text("INSERT INTO Notifications(title,message,type,created_at) VALUES(:t,:m,:tp,:ca)"),{"t":"Provider Flagged","m":f"{pb.Name}: {pb.c} fraud claims - auto-review triggered","tp":"fraud","ca":now})
+        if rf > 0:
+            sev = "critical" if rf > 5 else "high"
+            channel = "dashboard,email" if sev in ("critical", "high") else "dashboard"
+            db.execute(text("""INSERT INTO Notifications(title,message,type,severity,channel,delivery_status,created_at,recipient,description)
+                VALUES(:t,:m,:tp,:sv,:ch,:ds,:ca,:rc,:desc)"""), {
+                "t": "Fraud Claims Detected", "m": f"{rf} high-risk claims flagged today", "tp": "fraud",
+                "sv": sev, "ch": channel, "ds": "pending", "ca": now, "rc": recipients_default,
+                "desc": f"System detected {rf} claims with high fraud probability scores requiring immediate review."
+            })
+        
+        # 2. Provider Flagged (Critical severity)
+        pb = db.execute(text("""SELECT p.Name,p.Provider_ID,COUNT(c.Claim_ID) as c FROM Provider p JOIN Claims c ON p.Provider_ID=c.Provider_ID WHERE c.Is_Fraudulent=1 GROUP BY p.Provider_ID ORDER BY c DESC LIMIT 1""")).fetchone()
+        if pb and pb.c > 0:
+            sev = "critical" if pb.c > 10 else "high"
+            channel = "dashboard,email" if sev == "critical" else "dashboard"
+            db.execute(text("""INSERT INTO Notifications(title,message,type,severity,channel,delivery_status,created_at,recipient,description,provider_id,recommended_action)
+                VALUES(:t,:m,:tp,:sv,:ch,:ds,:ca,:rc,:desc,:pid,:ra)"""), {
+                "t": "Provider Flagged", "m": f"{pb.Name}: {pb.c} fraud claims - auto-review triggered", "tp": "fraud",
+                "sv": sev, "ch": channel, "ds": "pending", "ca": now, "rc": recipients_default,
+                "desc": f"Provider {pb.Name} has {pb.c} flagged fraud claims. Immediate investigation recommended.",
+                "pid": pb.Provider_ID, "ra": "Review all claims from this provider. Consider temporary suspension."
+            })
+        
+        # 3. Volume Spike (Medium severity)
         tc = db.execute(text("SELECT COUNT(*) FROM Claims WHERE Claim_Date=:t"),{"t":td}).scalar() or 0
         wa = db.execute(text("SELECT AVG(cnt) FROM (SELECT COUNT(*) as cnt FROM Claims WHERE Claim_Date>=:d GROUP BY Claim_Date)"),{"d":(datetime.date.today()-datetime.timedelta(days=7)).isoformat()}).scalar() or 0
-        if wa > 0 and tc > wa*1.5: db.execute(text("INSERT INTO Notifications(title,message,type,created_at) VALUES(:t,:m,:tp,:ca)"),{"t":"Volume Spike","m":f"Today: {tc} claims ({((tc/wa)-1)*100:.0f}% above weekly avg {wa:.0f})","tp":"info","ca":now})
+        if wa > 0 and tc > wa*1.5:
+            db.execute(text("""INSERT INTO Notifications(title,message,type,severity,channel,delivery_status,created_at,recipient,description,recommended_action)
+                VALUES(:t,:m,:tp,:sv,:ch,:ds,:ca,:rc,:desc,:ra)"""), {
+                "t": "Volume Spike", "m": f"Today: {tc} claims ({((tc/wa)-1)*100:.0f}% above weekly avg {wa:.0f})", "tp": "system",
+                "sv": "medium", "ch": "dashboard", "ds": "sent", "ca": now, "rc": recipients_default,
+                "desc": f"Unusual claim volume detected: {tc} claims today vs {wa:.0f} weekly average.",
+                "ra": "Monitor claim submissions. Verify no system integration issues."
+            })
+        
+        # 4. Large Claim (Medium severity)
         lc = db.execute(text("""SELECT c.Claim_ID,c.Claim_Amount,p.Name,pt.Name as pn FROM Claims c JOIN Provider p ON c.Provider_ID=p.Provider_ID JOIN Patient pt ON c.Patient_ID=pt.Patient_ID WHERE DATE(c.Claim_Date)=:t ORDER BY c.Claim_Amount DESC LIMIT 1"""),{"t":td}).fetchone()
-        if lc and lc.Claim_Amount > 20000: db.execute(text("INSERT INTO Notifications(title,message,type,created_at) VALUES(:t,:m,:tp,:ca)"),{"t":"Large Claim","m":f"${lc.Claim_Amount:.0f} by {lc.Name} for {lc.pn} (Claim #{lc.Claim_ID})","tp":"info","ca":now})
+        if lc and lc.Claim_Amount > 20000:
+            db.execute(text("""INSERT INTO Notifications(title,message,type,severity,channel,delivery_status,created_at,recipient,description,claim_id,recommended_action)
+                VALUES(:t,:m,:tp,:sv,:ch,:ds,:ca,:rc,:desc,:cid,:ra)"""), {
+                "t": "Large Claim", "m": f"${lc.Claim_Amount:.0f} by {lc.Name} for {lc.pn} (Claim #{lc.Claim_ID})", "tp": "policy",
+                "sv": "medium", "ch": "dashboard", "ds": "sent", "ca": now, "rc": recipients_default,
+                "desc": f"Claim #{lc.Claim_ID} for ${lc.Claim_Amount:.0f} exceeds threshold. Manual review suggested.",
+                "cid": lc.Claim_ID, "ra": "Review claim details. Verify supporting documentation."
+            })
+        
         db.commit()
+        
+        # Try to send emails for critical/high notifications
+        if EMAIL_SERVICE_AVAILABLE:
+            critical = db.execute(text("""SELECT * FROM Notifications WHERE delivery_status='pending' AND channel LIKE '%email%' AND severity IN ('critical','high')""")).fetchall()
+            for n in critical:
+                nr = format_row(n)
+                status = send_email_notification(
+                    nr.get("title"), nr.get("description"), nr.get("severity", "info"),
+                    claim_info={"claim_id": nr.get("claim_id"), "fraud_score": "N/A", "provider": "N/A", "patient": "N/A"}
+                )
+                db.execute(text("UPDATE Notifications SET delivery_status=:ds, sent_at=:sa WHERE id=:id"),
+                          {"ds": status, "sa": now if status == "sent" else None, "id": nr["id"]})
+            db.commit()
+        
         all_n = db.execute(text("SELECT * FROM Notifications ORDER BY created_at DESC LIMIT 50")).fetchall()
         return {"data": [format_row(r) for r in all_n]}
     except Exception as e:
