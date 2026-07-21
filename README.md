@@ -8,7 +8,13 @@
   <strong>End-to-end AI-powered platform for detecting fraudulent healthcare insurance claims in real-time</strong>
 </p>
 
-https://github.com/omnyaayman/HelathCare-Fraud-Detection/raw/main/dashboard-demo.mp4
+<p align="center">
+  <a href="https://helath-care-fraud-detection.vercel.app/">
+    <img src="https://img.shields.io/badge/LIVE_APP-Click_to_Open-00C853?style=for-the-badge&logo=vercel&logoColor=white&labelColor=00C853" alt="Live App"/>
+  </a>
+</p>
+
+https://github.com/omnyaayman/HelathCare-Fraud-Detection/releases/download/v1.0/dashboard-demo.mp4
 
 <p align="center">
   <img src="https://img.shields.io/badge/FastAPI-05998B?style=for-the-badge&logo=fastapi&logoColor=white" alt="FastAPI"/>
