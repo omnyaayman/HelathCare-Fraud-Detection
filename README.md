@@ -14,7 +14,6 @@
   </a>
 </p>
 
-https://github.com/omnyaayman/HelathCare-Fraud-Detection/releases/download/v1.0/dashboard-demo.mp4
 
 <p align="center">
   <img src="https://img.shields.io/badge/FastAPI-05998B?style=for-the-badge&logo=fastapi&logoColor=white" alt="FastAPI"/>
