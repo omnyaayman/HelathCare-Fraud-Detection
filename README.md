@@ -2,17 +2,6 @@
   <img src="https://svg-banners.vercel.app/api?type=origin&text1=Healthcare%20Fraud&text2=Detection%20System%20🚀&width=900&height=200&color=0078D4"/>
 </p>
 
-<!-- 🎬 DASHBOARD DEMO VIDEO -->
-<p align="center">
-  <a href="./dashboard-demo.mp4">
-    <img src="https://img.shields.io/badge/🎬-Watch_Dashboard_Demo-FF0000?style=for-the-badge&logo=youtube&logoColor=white&labelColor=CC0000" alt="Watch Demo"/>
-  </a>
-</p>
-
-https://github.com/omnyaayman/HelathCare-Fraud-Detection/assets/dashboard-demo.mp4
-
-> 📹 **Full dashboard walkthrough** — Click ▶ to play the demo video above
-
 <h1 align="center">🏥 Healthcare Fraud Detection System</h1>
 
 <p align="center">
@@ -60,9 +49,15 @@ A production-grade healthcare fraud detection system that combines **real-time M
 
 ## 🚀 Live Demo
 
+<p align="center">
+  <a href="https://helath-care-fraud-detection.vercel.app/">
+    <img src="https://img.shields.io/badge/LIVE_APP-Click_to_Open-00C853?style=for-the-badge&logo=vercel&logoColor=white&labelColor=00C853" alt="Live App"/>
+  </a>
+</p>
+
 | Component | URL |
 |-----------|-----|
-| **Frontend** | [healthcare-fraud-detection.netlify.app](https://healthcare-fraud-detection.netlify.app) |
+| **Frontend** | [helath-care-fraud-detection.vercel.app](https://helath-care-fraud-detection.vercel.app/) |
 | **Backend API** | `http://localhost:8000` (local) |
 
 ### 🔐 Login Credentials
@@ -499,7 +494,7 @@ start → bronze_layer → silver_layer → gold_layer → data_validation
 |------------|---------|
 | **Docker** | Containerization |
 | **Azure SQL** | Production database |
-| **Netlify** | Frontend deployment |
+| **Vercel** | Frontend deployment |
 | **SQLite** | Local development DB |
 
 ---
@@ -601,14 +596,14 @@ HelathCare-Fraud-Detection/
 
 ## 🚀 Deployment
 
-### Frontend (Netlify)
+### Frontend (Vercel)
 
-The frontend is configured for Netlify deployment via `netlify.toml`:
+The frontend is deployed on Vercel:
 
 ```bash
 cd frontend
 npm run build
-# Deploy dist/ to Netlify
+# Deploy dist/ to Vercel
 ```
 
 ### Backend (Docker)
