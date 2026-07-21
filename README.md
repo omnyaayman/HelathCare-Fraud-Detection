@@ -62,6 +62,10 @@ https://github.com/user-attachments/assets/d86148c4-3cc5-4e3f-9a50-2120e75b60fa
 
 ## 🏗️ Architecture
 
+<p align="center">
+  <img src="architecture.jpeg" alt="System Architecture" width="800"/>
+</p>
+
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
 │                        PRESENTATION LAYER                           │
