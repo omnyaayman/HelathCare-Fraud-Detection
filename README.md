@@ -55,102 +55,13 @@ A production-grade healthcare fraud detection system that combines **real-time M
 
 ---
 
-## 🚀 Live Demo
+## 🎥 Dashboard Demo
 
-<p align="center">
-  <a href="https://helath-care-fraud-detection.vercel.app/">
-    <img src="https://img.shields.io/badge/LIVE_APP-Click_to_Open-00C853?style=for-the-badge&logo=vercel&logoColor=white&labelColor=00C853" alt="Live App"/>
-  </a>
-</p>
-
-| Component | URL |
-|-----------|-----|
-| **Frontend** | [helath-care-fraud-detection.vercel.app](https://helath-care-fraud-detection.vercel.app/) |
-| **Backend API** | `http://localhost:8000` (local) |
-
-### 🔐 Login Credentials
-
-| Role | Username | Password |
-|------|----------|----------|
-| Insurance Admin | `admin_insurance` | `password123` |
-| Insurance Auditor | `auditor_insurance` | `password123` |
-| Insurance Manager | `manager_insurance` | `password123` |
-
----
-
-## ⚡ Quick Start
-
-### Prerequisites
-
-- **Python 3.10+**
-- **Node.js 18+**
-- **Git**
-
-### 1. Clone the Repository
-
-```bash
-git clone https://github.com/omnyaayman/HelathCare-Fraud-Detection.git
-cd HelathCare-Fraud-Detection
-```
-
-### 2. Backend Setup
-
-```bash
-# Create virtual environment
-python -m venv venv
-venv\Scripts\activate        # Windows
-# source venv/bin/activate   # Linux/Mac
-
-# Install dependencies
-pip install -r requirements.backend.txt
-
-# Initialize database (seeds data from CSV + runs ML predictions)
-python init_db.py
-
-# Start the API server
-python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
-```
-
-### 3. Frontend Setup
-
-```bash
-cd frontend
-
-# Install dependencies
-npm install
-
-# Start development server
-npm run dev
-```
-
-### 4. Open in Browser
-
-```
-Frontend:  http://localhost:5173
-Backend:   http://localhost:8000
-API Docs:  http://localhost:8000/docs
-```
-
----
-
-## 🐳 Docker Setup
-
-```bash
-# Start all services (Kafka, Backend, Airflow)
-docker-compose up -d
-
-# Services:
-#   - Backend:    http://localhost:8000
-#   - Airflow:    http://localhost:8080
-#   - Kafka:      localhost:9092
-#   - Zookeeper:  localhost:2181
-```
+https://github.com/user-attachments/assets/d86148c4-3cc5-4e3f-9a50-2120e75b60fa
 
 ---
 
 ## 🏗️ Architecture
-
-### System Overview
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
