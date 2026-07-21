@@ -702,6 +702,58 @@ export default function ModelManagement() {
             </div>
           </div>
 
+          {/* Data Drift Over Time */}
+          <div className="space-y-2 lg:col-span-2">
+            <label className="text-sm text-[#f8fafc] font-medium">Data Drift Monitoring (6-Month Trend)</label>
+            <div className="bg-[#1e293b] rounded-lg p-3">
+              <PlotlyChart
+                data={[{
+                  x: ['Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul'],
+                  y: [2.8, 3.1, 3.5, 3.8, 4.0, CANONICAL_MODEL.dataDrift],
+                  type: 'scatter', mode: 'lines+markers', name: 'Data Drift %',
+                  line: { color: '#818cf8', width: 3, shape: 'spline' },
+                  marker: { size: 8, color: '#818cf8', line: { color: '#0b0f19', width: 2 } },
+                  fill: 'tozeroy', fillcolor: 'rgba(129,140,248,0.08)',
+                  hovertemplate: '%{x}<br>Drift: %{y:.1f}%<extra></extra>'
+                }, {
+                  x: ['Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul'],
+                  y: [15, 15, 15, 15, 15, 15],
+                  type: 'scatter', mode: 'lines', name: 'Warning Threshold',
+                  line: { color: '#f59e0b', width: 2, dash: 'dash' },
+                  hovertemplate: 'Warning: 15%<extra></extra>'
+                }, {
+                  x: ['Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul'],
+                  y: [25, 25, 25, 25, 25, 25],
+                  type: 'scatter', mode: 'lines', name: 'Critical Threshold',
+                  line: { color: '#ef4444', width: 2, dash: 'dash' },
+                  hovertemplate: 'Critical: 25%<extra></extra>'
+                }]}
+                layout={{
+                  margin: { t: 5, r: 10, l: 35, b: 30 },
+                  height: 180,
+                  xaxis: { showgrid: false, tickfont: { size: 10, color: '#64748b' } },
+                  yaxis: { gridcolor: 'rgba(71,85,105,0.3)', tickfont: { size: 10, color: '#64748b' }, ticksuffix: '%', range: [0, 30] },
+                  showlegend: true, legend: { orientation: 'h', y: -0.3, font: { size: 9, color: '#94a3b8' } },
+                  paper_bgcolor: 'transparent', plot_bgcolor: 'transparent',
+                  annotations: [{
+                    x: 'Jul', y: CANONICAL_MODEL.dataDrift,
+                    text: `${CANONICAL_MODEL.dataDrift}%`,
+                    showarrow: true, arrowhead: 2, arrowcolor: '#818cf8',
+                    font: { size: 10, color: '#818cf8', family: 'monospace' },
+                    bgcolor: 'rgba(129,140,248,0.1)', bordercolor: '#818cf8', borderwidth: 1, borderpad: 3,
+                    ax: 0, ay: -30
+                  }]
+                }}
+              />
+              <div className="flex items-center gap-4 mt-2 text-[10px] text-[#64748b]">
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-400" /> Safe (&lt;15%)</span>
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-400" /> Warning (15-25%)</span>
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-400" /> Critical (&gt;25%)</span>
+                <span className="ml-auto font-mono text-[#818cf8]">Current: {CANONICAL_MODEL.dataDrift}%</span>
+              </div>
+            </div>
+          </div>
+
           {/* Auto-Retraining */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">

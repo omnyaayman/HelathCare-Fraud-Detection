@@ -402,6 +402,85 @@ export default function Reports() {
         </div>
       </div>
 
+      {/* ──── Report Templates ──── */}
+      <div className="rounded-2xl border border-[#1e293b]/80 bg-[#0f172a]/80 p-5">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <FileText size={16} className="text-[#818cf8]" />
+            <h2 className="text-sm font-bold text-[#f8fafc]">Report Templates</h2>
+          </div>
+          <span className="text-[10px] text-[#64748b]">Click a template to generate instantly</span>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+          {[
+            { name: 'Weekly Fraud Summary', desc: 'Top fraud cases, risk scores, provider breakdown', frequency: 'Weekly', icon: 'alert', color: 'red' },
+            { name: 'Monthly Financial Impact', desc: 'Cost savings, fraud prevented, ROI metrics', frequency: 'Monthly', icon: 'dollar', color: 'green' },
+            { name: 'Provider Risk Report', desc: 'Provider rankings, fraud rates, peer comparison', frequency: 'Monthly', icon: 'building', color: 'amber' },
+            { name: 'Executive Briefing', desc: 'KPIs, trends, AI recommendations for leadership', frequency: 'Quarterly', icon: 'star', color: 'purple' },
+          ].map((tpl, i) => (
+            <button
+              key={i}
+              onClick={() => { setModalForm(f => ({...f, reportType: tpl.name.toLowerCase().includes('financial') ? 'financial' : tpl.name.toLowerCase().includes('provider') ? 'provider' : tpl.name.toLowerCase().includes('executive') ? 'fraud-summary' : 'claims' })); setShowModal(true); }}
+              className={`text-left p-4 rounded-xl border border-${tpl.color}-500/20 bg-${tpl.color}-500/5 hover:bg-${tpl.color}-500/10 transition-all group`}
+            >
+              <div className="flex items-center gap-2 mb-2">
+                <span className={`text-[9px] font-bold px-2 py-0.5 rounded-md bg-${tpl.color}-500/10 text-${tpl.color}-400 border border-${tpl.color}-500/20`}>{tpl.frequency}</span>
+              </div>
+              <p className="text-xs font-bold text-[#f8fafc] group-hover:text-[#818cf8] transition-colors">{tpl.name}</p>
+              <p className="text-[10px] text-[#64748b] mt-1 leading-relaxed">{tpl.desc}</p>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* ──── Scheduled Reports ──── */}
+      <div className="rounded-2xl border border-[#1e293b]/80 bg-[#0f172a]/80 p-5">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <Calendar size={16} className="text-[#818cf8]" />
+            <h2 className="text-sm font-bold text-[#f8fafc]">Scheduled Reports</h2>
+          </div>
+          <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#4f46e5] text-white text-[10px] font-bold hover:bg-[#4338ca] transition-colors">
+            <FileText size={12} /> New Schedule
+          </button>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-[#1e293b]/80">
+                <th className="px-3 py-2 text-left text-[10px] font-bold text-[#64748b] uppercase tracking-wider">Report</th>
+                <th className="px-3 py-2 text-left text-[10px] font-bold text-[#64748b] uppercase tracking-wider">Frequency</th>
+                <th className="px-3 py-2 text-left text-[10px] font-bold text-[#64748b] uppercase tracking-wider">Recipients</th>
+                <th className="px-3 py-2 text-left text-[10px] font-bold text-[#64748b] uppercase tracking-wider">Format</th>
+                <th className="px-3 py-2 text-left text-[10px] font-bold text-[#64748b] uppercase tracking-wider">Next Run</th>
+                <th className="px-3 py-2 text-left text-[10px] font-bold text-[#64748b] uppercase tracking-wider">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {[
+                { report: 'Weekly Fraud Summary', freq: 'Every Monday 8:00 AM', recipients: 'sarah.m@, james.r@', format: 'PDF + CSV', next: 'Mon, Jul 27', status: 'Active' },
+                { report: 'Monthly Financial Impact', freq: '1st of month', recipients: 'exec-team@', format: 'PDF', next: 'Sat, Aug 1', status: 'Active' },
+                { report: 'Provider Risk Report', freq: 'Bi-weekly', recipients: 'james.r@, emily.c@', format: 'Excel', next: 'Wed, Jul 30', status: 'Active' },
+                { report: 'Executive Briefing', freq: 'Quarterly', recipients: 'ceo@, cfo@, coo@', format: 'PDF', next: 'Wed, Oct 1', status: 'Paused' },
+              ].map((sched, i) => (
+                <tr key={i} className="border-b border-[#1e293b]/30 hover:bg-[#1e293b]/20 transition-colors">
+                  <td className="px-3 py-2.5 text-xs font-bold text-[#f8fafc]">{sched.report}</td>
+                  <td className="px-3 py-2.5 text-[10px] text-[#94a3b8]">{sched.freq}</td>
+                  <td className="px-3 py-2.5 text-[10px] text-[#64748b] font-mono">{sched.recipients}</td>
+                  <td className="px-3 py-2.5"><span className="text-[10px] font-bold px-2 py-0.5 rounded bg-[#1e293b] text-[#94a3b8]">{sched.format}</span></td>
+                  <td className="px-3 py-2.5 text-[10px] text-[#94a3b8]">{sched.next}</td>
+                  <td className="px-3 py-2.5">
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${
+                      sched.status === 'Active' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-amber-500/10 text-amber-400'
+                    }`}>{sched.status}</span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
       {/* KPIs */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {loading ? (

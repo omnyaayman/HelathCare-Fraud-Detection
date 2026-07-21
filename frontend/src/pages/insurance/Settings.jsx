@@ -1,6 +1,8 @@
 import { useState, useEffect, useMemo } from 'react';
 import Skeleton from '../../components/Skeleton';
 import StatusBadge from '../../components/StatusBadge';
+import { CANONICAL_MODEL, CANONICAL_REFERENCE } from '../../data/canonicalData';
+import { formatNumber } from '../../data/dataUtils';
 import {
   Settings as SettingsIcon,
   Activity,
@@ -30,6 +32,13 @@ import {
   GitBranch,
   Calendar,
   ArrowUpRight,
+  UserPlus,
+  Trash2,
+  Edit,
+  Save,
+  ShieldCheck,
+  Key,
+  Gauge,
 } from 'lucide-react';
 import api from '../../api';
 
@@ -506,6 +515,216 @@ export default function Settings() {
               </div>
             );
           })}
+        </div>
+      </div>
+
+      {/* ──── ENTERPRISE: User Management ──── */}
+      <div className="bg-[#0f172a]/80 rounded-2xl border border-[#1e293b]/80 p-5">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-xl bg-[#4f46e5]/10">
+              <Users className="w-5 h-5 text-[#818cf8]" />
+            </div>
+            <div>
+              <h2 className="text-[#f8fafc] font-semibold text-sm">User Management</h2>
+              <p className="text-[10px] text-[#64748b]">Manage system users and access control</p>
+            </div>
+          </div>
+          <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#4f46e5] text-white text-[10px] font-bold hover:bg-[#4338ca] transition-colors">
+            <UserPlus size={12} /> Add User
+          </button>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-[#1e293b]/80">
+                <th className="px-4 py-2.5 text-left text-[10px] font-bold text-[#64748b] uppercase tracking-wider">User</th>
+                <th className="px-4 py-2.5 text-left text-[10px] font-bold text-[#64748b] uppercase tracking-wider">Role</th>
+                <th className="px-4 py-2.5 text-left text-[10px] font-bold text-[#64748b] uppercase tracking-wider">Department</th>
+                <th className="px-4 py-2.5 text-left text-[10px] font-bold text-[#64748b] uppercase tracking-wider">Last Active</th>
+                <th className="px-4 py-2.5 text-left text-[10px] font-bold text-[#64748b] uppercase tracking-wider">Status</th>
+                <th className="px-4 py-2.5 text-right text-[10px] font-bold text-[#64748b] uppercase tracking-wider">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {[
+                { name: 'Dr. Sarah Mitchell', email: 'sarah.m@metro-general.org', role: 'Admin', department: 'SIU Division', lastActive: '2 min ago', status: 'Active' },
+                { name: 'James Rodriguez', email: 'james.r@metro-general.org', role: 'Investigator', department: 'Fraud Detection', lastActive: '15 min ago', status: 'Active' },
+                { name: 'Emily Chen', email: 'emily.c@metro-general.org', role: 'Analyst', department: 'Data Science', lastActive: '1 hour ago', status: 'Active' },
+                { name: 'Michael Thompson', email: 'michael.t@metro-general.org', role: 'Reviewer', department: 'Claims Processing', lastActive: '3 hours ago', status: 'Active' },
+                { name: 'Lisa Park', email: 'lisa.p@metro-general.org', role: 'Viewer', department: 'Compliance', lastActive: '1 day ago', status: 'Inactive' },
+              ].map((user, i) => (
+                <tr key={i} className="border-b border-[#1e293b]/40 hover:bg-[#1e293b]/20 transition-colors">
+                  <td className="px-4 py-3">
+                    <div>
+                      <p className="text-xs font-bold text-[#f8fafc]">{user.name}</p>
+                      <p className="text-[10px] text-[#64748b]">{user.email}</p>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md border ${
+                      user.role === 'Admin' ? 'bg-red-500/10 text-red-400 border-red-500/20' :
+                      user.role === 'Investigator' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' :
+                      user.role === 'Analyst' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' :
+                      user.role === 'Reviewer' ? 'bg-purple-500/10 text-purple-400 border-purple-500/20' :
+                      'bg-slate-500/10 text-slate-400 border-slate-500/20'
+                    }`}>{user.role}</span>
+                  </td>
+                  <td className="px-4 py-3 text-xs text-[#94a3b8]">{user.department}</td>
+                  <td className="px-4 py-3 text-[10px] text-[#64748b]">{user.lastActive}</td>
+                  <td className="px-4 py-3">
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${
+                      user.status === 'Active' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-slate-500/10 text-slate-400'
+                    }`}>{user.status}</span>
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    <div className="flex items-center justify-end gap-1">
+                      <button className="p-1.5 rounded-lg hover:bg-[#1e293b] text-[#64748b] hover:text-[#818cf8] transition-colors"><Edit size={12} /></button>
+                      <button className="p-1.5 rounded-lg hover:bg-[#1e293b] text-[#64748b] hover:text-red-400 transition-colors"><Trash2 size={12} /></button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* ──── ENTERPRISE: Role & Permission Management ──── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="bg-[#0f172a]/80 rounded-2xl border border-[#1e293b]/80 p-5">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="p-2 rounded-xl bg-purple-500/10">
+              <ShieldCheck className="w-5 h-5 text-purple-400" />
+            </div>
+            <div>
+              <h2 className="text-[#f8fafc] font-semibold text-sm">Role Management</h2>
+              <p className="text-[10px] text-[#64748b]">Define RBAC roles and capabilities</p>
+            </div>
+          </div>
+          <div className="space-y-3">
+            {[
+              { name: 'Admin', desc: 'Full system access, user management, configuration', users: 1, color: 'red', perms: ['All Access'] },
+              { name: 'Investigator', desc: 'Case management, claim investigation, evidence review', users: 3, color: 'amber', perms: ['View Claims', 'Manage Cases', 'Add Notes'] },
+              { name: 'Analyst', desc: 'Read-only analytics, model metrics, reporting', users: 2, color: 'blue', perms: ['View Analytics', 'Export Reports'] },
+              { name: 'Reviewer', desc: 'Claim review, approve/reject, limited case access', users: 4, color: 'purple', perms: ['Review Claims', 'Approve/Reject'] },
+              { name: 'Viewer', desc: 'Read-only dashboard access, no data export', users: 5, color: 'slate', perms: ['View Dashboard'] },
+            ].map((role, i) => (
+              <div key={i} className="flex items-center justify-between p-3 rounded-xl bg-[#1e293b]/40 border border-[#1e293b]/60 hover:border-purple-500/20 transition-colors">
+                <div className="flex items-center gap-3">
+                  <div className={`w-2.5 h-2.5 rounded-full bg-${role.color}-400`} />
+                  <div>
+                    <p className="text-xs font-bold text-[#f8fafc]">{role.name}</p>
+                    <p className="text-[10px] text-[#64748b]">{role.desc}</p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="text-[10px] font-bold text-[#94a3b8]">{role.users} users</p>
+                  <div className="flex gap-1 mt-1 justify-end">
+                    {role.perms.slice(0, 2).map((p, j) => (
+                      <span key={j} className="text-[8px] font-bold px-1.5 py-0.5 rounded bg-[#1e293b] text-[#64748b]">{p}</span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="bg-[#0f172a]/80 rounded-2xl border border-[#1e293b]/80 p-5">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="p-2 rounded-xl bg-amber-500/10">
+              <Key className="w-5 h-5 text-amber-400" />
+            </div>
+            <div>
+              <h2 className="text-[#f8fafc] font-semibold text-sm">Permission Matrix</h2>
+              <p className="text-[10px] text-[#64748b]">Granular access control per module</p>
+            </div>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-[#1e293b]/80">
+                  <th className="px-2 py-2 text-left text-[9px] font-bold text-[#64748b] uppercase">Module</th>
+                  {['Admin', 'Investigator', 'Analyst', 'Reviewer', 'Viewer'].map(r => (
+                    <th key={r} className="px-2 py-2 text-center text-[9px] font-bold text-[#64748b] uppercase">{r}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {[
+                  { module: 'Dashboard', perms: [true, true, true, true, true] },
+                  { module: 'Claims', perms: [true, true, true, true, false] },
+                  { module: 'Flagged Claims', perms: [true, true, true, true, false] },
+                  { module: 'Patients', perms: [true, true, true, false, false] },
+                  { module: 'Providers', perms: [true, true, true, false, false] },
+                  { module: 'Analytics', perms: [true, true, true, false, false] },
+                  { module: 'AI Insights', perms: [true, true, true, false, false] },
+                  { module: 'Reports', perms: [true, true, true, false, false] },
+                  { module: 'Model Mgmt', perms: [true, false, true, false, false] },
+                  { module: 'Settings', perms: [true, false, false, false, false] },
+                ].map((row, i) => (
+                  <tr key={i} className="border-b border-[#1e293b]/30 hover:bg-[#1e293b]/20">
+                    <td className="px-2 py-1.5 text-[10px] font-bold text-[#94a3b8]">{row.module}</td>
+                    {row.perms.map((has, j) => (
+                      <td key={j} className="px-2 py-1.5 text-center">
+                        {has ? (
+                          <span className="inline-block w-4 h-4 rounded bg-emerald-500/20 text-emerald-400 text-[10px] leading-4">&#10003;</span>
+                        ) : (
+                          <span className="inline-block w-4 h-4 rounded bg-[#1e293b]/60 text-[#475569] text-[10px] leading-4">&mdash;</span>
+                        )}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      {/* ──── ENTERPRISE: Threshold Configuration ──── */}
+      <div className="bg-[#0f172a]/80 rounded-2xl border border-[#1e293b]/80 p-5">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-xl bg-red-500/10">
+              <Gauge className="w-5 h-5 text-red-400" />
+            </div>
+            <div>
+              <h2 className="text-[#f8fafc] font-semibold text-sm">Fraud Detection Thresholds</h2>
+              <p className="text-[10px] text-[#64748b]">Configure system-wide detection parameters</p>
+            </div>
+          </div>
+          <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 text-[10px] font-bold border border-emerald-500/20 hover:bg-emerald-500/20 transition-colors">
+            <Save size={12} /> Save Changes
+          </button>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {[
+            { label: 'AI Fraud Score Threshold', value: `${(CANONICAL_MODEL.fraudThreshold * 100).toFixed(0)}%`, desc: 'Minimum score to flag a claim', slider: CANONICAL_MODEL.fraudThreshold * 100, color: '#ef4444' },
+            { label: 'Auto-Escalation Threshold', value: '90%', desc: 'Score above which cases auto-escalate', slider: 90, color: '#f97316' },
+            { label: 'Investigation SLA (hours)', value: '72h', desc: 'Max time before case is overdue', slider: 72, color: '#f59e0b' },
+            { label: 'Min Claims for Provider Rate', value: '5', desc: 'Minimum claims before provider fraud rate is calculated', slider: 5, color: '#6366f1' },
+            { label: 'Data Drift Alert Threshold', value: `${CANONICAL_MODEL.dataDrift}%`, desc: 'Model drift % that triggers retraining alert', slider: CANONICAL_MODEL.dataDrift, color: '#8b5cf6' },
+            { label: 'Auto-Retrain Trigger', value: 'Disabled', desc: 'Automatically retrain model when drift exceeds threshold', slider: 0, color: '#10b981' },
+          ].map((cfg, i) => (
+            <div key={i} className="bg-[#0b0f19]/60 rounded-xl p-4 border border-[#1e293b]/40">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-[10px] font-bold text-[#94a3b8] uppercase tracking-wider">{cfg.label}</p>
+                <span className="text-xs font-mono font-bold" style={{ color: cfg.color }}>{cfg.value}</span>
+              </div>
+              <p className="text-[10px] text-[#64748b] mb-3">{cfg.desc}</p>
+              <input
+                type="range"
+                min="0"
+                max={cfg.label.includes('SLA') ? 168 : cfg.label.includes('Min Claims') ? 20 : cfg.label.includes('Auto-Retrain') ? 1 : 100}
+                value={cfg.slider}
+                className="w-full h-1.5 rounded-full appearance-none cursor-pointer"
+                style={{ background: `linear-gradient(to right, ${cfg.color} ${cfg.slider}%, #1e293b ${cfg.slider}%)` }}
+                readOnly
+              />
+            </div>
+          ))}
         </div>
       </div>
 

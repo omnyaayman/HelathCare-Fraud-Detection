@@ -1,202 +1,47 @@
 ﻿import { useEffect, useState, useCallback, useMemo } from 'react';
-import { BrainCircuit, AlertTriangle, Target, ShieldCheck, DollarSign, Building2, MapPin, Stethoscope, UserCheck, Activity, Lightbulb, ExternalLink, Eye, FileText, X, ChevronDown, ChevronUp, TrendingUp } from 'lucide-react';
+import {
+  BrainCircuit, AlertTriangle, Target, ShieldCheck, DollarSign, Building2,
+  MapPin, Stethoscope, UserCheck, Activity, Lightbulb, ExternalLink, Eye,
+  FileText, X, ChevronDown, ChevronUp, TrendingUp, TrendingDown, Zap,
+  BarChart3, PieChart, Flame, ShieldAlert, Crosshair, Clock, RefreshCw,
+  ArrowUpRight, Sparkles, Database, Cpu
+} from 'lucide-react';
 import api from '../../api';
 import Skeleton from '../../components/Skeleton';
-import PlotlyChart from '../../components/PlotlyChart';
-import { CANONICAL_MODEL, CANONICAL_FEATURE_IMPORTANCE, CANONICAL_FUNNEL, CANONICAL_REFERENCE, CANONICAL_FINANCIALS, CANONICAL_MONTHLY_TRENDS, CANONICAL_PROVIDERS, CANONICAL_PATIENTS, CANONICAL_FRAUD_DIAGNOSES } from '../../data/canonicalData';
-
-function generateFallbackClaims(count = 200) {
-  const providers = CANONICAL_PROVIDERS;
-  const patients = CANONICAL_PATIENTS;
-  const diagnoses = CANONICAL_FRAUD_DIAGNOSES;
-  const procedures = ['99213','99214','99215','99203','99204','80053','71046','97110'];
-  const services = ['Office Visit','Lab Work','Imaging','Surgery Consultation','Physical Therapy','Emergency Visit'];
-  const results = [];
-  for (let i = 0; i < count; i++) {
-    const p = providers[i % providers.length];
-    const pt = patients[i % patients.length];
-    const d = diagnoses[i % diagnoses.length];
-    const month = String(Math.floor(Math.random() * 12) + 1).padStart(2, '0');
-    const day = String(Math.floor(Math.random() * 28) + 1).padStart(2, '0');
-    const rawScore = Math.random();
-    let status;
-    if (rawScore >= 0.85) {
-      const high = ['Under Review', 'Investigating', 'Escalated', 'Fraud Confirmed'];
-      status = high[Math.floor(Math.random() * high.length)];
-    } else if (rawScore >= 0.65) {
-      const medHigh = ['Investigating', 'Escalated'];
-      status = medHigh[Math.floor(Math.random() * medHigh.length)];
-    } else if (rawScore >= 0.4) {
-      const med = ['Under Review', 'Rejected'];
-      status = med[Math.floor(Math.random() * med.length)];
-    } else {
-      const low = ['Submitted', 'AI Scored', 'Approved', 'Closed'];
-      status = low[Math.floor(Math.random() * low.length)];
-    }
-    results.push({
-      claim_id: `CLM-2026-${String(203000 + i).padStart(6, '0')}`,
-      id: `CLM-2026-${String(203000 + i).padStart(6, '0')}`,
-      patient_name: pt.name,
-      patient_id: pt.id,
-      provider_name: p.name,
-      provider_id: p.id,
-      provider: p.name,
-      service_name: services[i % services.length],
-      diagnosis_code: d.code,
-      procedure_code: procedures[i % procedures.length],
-      diagnosis: d,
-      claim_amount: Math.round(5000 + Math.random() * 15000),
-      amount: Math.round(500 + Math.random() * 4500),
-      fraud_score: Math.round(rawScore * 1000) / 1000,
-      status,
-      claim_date: `2026-${month}-${day}`,
-      service_date: `2026-${month}-${day}`,
-      date_submitted: `2026-${month}-${day}`,
-      number_of_previous_claims_patient: Math.floor(Math.random() * 15),
-      number_of_procedures: Math.floor(Math.random() * 4) + 1,
-      provider_patient_distance_miles: Math.floor(Math.random() * 400),
-      claim_submitted_late: Math.random() > 0.85,
-      insurance_plan: ['Aetna','Blue Cross','Cigna','UnitedHealth','Kaiser'][Math.floor(Math.random() * 5)],
-      policy_number: `POL-2026-${String(10000 + Math.floor(Math.random() * 90000)).padStart(6,'0')}`,
-    });
-  }
-  return results;
-}
 import { formatCompactCurrency, formatCurrency } from '../../data/dataUtils';
 
 const SEVERITY = {
-  critical: { color: 'text-red-500', bg: 'bg-red-500/10', border: 'border-red-500/40', label: 'Critical' },
-  high: { color: 'text-orange-500', bg: 'bg-orange-500/10', border: 'border-orange-500/40', label: 'High' },
-  medium: { color: 'text-amber-500', bg: 'bg-amber-500/10', border: 'border-amber-500/40', label: 'Medium' },
-  low: { color: 'text-sky-500', bg: 'bg-sky-500/10', border: 'border-sky-500/40', label: 'Low' },
+  critical: { color: 'text-red-400', bg: 'bg-red-500/10', border: 'border-red-500/30', glow: 'shadow-red-500/10', label: 'Critical', dot: 'bg-red-500' },
+  high: { color: 'text-orange-400', bg: 'bg-orange-500/10', border: 'border-orange-500/30', glow: 'shadow-orange-500/10', label: 'High', dot: 'bg-orange-500' },
+  medium: { color: 'text-amber-400', bg: 'bg-amber-500/10', border: 'border-amber-500/30', glow: 'shadow-amber-500/10', label: 'Medium', dot: 'bg-amber-500' },
+  low: { color: 'text-sky-400', bg: 'bg-sky-500/10', border: 'border-sky-500/30', glow: 'shadow-sky-500/10', label: 'Low', dot: 'bg-sky-500' },
 };
 
-const CONFIDENCE = {
-  high: { color: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20', label: 'High' },
-  medium: { color: 'text-amber-400', bg: 'bg-amber-500/10', border: 'border-amber-500/20', label: 'Medium' },
-  low: { color: 'text-slate-400', bg: 'bg-slate-500/10', border: 'border-slate-500/20', label: 'Low' },
+const INSIGHT_ICONS = {
+  admission_analysis: Crosshair,
+  claim_amount_analysis: DollarSign,
+  provider_specialty: Building2,
+  geographic_analysis: MapPin,
+  patient_behavior: UserCheck,
+  diagnosis_pattern: Stethoscope,
+  financial_risk: Flame,
+  fraud_trend: TrendingUp,
 };
 
-function pickConfidence(score) {
-  if (score >= 85) return 'high';
-  if (score >= 65) return 'medium';
-  return 'low';
-}
-
-const SPECIALTIES = ['Multi-Specialty', 'Cardiology', 'Orthopedics', 'Neurology', 'Oncology', 'Radiology', 'General Surgery', 'Internal Medicine', 'Dermatology'];
-const CITIES_FALLBACK = ['Dallas', 'Houston', 'Austin', 'San Antonio', 'Fort Worth', 'El Paso', 'Arlington', 'Plano'];
-const PROVIDERS_FALLBACK = ['Metropolitan General Hospital', 'St. Mary Medical Center', 'City Health Network', 'Pacific Wellness Group'];
-const PATIENTS_FALLBACK = ['Margaret Holloway', 'James Rutherford III', 'Diane Castellano', 'Robert Langston'];
-const DIAGNOSES_FALLBACK = ['414', '722', '530', '250', '401', '724', '296', '599'];
-
-const CACHED_INSIGHT_DETAILS = {
-  1: { claims: [
-    { id: 'CLM-2026-210482', patient: 'Robert Chen', provider: 'Metropolitan General Hospital', amount: 28450, score: 0.92, status: 'Fraud Confirmed', date: '2026-01-15', evidence: 'CPT 99215 billed 3x for single visit' },
-    { id: 'CLM-2026-208453', patient: 'Sarah Johnson', provider: 'St. Mary Medical Center', amount: 18320, score: 0.87, status: 'Under Review', date: '2026-01-12', evidence: 'Upcode pattern detected: 99214→99215' },
-    { id: 'CLM-2026-206127', patient: 'William Brown', provider: 'Northeast Health Services', amount: 22150, score: 0.84, status: 'Fraud Confirmed', date: '2026-01-08', evidence: 'Duplicate billing for same procedure' },
-  ]},
-  2: { claims: [
-    { id: 'CLM-2026-209182', patient: 'James Anderson', provider: 'Apex Diagnostics Lab', amount: 34200, score: 0.95, status: 'Fraud Confirmed', date: '2026-01-20', evidence: 'Shared address with 3 co-located providers' },
-    { id: 'CLM-2026-207651', patient: 'Emily Davis', provider: 'Lone Star Medical Group', amount: 28750, score: 0.91, status: 'Fraud Confirmed', date: '2026-01-18', evidence: 'Overlapping patient records across ring members' },
-    { id: 'CLM-2026-205432', patient: 'Kevin White', provider: 'Premier Health Partners', amount: 19500, score: 0.88, status: 'Under Review', date: '2026-01-10', evidence: 'Phantom billing ring participant' },
-  ]},
-  3: { claims: [
-    { id: 'CLM-2026-211034', patient: 'Amanda Taylor', provider: 'Valley Regional Hospital', amount: 12450, score: 0.72, status: 'AI Scored', date: '2026-02-01', evidence: 'Holiday volume anomaly \u2014 22% above forecast' },
-    { id: 'CLM-2026-210987', patient: 'Brandon Hall', provider: 'Pacific Wellness Group', amount: 9870, score: 0.68, status: 'AI Scored', date: '2026-01-28', evidence: 'Weekend submission during low-volume period' },
-  ]},
-  4: { claims: [
-    { id: 'CLM-2026-208765', patient: 'Justin Young', provider: 'Summit Healthcare Partners', amount: 8900, score: 0.74, status: 'AI Scored', date: '2026-01-22', evidence: 'Score within 0.72-0.75 optimization window' },
-    { id: 'CLM-2026-206543', patient: 'Rachel King', provider: 'Community Health Alliance', amount: 7650, score: 0.73, status: 'AI Scored', date: '2026-01-05', evidence: 'Threshold adjustment would reclassify this claim' },
-  ]},
-  5: { claims: [
-    { id: 'CLM-2026-212345', patient: 'Katherine Wright', provider: 'Premier Care Network', amount: 17800, score: 0.86, status: 'Under Review', date: '2026-02-05', evidence: 'Saturday submission \u2014 47% higher fraud probability' },
-    { id: 'CLM-2026-210123', patient: 'Joshua Scott', provider: 'Coastal Diagnostic Center', amount: 22100, score: 0.83, status: 'Under Review', date: '2026-01-30', evidence: 'Weekend billing anomaly flagged by model' },
-    { id: 'CLM-2026-208901', patient: 'Laura Adams', provider: 'Midwest Surgical Institute', amount: 14500, score: 0.81, status: 'Fraud Confirmed', date: '2026-01-19', evidence: 'Sunday submission \u2014 confirmed fraud via audit' },
-  ]},
-};
-
-const SUPPORTING_EVIDENCE = {
-  1: [
-    `3 confirmed fraud cases totaling $68,920 in billed amount`,
-    `Metropolitan General Hospital leads with 189 fraud claims out of 1,842 total (10.3% rate)`,
-    `CPT code 99215 upcoding pattern detected across ${CANONICAL_REFERENCE.totalProviders.toLocaleString()} providers`,
-  ],
-  2: [
-    `Provider ring spans ${CANONICAL_REFERENCE.totalProviders.toLocaleString()} network participants with $25.1M total exposure`,
-    `3 co-located providers share identical billing addresses and overlapping patient rosters`,
-    `Network anomaly score elevated across ${CANONICAL_FUNNEL.aiScoredHighRisk.toLocaleString()} flagged claims`,
-  ],
-  3: [
-    `Holiday-period claims ${22}% above seasonal forecast with no corresponding patient volume increase`,
-    `${CANONICAL_FUNNEL.aiScoredHighRisk.toLocaleString()} of ${CANONICAL_FUNNEL.totalClaims.toLocaleString()} claims (${((CANONICAL_FUNNEL.aiScoredHighRisk / CANONICAL_FUNNEL.totalClaims) * 100).toFixed(1)}%) scored high-risk by model`,
-    `Weekend submissions show 47% higher fraud probability per model inference`,
-  ],
-  4: [
-    `Model precision at ${(CANONICAL_MODEL.precision * 100).toFixed(1)}% with ${(CANONICAL_MODEL.recall * 100).toFixed(1)}% recall`,
-    `${CANONICAL_FUNNEL.formallyFlagged} formally flagged vs. ${CANONICAL_FUNNEL.aiScoredHighRisk.toLocaleString()} AI-scored \u2014 review capacity gap`,
-    `Threshold of ${CANONICAL_MODEL.fraudThreshold} produces ${CANONICAL_REFERENCE.escalatedAlerts} escalated alerts`,
-  ],
-  5: [
-    `Weekend claims show ${(47)}% elevated fraud probability vs. weekday baseline`,
-    `December fraud rate at ${CANONICAL_MONTHLY_TRENDS[11].fraud_rate}% \u2014 highest monthly rate in dataset`,
-    `Fraud exposure at ${CANONICAL_REFERENCE.financialImpactDisplay} with ${CANONICAL_REFERENCE.moneySaved.toLocaleString()} saved through detection`,
-  ],
-};
+const FI_COLORS = ['#6366f1', '#8b5cf6', '#06b6d4', '#10b981', '#f59e0b', '#ef4444', '#ec4899', '#3b82f6', '#14b8a6', '#f97316'];
 
 export default function AIInsights() {
   const [loading, setLoading] = useState(true);
-  const [insights, setInsights] = useState([]);
-  const [metrics, setMetrics] = useState(null);
-  const [topProvider, setTopProvider] = useState(null);
-  const [topPatient, setTopPatient] = useState(null);
-  const [topDiagnosis, setTopDiagnosis] = useState(null);
-  const [topCity, setTopCity] = useState(null);
-  const [allProviders, setAllProviders] = useState([]);
-  const [allPatients, setAllPatients] = useState([]);
-  const [allCities, setAllCities] = useState([]);
-  const [allDiagnoses, setAllDiagnoses] = useState([]);
-  const [allClaims, setAllClaims] = useState([]);
+  const [data, setData] = useState(null);
   const [expandedInsight, setExpandedInsight] = useState(null);
+  const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async () => {
-    setLoading(true);
     try {
-      const [insightsRes, metricsRes, topProvidersRes, topPatientsRes, topDiagnosesRes, fraudByCityRes, claimsRes] = await Promise.allSettled([
-        api.getAiInsights(),
-        api.getStats(),
-        api.getTopProviders(),
-        api.getTopPatients(),
-        api.getTopDiagnoses(),
-        api.getFraudByCity(),
-        api.getClaims({ page_size: 2000 }),
-      ]);
-
-      setInsights(insightsRes.status === 'fulfilled' ? insightsRes.value : []);
-      setMetrics(metricsRes.status === 'fulfilled' ? metricsRes.value : {});
-
-      const allC = claimsRes.status === 'fulfilled'
-        ? (claimsRes.value?.claims || claimsRes.value?.data || claimsRes.value || [])
-        : [];
-      setAllClaims(Array.isArray(allC) && allC.length > 0 ? allC : generateFallbackClaims(2000));
-
-      if (topProvidersRes.status === 'fulfilled' && topProvidersRes.value.length > 0) {
-        setTopProvider(topProvidersRes.value[0]);
-        setAllProviders(topProvidersRes.value.slice(0, 5));
-      }
-      if (topPatientsRes.status === 'fulfilled' && topPatientsRes.value.length > 0) {
-        setTopPatient(topPatientsRes.value[0]);
-        setAllPatients(topPatientsRes.value.slice(0, 5));
-      }
-      if (topDiagnosesRes.status === 'fulfilled' && topDiagnosesRes.value.length > 0) {
-        setTopDiagnosis(topDiagnosesRes.value[0]);
-        setAllDiagnoses(topDiagnosesRes.value.slice(0, 5));
-      }
-      if (fraudByCityRes.status === 'fulfilled' && fraudByCityRes.value.length > 0) {
-        setTopCity(fraudByCityRes.value[0]);
-        setAllCities(fraudByCityRes.value.slice(0, 5));
-      }
+      const res = await api.getAiInsightsDetailed();
+      setData(res);
     } catch (err) {
-      console.error(err);
+      console.error('Failed to load AI insights:', err);
     } finally {
       setLoading(false);
     }
@@ -204,280 +49,420 @@ export default function AIInsights() {
 
   useEffect(() => { load(); }, [load]);
 
-  const providerName = topProvider?.name || (allProviders[0]?.name || PROVIDERS_FALLBACK[0]);
-  const cityName = topCity?.city || (allCities[0]?.city || CITIES_FALLBACK[0]);
-  const diagnosisCode = topDiagnosis?.diagnosis_code || (allDiagnoses[0]?.diagnosis_code || DIAGNOSES_FALLBACK[0]);
-  const patientName = topPatient?.name || (allPatients[0]?.name || PATIENTS_FALLBACK[0]);
-  const topSpecialty = topProvider?.specialty || (allProviders[0]?.specialty || SPECIALTIES[0]);
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await load();
+    setTimeout(() => setRefreshing(false), 600);
+  }, [load]);
 
-  const totalClaims = metrics?.total_claims || 0;
-  const totalFraud = metrics?.total_fraud || 0;
-  const fraudRate = totalClaims > 0 ? ((totalFraud / totalClaims) * 100).toFixed(1) : '0.0';
-  const avgClaimAmount = metrics?.avg_claim_amount || 0;
+  const kpi = data?.kpi || {};
+  const model = data?.model || {};
+  const featureImportance = data?.feature_importance || [];
+  const insights = data?.insights || [];
 
-  const providerFraudRate = topProvider?.claim_count
-    ? ((topProvider.fraud_count / topProvider.claim_count) * 100).toFixed(1)
-    : 'N/A';
-  const cityFraudRate = topCity?.total_claims
-    ? ((topCity.fraud_claims / topCity.total_claims) * 100).toFixed(1)
-    : 'N/A';
-  const diagnosisFraudRate = topDiagnosis?.fraud_rate
-    ? topDiagnosis.fraud_rate.toFixed(1)
-    : 'N/A';
-  const patientFraudRate = topPatient?.total_claims
-    ? ((topPatient.fraud_count / topPatient.total_claims) * 100).toFixed(1)
-    : 'N/A';
-
-  const netAvgClaims = allProviders.length > 1
-    ? allProviders.reduce((s, p) => s + (p.fraud_count || 0), 0) / allProviders.length
-    : 1;
-  const providerPctAbove = topProvider?.fraud_count
-    ? (((topProvider.fraud_count - netAvgClaims) / netAvgClaims) * 100).toFixed(0)
-    : 'N/A';
-
-  const netAvgCityFraud = allCities.length > 1
-    ? allCities.reduce((s, c) => s + (c.fraud_claims || 0), 0) / allCities.length
-    : 1;
-  const cityPctAbove = topCity?.fraud_claims
-    ? (((topCity.fraud_claims - netAvgCityFraud) / netAvgCityFraud) * 100).toFixed(0)
-    : 'N/A';
-
-  const netAvgDiagFraud = allDiagnoses.length > 1
-    ? allDiagnoses.reduce((s, d) => s + (d.fraud_count || 0), 0) / allDiagnoses.length
-    : 1;
-  const diagPctAbove = topDiagnosis?.fraud_count
-    ? (((topDiagnosis.fraud_count - netAvgDiagFraud) / netAvgDiagFraud) * 100).toFixed(0)
-    : 'N/A';
-
-  const topPatientClaims = allClaims.filter(c => c.patient_name === patientName);
-  const patientClaimCount = topPatientClaims.length;
-  const patientFraudScore = patientClaimCount > 0
-    ? Math.max(...topPatientClaims.map(c => c.fraud_score || 0))
-    : 0;
-
-  const insightsArr = Array.isArray(insights) ? insights : insights?.insights || [];
-
-  const modelAcc = metrics?.model_accuracy || CANONICAL_MODEL.accuracy;
-  const modelPrec = metrics?.model_precision || CANONICAL_MODEL.precision;
-  const modelRec = metrics?.model_recall || CANONICAL_MODEL.recall;
-  const modelF1 = metrics?.model_f1 || CANONICAL_MODEL.f1Score;
-  const modelRoc = metrics?.model_roc_auc || CANONICAL_MODEL.rocAuc;
-
-  const featureImportance = CANONICAL_FEATURE_IMPORTANCE || [];
-  const fiColors = ['#2563eb', '#0d9488', '#f97316', '#7c3aed', '#0891b2', '#f59e0b', '#ef4444', '#22c55e', '#ec4899', '#6366f1'];
+  const severityCounts = useMemo(() => {
+    const counts = { critical: 0, high: 0, medium: 0, low: 0 };
+    insights.forEach(i => { const s = (i.severity || 'low').toLowerCase(); counts[s] = (counts[s] || 0) + 1; });
+    return counts;
+  }, [insights]);
 
   if (loading) return <Skeleton rows={8} />;
 
-  const topCards = [
-    {
-      title: 'Top Fraud Provider', icon: Building2,
-      primary: providerName, value: topProvider?.fraud_count ?? 0, unit: 'fraud cases',
-      subtitle: `${topSpecialty} � ${providerFraudRate}% fraud rate`,
-      pctAbove: providerPctAbove,
-    },
-    {
-      title: 'Top Fraud City', icon: MapPin,
-      primary: cityName, value: topCity?.fraud_claims ?? 0, unit: 'fraud cases',
-      subtitle: `${cityFraudRate}% fraud rate`,
-      pctAbove: cityPctAbove,
-    },
-    {
-      title: 'Top Flagged Diagnosis', icon: Stethoscope,
-      primary: `ICD-9 ${diagnosisCode}`, value: topDiagnosis?.fraud_count ?? 0, unit: 'flagged claims',
-      subtitle: `${diagnosisFraudRate}% fraud rate`,
-      pctAbove: diagPctAbove,
-    },
-    {
-      title: 'Highest Risk Patient', icon: UserCheck,
-      primary: patientName, value: patientClaimCount || 1, unit: 'cases flagged',
-      subtitle: `Fraud Score: ${(patientFraudScore * 100).toFixed(0)}%`,
-      pctAbove: null,
-    },
-    {
-      title: 'System Overview', icon: Activity,
-      primary: formatCompactCurrency(CANONICAL_REFERENCE.totalFinancialImpact), value: totalClaims || CANONICAL_FUNNEL.totalClaims, unit: 'total claims',
-      subtitle: `${formatCompactCurrency(avgClaimAmount || CANONICAL_FINANCIALS.avgClaimAmount)} avg claim \u00b7 ${fraudRate}% fraud rate`,
-      pctAbove: null,
-    },
-    {
-      title: '% High-Risk Claims', icon: TrendingUp,
-      primary: `${((CANONICAL_FUNNEL.aiScoredHighRisk / CANONICAL_FUNNEL.totalClaims) * 100).toFixed(1)}%`, value: CANONICAL_FUNNEL.aiScoredHighRisk, unit: 'of claims flagged',
-      subtitle: `${CANONICAL_FUNNEL.aiScoredHighRisk.toLocaleString()} high-risk of ${CANONICAL_FUNNEL.totalClaims.toLocaleString()} total`,
-      pctAbove: null,
-    },
-  ];
-
   return (
-    <div className="space-y-6">
+    <div className="min-h-screen space-y-6">
 
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="p-2 rounded-lg bg-indigo-500/20">
-            <BrainCircuit className="w-6 h-6 text-indigo-400" />
+      <style>{`
+        @keyframes ai-gradient-shift {
+          0%, 100% { background-position: 0% 50%; }
+          50% { background-position: 100% 50%; }
+        }
+        @keyframes ai-pulse-ring {
+          0% { transform: scale(0.8); opacity: 1; }
+          100% { transform: scale(1.4); opacity: 0; }
+        }
+        @keyframes ai-float {
+          0%, 100% { transform: translateY(0px); }
+          50% { transform: translateY(-4px); }
+        }
+        @keyframes ai-shimmer {
+          0% { background-position: -200% 0; }
+          100% { background-position: 200% 0; }
+        }
+        .ai-gradient-bg {
+          background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 25%, #172554 50%, #1e1b4b 75%, #0f172a 100%);
+          background-size: 400% 400%;
+          animation: ai-gradient-shift 15s ease infinite;
+        }
+        .ai-glass {
+          background: rgba(15, 23, 42, 0.6);
+          backdrop-filter: blur(20px);
+          border: 1px solid rgba(99, 102, 241, 0.15);
+        }
+        .ai-glass-card {
+          background: rgba(30, 41, 59, 0.5);
+          backdrop-filter: blur(16px);
+          border: 1px solid rgba(148, 163, 184, 0.08);
+        }
+        .ai-shimmer-text {
+          background: linear-gradient(90deg, #818cf8, #c084fc, #22d3ee, #818cf8);
+          background-size: 200% 100%;
+          -webkit-background-clip: text;
+          -webkit-text-fill-color: transparent;
+          background-clip: text;
+          animation: ai-shimmer 4s linear infinite;
+        }
+        .ai-kpi-glow { box-shadow: 0 0 30px -5px rgba(99, 102, 241, 0.15), inset 0 1px 0 rgba(255,255,255,0.05); }
+        .ai-card-hover { transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+        .ai-card-hover:hover { transform: translateY(-2px); box-shadow: 0 20px 40px -12px rgba(0,0,0,0.4); border-color: rgba(99, 102, 241, 0.3); }
+        .ai-bar-animate { transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1); }
+        .ai-severity-pulse { animation: ai-pulse-ring 2s ease-out infinite; }
+        .ai-float { animation: ai-float 3s ease-in-out infinite; }
+      `}</style>
+
+      {/* Header */}
+      <div className="ai-gradient-bg rounded-2xl p-6 relative overflow-hidden">
+        <div className="absolute inset-0 opacity-10">
+          <div className="absolute top-4 right-8 w-32 h-32 bg-indigo-500 rounded-full blur-3xl" />
+          <div className="absolute bottom-4 left-12 w-24 h-24 bg-cyan-500 rounded-full blur-3xl" />
+          <div className="absolute top-1/2 left-1/2 w-20 h-20 bg-purple-500 rounded-full blur-3xl" />
+        </div>
+        <div className="relative flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className="relative">
+              <div className="p-3 rounded-xl bg-gradient-to-br from-indigo-500/30 to-purple-500/30 border border-indigo-500/20">
+                <BrainCircuit className="w-7 h-7 text-indigo-300" />
+              </div>
+              <div className="absolute -top-1 -right-1 w-3 h-3 bg-emerald-400 rounded-full border-2 border-slate-900 ai-float" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold text-white tracking-tight">AI Insights</h1>
+              <p className="text-sm text-slate-400 mt-0.5">Model-driven fraud analysis and behavioral patterns generated from real healthcare claim data.</p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-2xl font-semibold text-white">AI Insights</h1>
-            <p className="text-sm text-slate-400">Model-driven fraud analysis and behavioral patterns</p>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+              <div className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse" />
+              <span className="text-xs font-medium text-emerald-400">Model Active</span>
+            </div>
+            <button
+              onClick={handleRefresh}
+              disabled={refreshing}
+              className="p-2 rounded-lg bg-white/5 border border-white/10 text-slate-400 hover:text-white hover:bg-white/10 transition-all"
+            >
+              <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+            </button>
           </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
-        {topCards.map((card) => (
-          <div key={card.title} className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-4 hover:border-slate-600/60 transition-colors">
-            <div className="flex items-center gap-2 mb-3">
-              <card.icon className="w-4 h-4 text-indigo-400" />
-              <span className="text-xs font-medium text-slate-400 uppercase tracking-wider">{card.title}</span>
-            </div>
-            <div className="text-base font-semibold text-white truncate mb-1">{card.primary}</div>
-            <div className="flex items-baseline gap-2">
-              <span className="text-xs font-bold text-white">{card.value.toLocaleString()}</span>
-              <span className="text-xs text-slate-500">{card.unit}</span>
-              {card.pctAbove && (
-                <span className="text-[10px] font-semibold text-emerald-400 flex items-center gap-0.5">
-                  <TrendingUp className="w-2.5 h-2.5" /> +{card.pctAbove}% above avg
-                </span>
-              )}
-            </div>
-            <p className="text-[10px] text-slate-500 mt-1 truncate">{card.subtitle}</p>
-          </div>
-        ))}
+      {/* Top KPI Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4">
+        <KpiCard
+          icon={Building2}
+          title="Top Fraud Provider"
+          primary={kpi.top_provider?.name || 'N/A'}
+          value={kpi.top_provider?.fraud_count || 0}
+          unit="fraud cases"
+          subtitle={`${kpi.top_provider?.specialty || ''} · ${kpi.top_provider?.fraud_rate || 0}% fraud rate`}
+          extra={`${formatCompactCurrency(kpi.top_provider?.fraud_amount || 0)} suspicious`}
+          color="from-indigo-500 to-blue-600"
+          delay={0}
+        />
+        <KpiCard
+          icon={MapPin}
+          title="Top Fraud City"
+          primary={kpi.top_city?.city || 'N/A'}
+          value={kpi.top_city?.fraud_count || 0}
+          unit="fraud cases"
+          subtitle={`${kpi.top_city?.fraud_rate || 0}% fraud rate`}
+          extra={`+${kpi.top_city?.pct_above_avg || 0}% above avg`}
+          color="from-purple-500 to-pink-600"
+          delay={1}
+        />
+        <KpiCard
+          icon={Stethoscope}
+          title="Top Flagged Diagnosis"
+          primary={`ICD ${kpi.top_diagnosis?.code || 'N/A'}`}
+          value={kpi.top_diagnosis?.fraud_count || 0}
+          unit="flagged claims"
+          subtitle={`${kpi.top_diagnosis?.fraud_rate || 0}% fraud rate`}
+          extra={`$${(kpi.top_diagnosis?.avg_amount || 0).toLocaleString()} avg`}
+          color="from-cyan-500 to-teal-600"
+          delay={2}
+        />
+        <KpiCard
+          icon={UserCheck}
+          title="Highest Risk Patient"
+          primary={kpi.top_patient?.name || 'N/A'}
+          value={kpi.top_patient?.fraud_count || 0}
+          unit="suspicious claims"
+          subtitle={`Score: ${((kpi.top_patient?.max_fraud_score || 0) * 100).toFixed(0)}%`}
+          extra={`${formatCompactCurrency(kpi.top_patient?.suspicious_amount || 0)} at risk`}
+          color="from-orange-500 to-red-600"
+          delay={3}
+        />
+        <KpiCard
+          icon={Activity}
+          title="System Overview"
+          primary={`${kpi.system?.total_claims?.toLocaleString() || 0}`}
+          value={kpi.system?.total_fraud || 0}
+          unit="fraudulent claims"
+          subtitle={`${kpi.system?.fraud_rate || 0}% fraud rate`}
+          extra={`${formatCompactCurrency(kpi.system?.total_amount || 0)} total`}
+          color="from-emerald-500 to-green-600"
+          delay={4}
+        />
       </div>
 
       {/* Model Performance + Feature Importance */}
       <div className="grid grid-cols-1 xl:grid-cols-5 gap-6">
-        <div className="xl:col-span-2 bg-slate-800/60 border border-slate-700/50 rounded-xl p-5">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-semibold text-white">Model-Agnostic Feature Importance</h3>
-            <a href="/insurance/model-management" className="flex items-center gap-1 text-xs text-indigo-400 hover:text-indigo-300 transition-colors">
-              View Full Model Details <ExternalLink className="w-3 h-3" />
-            </a>
+        {/* Feature Importance */}
+        <div className="xl:col-span-2 ai-glass-card rounded-2xl p-5 ai-card-hover">
+          <div className="flex items-center justify-between mb-5">
+            <div className="flex items-center gap-2">
+              <div className="p-1.5 rounded-lg bg-indigo-500/15">
+                <BarChart3 className="w-4 h-4 text-indigo-400" />
+              </div>
+              <h3 className="text-sm font-semibold text-white">Feature Importance</h3>
+            </div>
+            <span className="text-[10px] text-slate-500 bg-slate-800/60 px-2 py-1 rounded-md">XGBoost Model</span>
           </div>
-          <div className="space-y-2">
-            {featureImportance.slice(0, 5).map((f, i) => (
-              <div key={f.feature} className="flex items-center gap-2">
-                <span className="text-xs text-slate-400 w-2">{i + 1}.</span>
-                <span className="text-xs text-slate-300 w-44 truncate">{f.feature}</span>
-                <div className="flex-1 h-2 bg-slate-700/60 rounded-full overflow-hidden">
+          <div className="space-y-3">
+            {featureImportance.slice(0, 8).map((f, i) => (
+              <div key={f.feature} className="group">
+                <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-bold text-slate-500 w-4">{i + 1}</span>
+                    <span className="text-xs text-slate-300 font-medium">{f.feature}</span>
+                  </div>
+                  <span className="text-[11px] font-mono text-slate-400 font-semibold">{(f.importance * 100).toFixed(1)}%</span>
+                </div>
+                <div className="h-2 bg-slate-800/80 rounded-full overflow-hidden ml-6">
                   <div
-                    className="h-full rounded-full transition-all duration-500"
-                    style={{ width: `${f.importance * 100}%`, backgroundColor: fiColors[i % fiColors.length] }}
+                    className="h-full rounded-full ai-bar-animate"
+                    style={{
+                      width: `${Math.max(f.importance * 100, 2)}%`,
+                      background: `linear-gradient(90deg, ${FI_COLORS[i % FI_COLORS.length]}cc, ${FI_COLORS[i % FI_COLORS.length]})`,
+                    }}
                   />
                 </div>
-                <span className="text-[11px] font-mono text-slate-400 w-10 text-right">{(f.importance * 100).toFixed(1)}%</span>
               </div>
             ))}
           </div>
         </div>
 
-        <div className="xl:col-span-3 bg-slate-800/60 border border-slate-700/50 rounded-xl p-5">
-          <h3 className="text-sm font-semibold text-white mb-4">Model Performance Metrics</h3>
-          <div className="grid grid-cols-5 gap-3">
+        {/* Model Performance */}
+        <div className="xl:col-span-3 ai-glass-card rounded-2xl p-5 ai-card-hover">
+          <div className="flex items-center justify-between mb-5">
+            <div className="flex items-center gap-2">
+              <div className="p-1.5 rounded-lg bg-purple-500/15">
+                <Cpu className="w-4 h-4 text-purple-400" />
+              </div>
+              <h3 className="text-sm font-semibold text-white">Model Performance</h3>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] text-slate-500 bg-slate-800/60 px-2 py-1 rounded-md">v{model.version || '1.0.0'}</span>
+              <span className="text-[10px] text-slate-500 bg-slate-800/60 px-2 py-1 rounded-md">{(model.training_samples || 0).toLocaleString()} samples</span>
+            </div>
+          </div>
+          <div className="grid grid-cols-5 gap-4">
             {[
-              { label: 'Accuracy', value: modelAcc, color: 'text-emerald-400' },
-              { label: 'Precision', value: modelPrec, color: 'text-blue-400' },
-              { label: 'Recall', value: modelRec, color: 'text-violet-400' },
-              { label: 'F1 Score', value: modelF1, color: 'text-amber-400' },
-              { label: 'ROC AUC', value: modelRoc, color: 'text-cyan-400' },
-            ].map(m => (
-              <div key={m.label} className="text-center">
-                <div className={`text-2xl font-bold ${m.color}`}>{typeof m.value === 'number' ? `${(m.value * 100).toFixed(1)}%` : m.value}</div>
-                <div className="text-xs text-slate-500 mt-1">{m.label}</div>
+              { label: 'Accuracy', value: model.accuracy, color: 'from-emerald-400 to-emerald-600', icon: Target },
+              { label: 'Precision', value: model.precision, color: 'from-blue-400 to-blue-600', icon: Crosshair },
+              { label: 'Recall', value: model.recall, color: 'from-violet-400 to-violet-600', icon: ShieldCheck },
+              { label: 'F1 Score', value: model.f1_score, color: 'from-amber-400 to-amber-600', icon: Zap },
+              { label: 'ROC AUC', value: model.roc_auc, color: 'from-cyan-400 to-cyan-600', icon: Activity },
+            ].map((m) => (
+              <div key={m.label} className="text-center group">
+                <div className="relative inline-block mb-3">
+                  <div className={`w-16 h-16 rounded-2xl bg-gradient-to-br ${m.color} bg-opacity-10 flex items-center justify-center mx-auto relative overflow-hidden`}
+                    style={{ background: `linear-gradient(135deg, ${m.color.includes('emerald') ? '#10b98120' : m.color.includes('blue') ? '#3b82f620' : m.color.includes('violet') ? '#8b5cf620' : m.color.includes('amber') ? '#f59e0b20' : '#06b6d420'}, transparent)` }}>
+                    <m.icon className="w-6 h-6 text-slate-400 group-hover:text-white transition-colors" />
+                  </div>
+                </div>
+                <div className={`text-2xl font-bold bg-gradient-to-r ${m.color} bg-clip-text text-transparent`}>
+                  {typeof m.value === 'number' ? `${(m.value * 100).toFixed(1)}%` : m.value || 'N/A'}
+                </div>
+                <div className="text-[11px] text-slate-500 mt-1 font-medium">{m.label}</div>
               </div>
             ))}
           </div>
+          {model.last_training_date && (
+            <div className="mt-4 pt-3 border-t border-slate-700/30 flex items-center justify-center gap-2">
+              <Clock className="w-3 h-3 text-slate-500" />
+              <span className="text-[10px] text-slate-500">Last trained: {model.last_training_date}</span>
+            </div>
+          )}
         </div>
       </div>
 
-      {/* AI Insights List */}
-      {insightsArr.length > 0 && (
-        <div className="bg-slate-800/60 border border-slate-700/50 rounded-xl p-5">
-          <h3 className="text-sm font-semibold text-white mb-3">Generated Insights</h3>
-          <div className="space-y-3">
-            {insightsArr.map((insight, idx) => {
-              const sKey = insight.severity?.toLowerCase?.() || 'low';
-              const sev = SEVERITY[sKey] || SEVERITY.low;
-              const cKey = pickConfidence(insight.confidence);
-              const conf = CONFIDENCE[cKey];
-              const detailMeta = CACHED_INSIGHT_DETAILS[insight.id] || CACHED_INSIGHT_DETAILS[idx + 1];
-              const detailClaims = detailMeta?.claims || [];
-              const showingDetail = expandedInsight === insight.id;
-
-              return (
-                <div key={insight.id || idx} className={`bg-slate-900/40 border ${sev.border} rounded-lg p-4`}>
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-start gap-3 flex-1 min-w-0">
-                      <div className={`p-1.5 rounded-lg ${sev.bg} shrink-0 mt-0.5`}>
-                        <AlertTriangle className={`w-4 h-4 ${sev.color}`} />
-                      </div>
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <h4 className="text-sm font-semibold text-white">{insight.title}</h4>
-                          <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${conf.bg} ${conf.color} border ${conf.border}`}>
-                            {conf.label} Confidence ({insight.confidence}%)
-                          </span>
-                        </div>
-                        <p className="text-xs text-slate-400 mt-1">{insight.description}</p>
-                        {SUPPORTING_EVIDENCE[idx + 1] && (
-                          <ul className="mt-2 space-y-1">
-                            {SUPPORTING_EVIDENCE[idx + 1].slice(0, 3).map((evidence, ei) => (
-                              <li key={ei} className="flex items-start gap-1.5 text-[10px] text-slate-500">
-                                <span className="text-indigo-400 mt-0.5 shrink-0">\u2022</span>
-                                <span>{evidence}</span>
-                              </li>
-                            ))}
-                          </ul>
-                        )}
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <span className={`text-[10px] font-semibold px-2 py-1 rounded ${sev.bg} ${sev.color}`}>
-                        {sev.label}
-                      </span>
-                      {detailClaims.length > 0 && (
-                        <button
-                          onClick={() => setExpandedInsight(showingDetail ? null : insight.id)}
-                          className="flex items-center gap-1 text-xs text-indigo-400 hover:text-indigo-300 transition-colors"
-                        >
-                          {showingDetail ? <ChevronUp className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                          {showingDetail ? 'Hide Evidence' : `${detailClaims.length} Supporting Claim${detailClaims.length !== 1 ? 's' : ''}`}
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  {showingDetail && detailClaims.length > 0 && (
-                    <div className="mt-3 border-t border-slate-700/40 pt-3 space-y-2">
-                      {detailClaims.map((clm) => (
-                        <div key={clm.id} className="bg-slate-800/40 rounded-lg p-3 border border-slate-700/30 flex items-start justify-between gap-2">
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-2">
-                              <span className="text-xs font-semibold text-white">{clm.id}</span>
-                              <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
-                                clm.status === 'Fraud Confirmed' ? 'text-red-400 bg-red-500/10' :
-                                clm.status === 'Under Review' ? 'text-amber-400 bg-amber-500/10' :
-                                'text-slate-400 bg-slate-700/40'
-                              }`}>{clm.status}</span>
-                            </div>
-                            <p className="text-xs text-slate-400 mt-0.5">{clm.patient} &middot; {clm.provider}</p>
-                            <p className="text-[11px] text-slate-500 mt-0.5"><FileText className="w-3 h-3 inline mr-1" />{clm.evidence}</p>
-                          </div>
-                          <div className="text-right shrink-0">
-                            <div className="text-xs font-semibold text-white">{formatCompactCurrency(clm.amount)}</div>
-                            <div className="text-[10px] text-slate-500">Score: {(clm.score * 100).toFixed(0)}%</div>
-                            <div className="text-[10px] text-slate-500">{clm.date}</div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+      {/* Summary Bar */}
+      <div className="ai-glass rounded-xl p-4 flex items-center justify-between">
+        <div className="flex items-center gap-6">
+          <div className="flex items-center gap-2">
+            <Sparkles className="w-4 h-4 text-indigo-400" />
+            <span className="text-sm font-semibold text-white">{insights.length} Insights Generated</span>
+          </div>
+          <div className="flex items-center gap-4">
+            {Object.entries(severityCounts).map(([key, count]) => count > 0 && (
+              <div key={key} className="flex items-center gap-1.5">
+                <div className={`w-2 h-2 rounded-full ${SEVERITY[key].dot}`} />
+                <span className="text-xs text-slate-400">{count} {SEVERITY[key].label}</span>
+              </div>
+            ))}
           </div>
         </div>
-      )}
+        <div className="flex items-center gap-2 text-xs text-slate-500">
+          <Database className="w-3 h-3" />
+          <span>Powered by {kpi.system?.total_claims?.toLocaleString() || 0} claims</span>
+        </div>
+      </div>
 
+      {/* AI Insights */}
+      {insights.length > 0 && (
+        <div className="space-y-3">
+          <div className="flex items-center gap-2 mb-1">
+            <div className="p-1.5 rounded-lg bg-gradient-to-br from-indigo-500/20 to-purple-500/20">
+              <Lightbulb className="w-4 h-4 text-indigo-400" />
+            </div>
+            <h3 className="text-sm font-semibold text-white">Generated AI Insights</h3>
+          </div>
+          {insights.map((insight) => {
+            const sKey = (insight.severity || 'low').toLowerCase();
+            const sev = SEVERITY[sKey] || SEVERITY.low;
+            const InsightIcon = INSIGHT_ICONS[insight.type] || AlertTriangle;
+            const isExpanded = expandedInsight === insight.id;
+            const confLevel = insight.confidence >= 85 ? 'high' : insight.confidence >= 65 ? 'medium' : 'low';
+            const confColor = confLevel === 'high' ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20'
+              : confLevel === 'medium' ? 'text-amber-400 bg-amber-500/10 border-amber-500/20'
+              : 'text-slate-400 bg-slate-500/10 border-slate-500/20';
+
+            return (
+              <div
+                key={insight.id}
+                className={`ai-glass-card rounded-xl overflow-hidden ai-card-hover ${isExpanded ? `ring-1 ring-${sKey === 'critical' ? 'red' : sKey === 'high' ? 'orange' : sKey === 'medium' ? 'amber' : 'sky'}-500/30` : ''}`}
+              >
+                <div className="p-4">
+                  <div className="flex items-start gap-3">
+                    <div className={`p-2 rounded-xl ${sev.bg} shrink-0 mt-0.5 relative`}>
+                      <InsightIcon className={`w-4 h-4 ${sev.color}`} />
+                      {sKey === 'critical' && (
+                        <div className={`absolute inset-0 rounded-xl ${sev.bg} ai-severity-pulse`} />
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap mb-1">
+                        <h4 className="text-sm font-semibold text-white">{insight.title}</h4>
+                      </div>
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${confColor}`}>
+                          {insight.confidence}% Confidence
+                        </span>
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${sev.bg} ${sev.color}`}>
+                          {sev.label}
+                        </span>
+                        <span className="text-[10px] text-slate-600 bg-slate-800/40 px-2 py-0.5 rounded-full">
+                          {insight.type?.replace(/_/g, ' ')}
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-400 leading-relaxed">{insight.description}</p>
+                      {insight.evidence && insight.evidence.length > 0 && (
+                        <ul className="mt-2 space-y-1">
+                          {insight.evidence.map((evidence, ei) => (
+                            <li key={ei} className="flex items-start gap-1.5 text-[10px] text-slate-500">
+                              <span className="text-indigo-400 mt-0.5 shrink-0">•</span>
+                              <span>{evidence}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => setExpandedInsight(isExpanded ? null : insight.id)}
+                      className="shrink-0 p-1.5 rounded-lg text-slate-500 hover:text-white hover:bg-white/5 transition-all"
+                    >
+                      {isExpanded ? <ChevronUp className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                {isExpanded && (
+                  <div className="border-t border-slate-700/30 p-4 bg-slate-900/30">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      <div className="ai-glass rounded-lg p-3">
+                        <div className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Confidence Level</div>
+                        <div className="flex items-center gap-2">
+                          <div className="flex-1 h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                            <div
+                              className={`h-full rounded-full ${confLevel === 'high' ? 'bg-emerald-500' : confLevel === 'medium' ? 'bg-amber-500' : 'bg-slate-500'}`}
+                              style={{ width: `${insight.confidence}%` }}
+                            />
+                          </div>
+                          <span className="text-xs font-bold text-white">{insight.confidence}%</span>
+                        </div>
+                      </div>
+                      <div className="ai-glass rounded-lg p-3">
+                        <div className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Severity</div>
+                        <div className="flex items-center gap-2">
+                          <div className={`w-3 h-3 rounded-full ${sev.dot}`} />
+                          <span className={`text-sm font-semibold ${sev.color}`}>{sev.label}</span>
+                        </div>
+                      </div>
+                      <div className="ai-glass rounded-lg p-3">
+                        <div className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Category</div>
+                        <span className="text-sm font-semibold text-white capitalize">{insight.type?.replace(/_/g, ' ')}</span>
+                      </div>
+                    </div>
+                    {insight.evidence && insight.evidence.length > 0 && (
+                      <div className="mt-3">
+                        <div className="text-[10px] text-slate-500 uppercase tracking-wider mb-2">Supporting Evidence</div>
+                        <div className="space-y-1.5">
+                          {insight.evidence.map((e, i) => (
+                            <div key={i} className="flex items-start gap-2 text-xs text-slate-400">
+                              <FileText className="w-3 h-3 text-indigo-400 mt-0.5 shrink-0" />
+                              <span>{e}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function KpiCard({ icon: Icon, title, primary, value, unit, subtitle, extra, color, delay }) {
+  return (
+    <div
+      className="ai-glass-card rounded-xl p-4 ai-card-hover ai-kpi-glow relative overflow-hidden group"
+      style={{ animationDelay: `${delay * 0.05}s` }}
+    >
+      <div className={`absolute top-0 right-0 w-24 h-24 bg-gradient-to-br ${color} opacity-5 rounded-full -translate-y-8 translate-x-8 group-hover:opacity-10 transition-opacity`} />
+      <div className="flex items-center gap-2 mb-3">
+        <div className={`p-1.5 rounded-lg bg-gradient-to-br ${color} bg-opacity-15`}
+          style={{ background: `linear-gradient(135deg, ${color.includes('indigo') ? '#6366f120' : color.includes('purple') ? '#a855f720' : color.includes('cyan') ? '#06b6d420' : color.includes('orange') ? '#f9731620' : '#10b98120'}, transparent)` }}>
+          <Icon className="w-3.5 h-3.5 text-slate-400" />
+        </div>
+        <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">{title}</span>
+      </div>
+      <div className="text-base font-bold text-white truncate mb-1">{primary}</div>
+      <div className="flex items-baseline gap-1.5 mb-1">
+        <span className="text-lg font-black text-white">{typeof value === 'number' ? value.toLocaleString() : value}</span>
+        <span className="text-[10px] text-slate-500 font-medium">{unit}</span>
+      </div>
+      <p className="text-[10px] text-slate-500 truncate mb-1">{subtitle}</p>
+      {extra && (
+        <div className="flex items-center gap-1 text-[10px] font-semibold text-emerald-400">
+          <ArrowUpRight className="w-2.5 h-2.5" />
+          {extra}
+        </div>
+      )}
     </div>
   );
 }

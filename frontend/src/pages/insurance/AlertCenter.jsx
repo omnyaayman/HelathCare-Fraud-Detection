@@ -12,10 +12,10 @@ import PlotlyChart from "../../components/PlotlyChart";
 import Skeleton from "../../components/Skeleton";
 import Modal from "../../components/Modal";
 import { formatCurrency, formatCompactCurrency, formatNumber } from "../../data/dataUtils";
-import { CANONICAL_PROVIDERS, CANONICAL_PATIENTS, CANONICAL_FRAUD_DIAGNOSES, CANONICAL_INVESTIGATORS } from "../../data/canonicalData";
+import { CANONICAL_PROVIDERS, CANONICAL_PATIENTS, CANONICAL_FRAUD_DIAGNOSES, CANONICAL_INVESTIGATORS, CANONICAL_MODEL } from "../../data/canonicalData";
 
-const SYSTEM_NOW = new Date("2026-07-20T14:00:00");
-const MODEL_VERSION = "v3.2.1";
+const SYSTEM_NOW = new Date();
+const MODEL_VERSION = CANONICAL_MODEL.version;
 const PAGE_SIZE = 10;
 
 const INVESTIGATORS = [...CANONICAL_INVESTIGATORS];

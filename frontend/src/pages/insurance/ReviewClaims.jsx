@@ -12,7 +12,7 @@ import Modal from "../../components/Modal";
 import { formatCurrency, getRiskLevel, getStatusColor, buildSHAPExplanation } from "../../data/dataUtils";
 import { CANONICAL_PROVIDERS, CANONICAL_PATIENTS, CANONICAL_FRAUD_DIAGNOSES, CANONICAL_INVESTIGATORS } from "../../data/canonicalData";
 
-const SYSTEM_NOW = new Date("2026-07-20T14:00:00");
+const SYSTEM_NOW = new Date();
 const MODEL_VERSION = "v3.2.1";
 
 const RISK_THRESHOLD_MEDIUM = 0.40;

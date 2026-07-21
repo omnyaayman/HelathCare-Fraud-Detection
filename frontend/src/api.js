@@ -992,6 +992,27 @@ const MOCK_DATA = {
     roc_auc: CANONICAL_MODEL.rocAuc,
     model_version: CANONICAL_MODEL.version,
   }),
+  '/api/ai-insights/detailed': () => ({
+    kpi: {
+      top_provider: { name: 'Metropolitan General Hospital', specialty: 'Multi-Specialty', city: 'New York', state: 'NY', total_claims: 28, fraud_count: 12, fraud_rate: 42.9, fraud_amount: 156000 },
+      top_city: { city: 'New York', state: 'NY', total_claims: 28, fraud_count: 12, fraud_rate: 42.9, avg_fraud_amount: 13000, pct_above_avg: 280 },
+      top_diagnosis: { code: '414', total_claims: 12, fraud_count: 5, fraud_rate: 41.7, avg_amount: 18500 },
+      top_patient: { patient_id: 'PAT-003', name: 'Patricia Williams', total_claims: 6, fraud_count: 1, max_fraud_score: 0.856, suspicious_amount: 12500 },
+      system: { total_claims: 200, total_fraud: 15, fraud_rate: 7.5, total_amount: 2500000, fraud_amount: 625000, avg_claim_amount: 12500, avg_fraud_amount: 41667 },
+    },
+    model: { accuracy: CANONICAL_MODEL.accuracy, precision: CANONICAL_MODEL.precision, recall: CANONICAL_MODEL.recall, f1_score: CANONICAL_MODEL.f1Score, roc_auc: CANONICAL_MODEL.rocAuc, version: CANONICAL_MODEL.version, training_samples: 128459, last_training_date: '2026-06-15' },
+    feature_importance: CANONICAL_MODEL.featureImportance,
+    insights: [
+      { id: 1, type: 'admission_analysis', title: 'Emergency Admissions Show Highest Fraud Rate', confidence: 88, severity: 'high', description: 'Emergency admissions have a fraud rate of 12.3% compared to 4.1% for Elective admissions. This represents a 3.0x difference in fraud probability.', evidence: ['Emergency: 8 fraud claims out of 65 total (12.3%)', 'Elective: 3 fraud claims out of 73 total (4.1%)', 'Admission type distribution across 4 categories analyzed'] },
+      { id: 2, type: 'claim_amount_analysis', title: 'Higher Claim Amounts Strongly Correlate with Fraud', confidence: 91, severity: 'critical', description: 'Fraudulent claims average $41,667 compared to $9,876 for legitimate claims — a 4.2x difference. 18 extreme claims (2x+ average) were confirmed fraudulent.', evidence: ['Average fraudulent claim: $41,667 vs legitimate: $9,876', '18 claims exceeding 2x average confirmed as fraud', 'Total fraudulent exposure: $625,000 (7.5% of all claims)'] },
+      { id: 3, type: 'provider_specialty', title: 'Multi-Specialty Providers Lead Fraud Cases', confidence: 84, severity: 'high', description: 'Multi-Specialty providers account for 45% of all fraudulent claims with 12 cases and $156,000 in suspicious billings.', evidence: ['Multi-Specialty: 12 fraud claims (42.9% fraud rate)', 'Total specialty fraud exposure: $156,000', 'Across 9 provider specialties analyzed'] },
+      { id: 4, type: 'geographic_analysis', title: 'New York Shows Unusually High Fraud Rate', confidence: 82, severity: 'high', description: 'New York has a fraud rate of 42.9%, which is 280% above the dataset average of 11.3%.', evidence: ['New York: 12 fraud claims out of 28 (42.9%)', 'Dataset average fraud rate: 11.3%', '3 cities identified above average threshold'] },
+      { id: 5, type: 'patient_behavior', title: 'Suspicious Patient Claim Patterns Detected', confidence: 78, severity: 'medium', description: 'Patient PAT-003 (Patricia Williams) has 6 claims with 1 flagged as fraudulent and a peak fraud score of 86%.', evidence: ['Patient PAT-003: 6 total claims, 1 fraudulent', 'Peak fraud score: 86%', '3 patients identified with suspicious patterns'] },
+      { id: 6, type: 'diagnosis_pattern', title: 'ICD Code 414 Shows Elevated Fraud Association', confidence: 80, severity: 'medium', description: 'Diagnosis code 414 has 5 fraudulent claims (41.7% rate) with an average claim amount of $18,500.', evidence: ['ICD 414: 5 fraud / 12 total (41.7%)', 'Average claim amount for this diagnosis: $18,500', 'Compared to dataset average fraud rate: 7.5%'] },
+      { id: 7, type: 'financial_risk', title: 'Financial Impact: $625,000 in Fraudulent Claims', confidence: 95, severity: 'critical', description: 'Total fraudulent claim value is $625,000 (7.5% of $2,500,000 total). Estimated $118,750 saved through AI detection.', evidence: ['Fraudulent claims: 15 totaling $625,000', 'Average fraudulent claim: $41,667', 'Estimated fraud prevented: $118,750'] },
+      { id: 8, type: 'fraud_trend', title: 'Fraud Rate Increasing — 8.2% in Latest Month', confidence: 76, severity: 'medium', description: 'Fraud rate changed from 6.8% to 8.2% (+1.4pp) between the two most recent months.', evidence: ['Latest month: 8 fraud / 98 total (8.2%)', 'Previous month: 7 fraud / 103 total (6.8%)', 'Trend direction: increasing by 1.4 percentage points'] },
+    ],
+  }),
   '/api/model/metrics': () => ({
     accuracy: CANONICAL_MODEL.accuracy,
     precision: CANONICAL_MODEL.precision,
@@ -1126,6 +1147,7 @@ const api = {
   getTopDiagnoses: () => request('GET', '/api/analytics/top-diagnoses'),
 
   getAiInsights: () => request('GET', '/api/ai-insights'),
+  getAiInsightsDetailed: () => request('GET', '/api/ai-insights/detailed'),
 
   getNotifications: () => request('GET', '/api/notifications'),
   getNotificationDetail: (id) => request('GET', `/api/notifications/${id}`),

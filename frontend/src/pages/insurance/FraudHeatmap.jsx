@@ -1,8 +1,8 @@
 import { useState, useMemo } from 'react';
 import PlotlyChart from '../../components/PlotlyChart';
-import { MapPin, AlertTriangle, TrendingUp, TrendingDown, Activity, Building2, Stethoscope, Calendar, ChevronRight, Map } from 'lucide-react';
+import { MapPin, AlertTriangle, TrendingUp, TrendingDown, Activity, Building2, Stethoscope, Calendar, ChevronRight, Map, Search, Filter, X } from 'lucide-react';
 import { CANONICAL_FUNNEL, CANONICAL_FINANCIALS, CANONICAL_MONTHLY_TRENDS, CANONICAL_REGIONAL_DATA, CANONICAL_REFERENCE, CANONICAL_PROVIDERS } from '../../data/canonicalData';
-import { formatNumber } from '../../data/dataUtils';
+import { formatNumber, formatCurrency as fmtCurrency } from '../../data/dataUtils';
 
 const formatCurrency = (val) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(val || 0);
 
@@ -94,8 +94,48 @@ const LEGEND_TIERS = [
 
 export default function FraudHeatmap() {
   const [selectedState, setSelectedState] = useState(null);
+  const [stateSearch, setStateSearch] = useState('');
+  const [riskFilter, setRiskFilter] = useState('All');
+  const [regionFilter, setRegionFilter] = useState('All');
 
-  const sortedByRisk = useMemo(() => [...STATE_DATA].sort((a, b) => b.fraudRate - a.fraudRate), []);
+  const REGION_MAP = {
+    Northeast: ['CT', 'ME', 'MA', 'NH', 'RI', 'VT', 'NJ', 'NY', 'PA'],
+    Southeast: ['AL', 'AR', 'DE', 'FL', 'GA', 'KY', 'LA', 'MD', 'MS', 'NC', 'SC', 'TN', 'VA', 'WV'],
+    Midwest: ['IL', 'IN', 'IA', 'KS', 'MI', 'MN', 'MO', 'NE', 'ND', 'OH', 'SD', 'WI'],
+    West: ['AK', 'AZ', 'CA', 'CO', 'HI', 'ID', 'MT', 'NV', 'NM', 'OR', 'UT', 'WA', 'WY'],
+    Southwest: ['AZ', 'NM', 'OK', 'TX'],
+  };
+
+  const filteredStates = useMemo(() => {
+    return STATE_DATA.filter(s => {
+      if (stateSearch && !s.name.toLowerCase().includes(stateSearch.toLowerCase()) && !s.code.toLowerCase().includes(stateSearch.toLowerCase())) return false;
+      if (riskFilter !== 'All') {
+        if (riskFilter === 'Critical' && s.fraudRate <= 12) return false;
+        if (riskFilter === 'High' && (s.fraudRate <= 8 || s.fraudRate > 12)) return false;
+        if (riskFilter === 'Medium' && (s.fraudRate <= 4 || s.fraudRate > 8)) return false;
+        if (riskFilter === 'Low' && s.fraudRate > 4) return false;
+      }
+      if (regionFilter !== 'All') {
+        const regionStates = REGION_MAP[regionFilter] || [];
+        if (!regionStates.includes(s.code)) return false;
+      }
+      return true;
+    });
+  }, [stateSearch, riskFilter, regionFilter]);
+
+  const filteredMapData = useMemo(() => [{
+    type: 'choropleth',
+    locationmode: 'USA-states',
+    locations: filteredStates.map(s => s.code),
+    z: filteredStates.map(s => s.fraudRate),
+    text: filteredStates.map(s => `${s.name}\nFraud Rate: ${s.fraudRate.toFixed(1)}%\nTotal Claims: ${s.totalClaims.toLocaleString()}\nFlagged: ${s.flaggedClaims.toLocaleString()}\n\nClick for details`),
+    hoverinfo: 'text',
+    colorscale: [[0, '#064e3b'], [0.25, '#059669'], [0.5, '#f59e0b'], [0.75, '#ea580c'], [1, '#dc2626']],
+    colorbar: { title: { text: 'Fraud Rate %', font: { color: '#94a3b8', size: 11 } }, tickfont: { color: '#94a3b8' }, thickness: 15, len: 0.6, bgcolor: 'transparent', outlinewidth: 0 },
+    marker: { line: { color: '#1e293b', width: 1 } }
+  }], [filteredStates]);
+
+  const sortedByRisk = useMemo(() => [...filteredStates].sort((a, b) => b.fraudRate - a.fraudRate), [filteredStates]);
   const top5 = useMemo(() => sortedByRisk.slice(0, 5), [sortedByRisk]);
   const bottom5 = useMemo(() => sortedByRisk.slice(-5).reverse(), [sortedByRisk]);
   const maxFraudRate = useMemo(() => Math.max(...STATE_DATA.map(s => s.fraudRate)), []);
@@ -176,6 +216,63 @@ export default function FraudHeatmap() {
         </div>
       </div>
 
+      {/* ─── Interactive Filters ─── */}
+      <div className="bg-[#0f172a]/80 rounded-2xl border border-[#1e293b]/80 p-4">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2 text-[#94a3b8]">
+            <Filter size={14} />
+            <span className="text-[10px] font-black uppercase tracking-widest">Filters</span>
+          </div>
+          <div className="relative flex-1 min-w-[200px] max-w-xs">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#94a3b8]" />
+            <input
+              type="text"
+              placeholder="Search state..."
+              value={stateSearch}
+              onChange={e => setStateSearch(e.target.value)}
+              className="w-full pl-9 pr-3 py-2 rounded-xl bg-[#1e293b]/60 border border-[#1e293b] text-[#f8fafc] text-xs font-medium placeholder:text-slate-600 focus:outline-none focus:border-[#818cf8]/50 transition-colors"
+            />
+            {stateSearch && (
+              <button onClick={() => setStateSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-[#94a3b8] hover:text-[#f8fafc]">
+                <X size={12} />
+              </button>
+            )}
+          </div>
+          <select
+            value={riskFilter}
+            onChange={e => setRiskFilter(e.target.value)}
+            className="px-3 py-2 rounded-xl bg-[#1e293b]/60 border border-[#1e293b] text-[#f8fafc] text-xs font-medium focus:outline-none focus:border-[#818cf8]/50 transition-colors"
+          >
+            <option value="All">All Risk Tiers</option>
+            <option value="Critical">Critical (&gt;12%)</option>
+            <option value="High">High (8-12%)</option>
+            <option value="Medium">Medium (4-8%)</option>
+            <option value="Low">Low (&lt;4%)</option>
+          </select>
+          <select
+            value={regionFilter}
+            onChange={e => setRegionFilter(e.target.value)}
+            className="px-3 py-2 rounded-xl bg-[#1e293b]/60 border border-[#1e293b] text-[#f8fafc] text-xs font-medium focus:outline-none focus:border-[#818cf8]/50 transition-colors"
+          >
+            <option value="All">All Regions</option>
+            <option value="Northeast">Northeast</option>
+            <option value="Southeast">Southeast</option>
+            <option value="Midwest">Midwest</option>
+            <option value="West">West</option>
+            <option value="Southwest">Southwest</option>
+          </select>
+          {(stateSearch || riskFilter !== 'All' || regionFilter !== 'All') && (
+            <button
+              onClick={() => { setStateSearch(''); setRiskFilter('All'); setRegionFilter('All'); }}
+              className="flex items-center gap-1 px-3 py-2 rounded-xl bg-[#818cf8]/10 border border-[#818cf8]/20 text-[#818cf8] text-xs font-bold hover:bg-[#818cf8]/20 transition-colors"
+            >
+              <X size={12} /> Clear All
+            </button>
+          )}
+          <span className="text-[10px] text-[#94a3b8] font-mono ml-auto">{filteredStates.length} of {STATE_DATA.length} states</span>
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-[#0f172a]/80 rounded-2xl border border-[#1e293b]/80 p-5">
           <div className="flex items-center gap-3 mb-3">
@@ -227,7 +324,7 @@ export default function FraudHeatmap() {
             </div>
             <div className="p-2">
               <PlotlyChart
-                data={mapData}
+                data={filteredMapData}
                 layout={mapLayout}
                 onPointClick={handleMapClick}
                 style={{ height: '520px' }}

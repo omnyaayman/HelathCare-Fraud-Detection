@@ -11,6 +11,7 @@ import {
 import PlotlyChart from "../../components/PlotlyChart";
 import Skeleton from "../../components/Skeleton";
 import { formatCurrency, formatCompactCurrency, formatNumber } from "../../data/dataUtils";
+import { CANONICAL_MODEL, CANONICAL_REFERENCE, CANONICAL_FINANCIALS, CANONICAL_FUNNEL, CANONICAL_CLAIMS_OVER_TIME } from "../../data/canonicalData";
 
 // ═══════════════════════════════════════════════════════════════
 // SECTION 0: UNIFIED DATA MODEL — SINGLE SOURCE OF TRUTH
@@ -113,13 +114,13 @@ const DIAGNOSES = [
 ].map(d => ({ ...d, fraudRate: +((d.fraud / d.claims) * 100).toFixed(1) }));
 const TOP3_DIAGNOSES = DIAGNOSES.slice(0, 3);
 
-const MODEL_ACCURACY = 94.6;
-const MODEL_PRECISION = 86.2;
-const MODEL_RECALL = 85.9;
-const MODEL_F1 = 86.1;
-const MODEL_FPR = 3.3;
+const MODEL_ACCURACY = +(CANONICAL_MODEL.accuracy * 100).toFixed(1);
+const MODEL_PRECISION = +(CANONICAL_MODEL.precision * 100).toFixed(1);
+const MODEL_RECALL = +(CANONICAL_MODEL.recall * 100).toFixed(1);
+const MODEL_F1 = +(CANONICAL_MODEL.f1Score * 100).toFixed(1);
+const MODEL_FPR = +(CANONICAL_MODEL.falsePositiveRate * 100).toFixed(1);
 const MODEL_FNR = +(100 - MODEL_RECALL).toFixed(1);
-const MODEL_ROC_AUC = 96.5;
+const MODEL_ROC_AUC = +(CANONICAL_MODEL.rocAuc * 100).toFixed(1);
 
 const MODEL_ACCURACY_TREND = [
   { month: 'Feb 2026', accuracy: 93.2 },
@@ -320,10 +321,60 @@ export default function ExecutiveDashboard() {
           <Skeleton rows={10} className="bg-surface rounded-2xl border border-border/80 p-5" />
           <Skeleton rows={10} className="bg-surface rounded-2xl border border-border/80 p-5" />
           <Skeleton rows={10} className="bg-surface rounded-2xl border border-border/80 p-5" />
+      </div>
+
+      {/* ═══════════════════════════════════════════════════════
+          ROW 8: AI Business Summary
+          ═══════════════════════════════════════════════════════ */}
+      <div className="bg-gradient-to-br from-primary/5 via-surface to-accent/5 rounded-2xl border border-primary/20 shadow-sm overflow-hidden">
+        <div className="border-b border-primary/10 px-5 py-4 flex items-center justify-between">
+          <h3 className="text-sm font-bold text-textPrimary flex items-center gap-2">
+            <Sparkles size={16} className="text-primary" />
+            AI-Generated Business Summary
+          </h3>
+          <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-[9px] font-black text-primary uppercase tracking-wider border border-primary/20">
+            Auto-Generated
+          </span>
+        </div>
+        <div className="p-5 space-y-4 text-sm text-textSecondary leading-relaxed">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            <div className="bg-surface/80 rounded-xl p-4 border border-border/40">
+              <h4 className="text-xs font-bold text-textPrimary mb-2 flex items-center gap-1.5">
+                <TrendingUp size={12} className="text-success" />
+                Financial Impact
+              </h4>
+              <p className="text-xs leading-relaxed">
+                The fraud detection system has processed <strong className="text-textPrimary">{formatNumber(TOTAL_CLAIMS)}</strong> claims valued at <strong className="text-textPrimary">{formatCompactCurrency(TOTAL_CLAIM_VALUE)}</strong>, successfully preventing <strong className="text-success">{formatCompactCurrency(FRAUD_PREVENTED)}</strong> in fraudulent payments — yielding a <strong className="text-primary">{RISK_ADJUSTED_ROI}x</strong> risk-adjusted ROI on the investigation budget of {formatCompactCurrency(INVESTIGATION_COST)}.
+              </p>
+            </div>
+            <div className="bg-surface/80 rounded-xl p-4 border border-border/40">
+              <h4 className="text-xs font-bold text-textPrimary mb-2 flex items-center gap-1.5">
+                <BrainCircuit size={12} className="text-primary" />
+                Model Performance
+              </h4>
+              <p className="text-xs leading-relaxed">
+                The ML model (v{CANONICAL_MODEL.version}) achieves <strong className="text-success">{MODEL_ACCURACY}%</strong> accuracy with <strong className="text-primary">{MODEL_ROC_AUC}%</strong> ROC-AUC, outperforming the industry benchmark recall of {INDUSTRY_BENCHMARK_RECALL}% by <strong className="text-success">{(MODEL_RECALL - INDUSTRY_BENCHMARK_RECALL).toFixed(1)} percentage points</strong>. Precision stands at {MODEL_PRECISION}% with an F1-score of {MODEL_F1}%.
+              </p>
+            </div>
+            <div className="bg-surface/80 rounded-xl p-4 border border-border/40">
+              <h4 className="text-xs font-bold text-textPrimary mb-2 flex items-center gap-1.5">
+                <AlertTriangle size={12} className="text-orange-500" />
+                Key Risks & Next Steps
+              </h4>
+              <p className="text-xs leading-relaxed">
+                {PROVIDER_RISK[0].name} remains the highest-risk provider with a <strong className="text-danger">{PROVIDER_RISK[0].fraudRate}%</strong> fraud rate across {PROVIDER_RISK[0].claimCount} claims. Southeast region shows elevated fraud clustering. Recommend implementing pre-payment claim scrubbing (est. 23% additional fraud reduction) and expanding AI model coverage to all claim types.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 text-[10px] text-textSecondary pt-1">
+            <Clock size={10} />
+            Generated on {new Date().toLocaleDateString()} based on {formatNumber(TOTAL_CLAIMS)} claims, {formatNumber(TOTAL_PATIENTS)} patients, and {formatNumber(ACTIVE_POLICIES)} active policies.
+          </div>
         </div>
       </div>
-    );
-  }
+    </div>
+  );
+}
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
@@ -339,7 +390,7 @@ export default function ExecutiveDashboard() {
         </div>
         <div className="flex items-center gap-3">
           <span className="text-[10px] text-textSecondary font-mono flex items-center gap-1">
-            <Clock size={10} /> Jul 20, 2026
+            <Clock size={10} /> {new Date(CANONICAL_CLAIMS_OVER_TIME[CANONICAL_CLAIMS_OVER_TIME.length - 1]?.date || Date.now()).toLocaleDateString()}
           </span>
           <button onClick={() => {
             const rows = [
@@ -351,7 +402,7 @@ export default function ExecutiveDashboard() {
             const blob = new Blob([rows.map(r => r.join(',')).join('\n')], { type: 'text/csv' });
             const a = document.createElement('a');
             a.href = URL.createObjectURL(blob);
-            a.download = 'executive-summary-2026-07-20.csv';
+            a.download = `executive-summary-${new Date().toISOString().slice(0,10)}.csv`;
             a.click();
           }} className="inline-flex items-center gap-2 bg-surface hover:bg-bg/60 border border-border/80 text-textSecondary hover:text-primary px-4 py-2.5 rounded-xl text-xs font-bold transition-all">
             <Download size={14} /> CSV

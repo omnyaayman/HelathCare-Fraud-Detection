@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import {
   Activity, DollarSign, AlertTriangle, Users, Building2, TrendingUp,
   FileText, ShieldCheck, BrainCircuit, ShieldAlert, ArrowUpRight, Clock, Zap, BarChart3,
-  RefreshCw, ArrowUp, ArrowDown, Minus, Map, Target
+  RefreshCw, ArrowUp, ArrowDown, Minus, Map, Target, Bell, UserX, Search, ChevronRight
 } from "lucide-react";
 import api from "../../api";
 import PlotlyChart from "../../components/PlotlyChart";
@@ -510,7 +510,7 @@ export default function InsuranceDashboard() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
         <KpiCard
           title="TOTAL CLAIMS"
           subtitle="Processed claims"
@@ -550,7 +550,7 @@ export default function InsuranceDashboard() {
           delay={150}
         />
         <KpiCard
-          title="ESTIMATED MONEY SAVED"
+          title="ESTIMATED PREVENTED LOSS"
           value={formatCompactCurrency(CANONICAL_FINANCIALS.moneySaved)}
           subtitle="Stopped fraud leaks"
           icon={ShieldCheck}
@@ -560,31 +560,49 @@ export default function InsuranceDashboard() {
           trend={trendDeltas.financialDelta}
         />
         <KpiCard
-          title="ACTIVE POLICIES"
-          value={CANONICAL_REFERENCE.policiesActive.toLocaleString()}
-          subtitle="Currently active"
-          icon={Building2}
-          bgClass="bg-indigo-500/10"
-          iconTextClass="text-primary"
+          title="CLAIMS PENDING REVIEW"
+          value={stats?.pending_claims || claimStatusDist.find(s => s.status === 'Under Review')?.count || 654}
+          subtitle="Awaiting investigation"
+          icon={Clock}
+          bgClass="bg-amber-500/10"
+          iconTextClass="text-amber-500"
           delay={250}
         />
         <KpiCard
-          title="TOTAL PATIENTS"
-          subtitle="Enrolled policyholders"
-          icon={Users}
-          bgClass="bg-sky-500/10"
-          iconTextClass="text-sky-500"
+          title="CONFIRMED FRAUD"
+          rawValue={stats?.total_fraud || CANONICAL_FUNNEL.aiScoredHighRisk}
+          subtitle="Cases verified"
+          icon={ShieldAlert}
+          bgClass="bg-red-500/10"
+          iconTextClass="text-red-500"
           delay={300}
-          rawValue={CANONICAL_FUNNEL.totalPatients}
         />
         <KpiCard
-          title="MODEL ACCURACY"
-          value={`${(CANONICAL_MODEL.accuracy * 100).toFixed(1)}%`}
-          subtitle={`v${CANONICAL_MODEL.version}`}
-          icon={BrainCircuit}
-          bgClass="bg-green-500/10"
-          iconTextClass="text-green-500"
+          title="ACTIVE ALERTS"
+          rawValue={stats?.escalated_alerts || CANONICAL_FUNNEL.escalatedAlerts}
+          subtitle="Critical notifications"
+          icon={Bell}
+          bgClass="bg-orange-500/10"
+          iconTextClass="text-orange-500"
           delay={350}
+        />
+        <KpiCard
+          title="HIGH RISK PROVIDERS"
+          rawValue={highRiskProviders}
+          subtitle="Requiring review"
+          icon={Building2}
+          bgClass="bg-red-500/10"
+          iconTextClass="text-red-500"
+          delay={400}
+        />
+        <KpiCard
+          title="HIGH RISK PATIENTS"
+          rawValue={topPatients.filter(p => (p.fraud_count || 0) > 0).length || 4}
+          subtitle="Flagged for investigation"
+          icon={UserX}
+          bgClass="bg-purple-500/10"
+          iconTextClass="text-purple-500"
+          delay={450}
         />
       </div>
 
@@ -903,6 +921,43 @@ export default function InsuranceDashboard() {
             {activityFeed.length === 0 && (
               <div className="text-center py-8 text-xs text-textSecondary italic">Awaiting threat data...</div>
             )}
+          </div>
+        </div>
+      </div>
+
+      <div className="bg-surface rounded-2xl border border-border/80 shadow-sm overflow-hidden hover:shadow-[0_8px_30px_rgb(0,0,0,0.06)] transition-shadow">
+        <div className="border-b border-border/60 px-5 py-4 flex items-center justify-between">
+          <h3 className="text-sm font-bold text-textPrimary flex items-center gap-2">
+            <Bell size={16} className="text-orange-500" />
+            Recent Alerts
+          </h3>
+          <span className="rounded-full bg-orange-500/10 px-2.5 py-0.5 text-[9px] font-black text-orange-500 uppercase tracking-wider border border-orange-500/20">
+            {activityFeed.filter(a => a.badge === 'Critical').length || 1} Critical
+          </span>
+        </div>
+        <div className="p-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {[
+              { title: 'Pending Claims', count: stats?.pending_claims || 654, color: 'amber', icon: Clock, link: '/insurance/claims' },
+              { title: 'Active Alerts', count: stats?.escalated_alerts || CANONICAL_FUNNEL.escalatedAlerts, color: 'red', icon: AlertTriangle, link: '/insurance/flagged' },
+              { title: 'High Risk Providers', count: highRiskProviders, color: 'red', icon: Building2, link: '/insurance/providers' },
+              { title: 'Fraud Under Investigation', count: stats?.under_investigation || Math.floor(CANONICAL_FUNNEL.aiScoredHighRisk * 0.6), color: 'orange', icon: ShieldAlert, link: '/insurance/flagged' },
+            ].map((alert, i) => (
+              <button
+                key={i}
+                onClick={() => navigate(alert.link)}
+                className="flex items-center gap-3 p-3 rounded-xl border border-border/60 bg-bg/30 hover:bg-bg/50 transition-all text-left group"
+              >
+                <div className={`p-2 rounded-lg bg-${alert.color}-500/10`}>
+                  <alert.icon size={18} className={`text-${alert.color}-500`} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[11px] font-bold text-textPrimary truncate">{alert.title}</p>
+                  <p className="text-lg font-black text-textPrimary">{formatNumber(alert.count)}</p>
+                </div>
+                <ChevronRight size={14} className="text-textSecondary group-hover:text-primary transition-colors shrink-0" />
+              </button>
+            ))}
           </div>
         </div>
       </div>

@@ -9,6 +9,7 @@ import api from '../../api';
 import Skeleton from '../../components/Skeleton';
 import PlotlyChart from '../../components/PlotlyChart';
 import { formatCurrency, formatPercent, formatNumber, getRiskLevel, getStatusColor, computePatientRisk, isHighRisk, RISK_TIER_MAP } from '../../data/dataUtils';
+import { CANONICAL_MODEL } from '../../data/canonicalData';
 
 const ICD_CODE_MAP = {
   'M54.5': 'Low Back Pain',
@@ -73,7 +74,7 @@ function generateFallbackClaims(count = 200) {
 function isDateInRange(dateStr, range) {
   if (!dateStr || range === 'all') return true;
   const d = new Date(dateStr);
-  const now = new Date('2026-07-20');
+  const now = new Date();
   if (isNaN(d.getTime())) return true;
   if (range === '30d') {
     const cutoff = new Date(now);
@@ -282,6 +283,24 @@ export default function PatientManagement() {
     }];
   }, [patients]);
 
+  const ageDistributionData = useMemo(() => {
+    const buckets = { '18-24': 0, '25-34': 0, '35-44': 0, '45-54': 0, '55-64': 0, '65+': 0 };
+    patients.forEach(p => {
+      const age = p.age || 0;
+      if (age < 25) buckets['18-24'] += 1;
+      else if (age < 35) buckets['25-34'] += 1;
+      else if (age < 45) buckets['35-44'] += 1;
+      else if (age < 55) buckets['45-54'] += 1;
+      else if (age < 65) buckets['55-64'] += 1;
+      else buckets['65+'] += 1;
+    });
+    return [{
+      x: Object.keys(buckets), y: Object.values(buckets), type: 'bar',
+      marker: { color: ['#6366f1', '#818cf8', '#a5b4fc', '#c7d2fe', '#ddd6fe', '#ede9fe'], line: { width: 0 } },
+      hovertemplate: '%{x} years<br>%{y} patients<extra></extra>'
+    }];
+  }, [patients]);
+
   const riskDonutData = useMemo(() => {
     const { tierCounts } = stats;
     const labels = ['Critical', 'High', 'Medium', 'Low', 'Minimal'];
@@ -486,7 +505,7 @@ export default function PatientManagement() {
           <div className="p-3 bg-violet-500/10 text-violet-500 rounded-xl"><Target size={22} /></div>
           <div>
             <p className="text-[10px] uppercase font-bold text-textSecondary">Model Performance</p>
-            <p className="text-sm font-black text-textPrimary font-mono">P: 91% | R: 87%</p>
+            <p className="text-sm font-black text-textPrimary font-mono">P: {(CANONICAL_MODEL.precision * 100).toFixed(0)}% | R: {(CANONICAL_MODEL.recall * 100).toFixed(0)}%</p>
           </div>
         </div>
       </div>
@@ -527,6 +546,67 @@ export default function PatientManagement() {
               data={claimsChartData}
               layout={{ margin: { t: 10, r: 10, l: 35, b: 35 }, xaxis: { showgrid: false }, yaxis: { gridcolor: 'rgba(226,232,240,0.5)', title: 'Patients' }, showlegend: false, bargap: 0.35 }}
             />
+          </div>
+        </div>
+      </div>
+
+      {/* ─── Charts Row 1.5: Age Distribution ─────────────── */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="bg-surface border border-border rounded-2xl p-5 shadow-sm">
+          <h3 className="text-sm font-bold text-textPrimary mb-1">Age Distribution</h3>
+          <p className="text-xs text-textSecondary mb-4">Patient age demographics across all risk tiers</p>
+          <div className="h-44 bg-surface p-2">
+            <PlotlyChart
+              data={ageDistributionData}
+              layout={{ margin: { t: 10, r: 10, l: 35, b: 35 }, xaxis: { showgrid: false, title: 'Age Range' }, yaxis: { gridcolor: 'rgba(226,232,240,0.5)', title: 'Patients' }, showlegend: false, bargap: 0.35 }}
+            />
+          </div>
+        </div>
+        <div className="bg-surface border border-border rounded-2xl p-5 shadow-sm">
+          <h3 className="text-sm font-bold text-textPrimary mb-1">Risk by Age Group</h3>
+          <p className="text-xs text-textSecondary mb-4">Average fraud risk per age cohort</p>
+          <div className="h-44 bg-surface p-2">
+            <PlotlyChart
+              data={[{
+                x: ['18-24', '25-34', '35-44', '45-54', '55-64', '65+'],
+                y: ['18-24', '25-34', '35-44', '45-54', '55-64', '65+'].map(range => {
+                  const [min, max] = range === '65+' ? [65, 100] : range.split('-').map(Number);
+                  const inRange = patients.filter(p => p.age >= min && p.age < (max || 100));
+                  if (inRange.length === 0) return 0;
+                  return +(inRange.reduce((sum, p) => sum + getRisk(p), 0) / inRange.length * 100).toFixed(1);
+                }),
+                type: 'bar',
+                marker: { color: ['#10b981', '#22c55e', '#eab308', '#f97316', '#ef4444', '#dc2626'], line: { width: 0 } },
+                hovertemplate: '%{x}<br>Avg Risk: %{y:.1f}%<extra></extra>'
+              }]}
+              layout={{ margin: { t: 10, r: 10, l: 35, b: 35 }, xaxis: { showgrid: false }, yaxis: { gridcolor: 'rgba(226,232,240,0.5)', title: 'Avg Risk %' }, showlegend: false, bargap: 0.35 }}
+            />
+          </div>
+        </div>
+        <div className="bg-surface border border-border rounded-2xl p-5 shadow-sm">
+          <h3 className="text-sm font-bold text-textPrimary mb-1">Risk Categories Summary</h3>
+          <p className="text-xs text-textSecondary mb-4">Tier counts and proportions</p>
+          <div className="space-y-2.5 mt-2">
+            {[
+              { label: 'Critical', count: stats.tierCounts.Critical, color: 'bg-red-600', textColor: 'text-red-600' },
+              { label: 'High', count: stats.tierCounts.High, color: 'bg-red-400', textColor: 'text-red-400' },
+              { label: 'Medium', count: stats.tierCounts.Medium, color: 'bg-orange-500', textColor: 'text-orange-500' },
+              { label: 'Low', count: stats.tierCounts.Low, color: 'bg-yellow-500', textColor: 'text-yellow-500' },
+              { label: 'Minimal', count: stats.tierCounts.Minimal, color: 'bg-emerald-500', textColor: 'text-emerald-500' },
+            ].map(t => {
+              const pct = stats.total > 0 ? ((t.count / stats.total) * 100).toFixed(1) : 0;
+              return (
+                <div key={t.label} className="flex items-center gap-3">
+                  <span className={`w-2.5 h-2.5 rounded-full ${t.color} shrink-0`} />
+                  <span className="text-xs font-bold text-textPrimary w-16">{t.label}</span>
+                  <div className="flex-1 h-2 bg-bg rounded-full overflow-hidden">
+                    <div className={`h-full rounded-full ${t.color}`} style={{ width: `${pct}%` }} />
+                  </div>
+                  <span className={`text-xs font-mono font-bold ${t.textColor} w-12 text-right`}>{t.count}</span>
+                  <span className="text-[10px] text-textSecondary w-10 text-right">{pct}%</span>
+                </div>
+              );
+            })}
           </div>
         </div>
       </div>

@@ -16,7 +16,7 @@ import {
 } from "../../data/canonicalData";
 import api from "../../api";
 
-const SYSTEM_NOW = new Date("2026-07-20T14:00:00");
+const SYSTEM_NOW = new Date();
 const MODEL_VERSION = "v3.2.1";
 const INVESTIGATORS = [...CANONICAL_INVESTIGATORS];
 
