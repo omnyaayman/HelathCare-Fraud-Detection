@@ -632,28 +632,3 @@ docker-compose up -d
 
 ---
 
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit changes (`git commit -m 'Add amazing feature'`)
-4. Push to branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
----
-
-## 📝 License
-
-This project is part of the **DEPI (Digital Egypt Pioneers Initiative)** graduation project.
-
----
-
-## 👥 Team
-
-Built with ❤️ for healthcare fraud prevention.
-
-<p align="center">
-  <a href="https://github.com/omnyaayman/HelathCare-Fraud-Detection">
-    <img src="https://img.shields.io/badge/GitHub-View%20on%20GitHub-181717?style=for-the-badge&logo=github" alt="GitHub"/>
-  </a>
-</p>
