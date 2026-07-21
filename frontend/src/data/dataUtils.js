@@ -1,3 +1,5 @@
+import { CANONICAL_INVESTIGATORS } from './canonicalData';
+
 export const formatCurrency = (val) => {
   const num = Number(val) || 0;
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(num);
@@ -20,12 +22,128 @@ export const formatNumber = (val) => {
   return new Intl.NumberFormat('en-US').format(num);
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// SINGLE SOURCE OF TRUTH — Risk Scoring
+// Every section of Patient Management (KPIs, donut, patterns, table, modal)
+// must call these functions with the SAME patient + SAME patterns array.
+//
+// ARCHITECTURE: computeBaseRisk() handles the non-pattern (activity-based)
+// scoring. computePatientRisk() wraps it: if a patient has patterns, risk =
+// maxConfidence/100; otherwise risk = computeBaseRisk(). Both functions
+// return values rounded to 2 decimal places so that the displayed score
+// (toFixed(2)) and the tier label (getRiskLevel) can NEVER disagree due to
+// floating-point precision issues at tier boundaries (e.g. 0.899999…).
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Derive severity string from a confidence percentage using the same tier
+ * thresholds displayed in the Tier Mapping legend.  This is the ONLY place
+ * severity is derived — pattern cards and the patient table both consume
+ * this value so they can never disagree.
+ */
+export const severityFromConfidence = (confidence) => {
+  if (confidence >= 90) return 'critical';
+  if (confidence >= 70) return 'high';
+  if (confidence >= 40) return 'medium';
+  if (confidence >= 20) return 'low';
+  return 'minimal';
+};
+
+/**
+ * Activity-based risk score for patients WITHOUT a detected pattern.
+ *
+ * Includes a small "activity micro-score" so that patients with varying
+ * claim counts / provider counts show naturally different values (e.g.
+ * 0.02, 0.05, 0.08) instead of a flat 0.00 across many Minimal-tier rows.
+ * The micro-score caps at 0.04 — well inside the Minimal tier ceiling (0.20).
+ *
+ * @param {number} totalClaims
+ * @param {number} fraudCount
+ * @param {number} providersVisited
+ * @returns {number} score between 0 and 0.99, rounded to 2 decimals
+ */
+export const computeBaseRisk = (totalClaims, fraudCount, providersVisited) => {
+  if (totalClaims === 0) return 0;
+
+  const fraudRate = fraudCount / totalClaims;
+  const multiProviderPenalty = providersVisited >= 4 ? (providersVisited - 3) * 0.08 : 0;
+  const volumePenalty = totalClaims >= 10 ? Math.min((totalClaims - 10) * 0.015, 0.2) : 0;
+
+  // Activity micro-score: gives every non-zero patient a unique small value
+  // so Minimal-tier rows never show an identical flat "0.00".
+  // Coefficients chosen so even 1-claim/1-provider patients round to 0.01,
+  // while the 0.04 cap keeps all micro-only patients deep in Minimal tier.
+  const activityMicro = Math.min(0.04, totalClaims * 0.005 + (providersVisited - 1) * 0.010);
+
+  let score = Math.min(0.99, activityMicro + fraudRate * 1.4 + multiProviderPenalty + volumePenalty);
+
+  // Hard cap for low-activity patients: if totalClaims ≤ 3 AND providers ≤ 2,
+  // the score must never exceed the Low tier regardless of fraud rate.
+  if (totalClaims <= 3 && providersVisited <= 2) {
+    score = Math.min(score, 0.19);
+  }
+
+  // Round to 2 decimal places so that displayed value (toFixed(2)) and
+  // tier label (getRiskLevel) ALWAYS agree — no floating-point edge cases.
+  return Math.round(Math.min(0.99, Math.max(0, score)) * 100) / 100;
+};
+
+/**
+ * Compute the composite fraud risk score for a patient.
+ *
+ * RULE: If a patient has ANY detected suspicious pattern, their risk score
+ * is derived DIRECTLY from their highest confidence score (as a 0–1 fraction).
+ * This guarantees the pattern card's severity badge, the confidence %, and
+ * the table Risk Level badge all agree — they are all derived from the same
+ * single number.
+ *
+ * If a patient has NO detected pattern, the score is computed from claim
+ * activity via computeBaseRisk().
+ *
+ * @param {Object} patient
+ * @param {Array}  patientPatterns - full patterns array from API
+ * @returns {number} score between 0 and 0.99, rounded to 2 decimals
+ */
+export const computePatientRisk = (patient, patientPatterns = []) => {
+  const patientId = patient.patient_id;
+
+  // ── Pattern patients: confidence IS the risk score ──────────────────────
+  const patientPatternList = patientPatterns.filter(p => p.patient_id === patientId);
+  if (patientPatternList.length > 0) {
+    const maxConfidence = Math.max(...patientPatternList.map(p => p.confidence || 0));
+    return Math.round(Math.min(0.99, Math.max(0, maxConfidence / 100)) * 100) / 100;
+  }
+
+  // ── Non-pattern patients: activity-based score ──────────────────────────
+  return computeBaseRisk(
+    patient.total_claims || patient.claim_count || 0,
+    patient.fraud_count || 0,
+    patient.providers_visited || 1
+  );
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 4-TIER risk levels (used in the patient table, modal, CSV export)
+// ─────────────────────────────────────────────────────────────────────────────
 export const getRiskLevel = (score) => {
-  if (score >= 0.85) return { label: 'Critical', color: 'text-red-500', bg: 'bg-red-500/10', border: 'border-red-500/20' };
-  if (score >= 0.65) return { label: 'High', color: 'text-orange-500', bg: 'bg-orange-500/10', border: 'border-orange-500/20' };
-  if (score >= 0.45) return { label: 'Medium', color: 'text-warning', bg: 'bg-warning/10', border: 'border-warning/20' };
-  if (score >= 0.25) return { label: 'Low', color: 'text-blue-500', bg: 'bg-blue-500/10', border: 'border-blue-500/20' };
-  return { label: 'Minimal', color: 'text-success', bg: 'bg-success/10', border: 'border-success/20' };
+  if (score >= 0.90) return { label: 'Critical', color: 'text-red-500',    bg: 'bg-red-500/10',    border: 'border-red-500/20' };
+  if (score >= 0.70) return { label: 'High',     color: 'text-orange-500', bg: 'bg-orange-500/10', border: 'border-orange-500/20' };
+  if (score >= 0.40) return { label: 'Medium',   color: 'text-amber-500',  bg: 'bg-amber-500/10',  border: 'border-amber-500/20' };
+  if (score >= 0.20) return { label: 'Low',      color: 'text-blue-500',   bg: 'bg-blue-500/10',   border: 'border-blue-500/20' };
+  return { label: 'Minimal', color: 'text-emerald-500', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20' };
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 2-TIER mapping (used in the KPI card + donut chart)
+//   High Risk = Medium + High + Critical  (score >= 0.40)
+//   Normal    = Low + Minimal             (score <  0.40)
+// The legend tooltip near the donut chart should reference this mapping.
+// ─────────────────────────────────────────────────────────────────────────────
+export const isHighRisk = (score) => score >= 0.40;
+
+export const RISK_TIER_MAP = {
+  highRisk: { label: 'High Risk', includes: ['Medium', 'High', 'Critical'], threshold: 0.40 },
+  normal:   { label: 'Normal',    includes: ['Low', 'Minimal'],            threshold: '< 0.40' },
 };
 
 export const getStatusColor = (status) => {
@@ -70,13 +188,8 @@ export const generateTimeline = (baseDate, events) => {
 };
 
 export const getInvestigatorForScore = (score) => {
-  const investigators = [
-    'Dr. Sarah Mitchell', 'James Rodriguez, CFE', 'Dr. Emily Chen',
-    'Mark Thompson, CPA', 'Lisa Park, CPC', 'Dr. Robert Kim',
-    'Angela Davis, AHFI', 'Dr. Michael O\'Brien'
-  ];
-  const idx = Math.floor((score || 0.5) * investigators.length) % investigators.length;
-  return investigators[idx];
+  const idx = Math.floor((score || 0.5) * CANONICAL_INVESTIGATORS.length) % CANONICAL_INVESTIGATORS.length;
+  return CANONICAL_INVESTIGATORS[idx];
 };
 
 export const buildSHAPExplanation = (claim) => {

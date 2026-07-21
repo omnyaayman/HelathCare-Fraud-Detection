@@ -10,14 +10,19 @@ import {
   ChevronRight
 } from 'lucide-react';
 import api from '../../api';
-import { CANONICAL_MODEL } from '../../data/canonicalData';
+import { CANONICAL_MODEL, CANONICAL_FEATURE_IMPORTANCE } from '../../data/canonicalData';
+
+function fmtDate(dateStr) {
+  const d = new Date(dateStr);
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
 
 const modelVersions = CANONICAL_MODEL.versions.map(v => ({
   name: v.label,
   version: v.version,
   status: v.status,
   accuracy: `${(v.accuracy * 100).toFixed(1)}%`,
-  lastTrained: v.date === '2026-01-15' ? 'Jan 15, 2026' : v.date === '2025-12-28' ? 'Dec 28, 2025' : 'Nov 14, 2025',
+  lastTrained: fmtDate(v.date),
   color: v.status === 'active' ? '#818cf8' : v.status === 'standby' ? '#38bdf8' : '#94a3b8',
   icon: v.status === 'active' ? BrainCircuit : v.status === 'standby' ? Shield : Database
 }));
@@ -34,9 +39,9 @@ const performanceMetrics = [
 const additionalInfo = [
   { label: 'Dataset Version', value: CANONICAL_MODEL.datasetVersion, icon: Database, color: '#818cf8' },
   { label: 'Model Version', value: CANONICAL_MODEL.version, icon: Cpu, color: '#38bdf8' },
-  { label: 'Training Date', value: 'Jan 15, 2026', icon: Clock, color: '#34d399' },
-  { label: 'Data Drift %', value: `${CANONICAL_MODEL.dataDrift}%`, icon: Activity, color: '#fbbf24' },
-  { label: 'Last Retraining', value: '4 days ago', icon: RefreshCw, color: '#a78bfa' },
+  { label: 'Training Date', value: fmtDate(CANONICAL_MODEL.trainingDate), icon: Clock, color: '#34d399' },
+  { label: 'Fraud Threshold', value: `${(CANONICAL_MODEL.fraudThreshold * 100).toFixed(0)}%`, icon: Activity, color: '#fbbf24' },
+  { label: 'Last Retraining', value: '14 days ago', icon: RefreshCw, color: '#a78bfa' },
   { label: 'Validation Accuracy', value: `${(CANONICAL_MODEL.validationAccuracy * 100).toFixed(1)}%`, icon: CheckCircle2, color: '#fb923c' },
   { label: 'Number of Features', value: CANONICAL_MODEL.numFeatures.toString(), icon: FileText, color: '#f472b6' },
   { label: 'Training Dataset Size', value: CANONICAL_MODEL.trainingSize.toLocaleString(), icon: Database, color: '#22d3ee' }
@@ -81,8 +86,8 @@ const confusionMatrixLayout = {
   plot_bgcolor: 'transparent'
 };
 
-const featuresList = CANONICAL_MODEL.featureImportance.map(f => f.feature);
-const importances = CANONICAL_MODEL.featureImportance.map(f => f.importance);
+const featuresList = CANONICAL_FEATURE_IMPORTANCE.map(f => f.feature);
+const importances = CANONICAL_FEATURE_IMPORTANCE.map(f => f.importance);
 
 const barColors = importances.map((_, i) => {
   const opacity = 1 - (i * 0.08);
@@ -355,6 +360,7 @@ export default function ModelManagement() {
   const [alertOnDegradation, setAlertOnDegradation] = useState(true);
   const [modelExplainability, setModelExplainability] = useState(true);
   const [shadowMode, setShadowMode] = useState(false);
+  const [showRetrainModal, setShowRetrainModal] = useState(false);
 
   useEffect(() => {
     const t = setTimeout(() => setLoading(false), 800);
@@ -375,6 +381,7 @@ export default function ModelManagement() {
   const sortedRuns = useMemo(() => sortRun(trainingRuns, sortKey, sortDir), [sortKey, sortDir]);
 
   const startRetraining = useCallback(() => {
+    setShowRetrainModal(true);
     setRetraining(true);
     setRetrainComplete(false);
     setRetrainStage(0);
@@ -496,6 +503,9 @@ export default function ModelManagement() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div className="bg-[#0f172a]/80 border border-[#1e293b]/80 rounded-2xl p-4">
           <PlotlyChart data={confusionMatrixData} layout={confusionMatrixLayout} config={{ displayModeBar: false, responsive: true }} />
+          <p className="text-[10px] text-slate-500 mt-2 text-center italic">
+            Based on test/validation set (n = {(CANONICAL_MODEL.confusionMatrix.tn + CANONICAL_MODEL.confusionMatrix.fp + CANONICAL_MODEL.confusionMatrix.fn + CANONICAL_MODEL.confusionMatrix.tp).toLocaleString()}) — separate from training dataset ({CANONICAL_MODEL.trainingSize.toLocaleString()} records)
+          </p>
         </div>
         <div className="bg-[#0f172a]/80 border border-[#1e293b]/80 rounded-2xl p-4">
           <PlotlyChart data={featureImportanceData} layout={featureImportanceLayout} config={{ displayModeBar: false, responsive: true }} />
@@ -655,10 +665,39 @@ export default function ModelManagement() {
           {/* Data Drift Threshold */}
           <div className="space-y-2">
             <label className="text-sm text-[#f8fafc] font-medium">Data Drift Threshold</label>
-            <div className="flex items-center gap-3">
-              <div className="flex-1 bg-[#1e293b] rounded-lg px-3 py-2 flex items-center justify-between">
-                <span className="text-xs text-amber-400">Warning: 15%</span>
-                <span className="text-xs text-red-400">Critical: 25%</span>
+            <div className="bg-[#1e293b] rounded-lg px-3 py-3">
+              <div className="relative h-12">
+                {/* Bar */}
+                <div className="absolute bottom-0 left-0 right-0 h-3 bg-[#0b0f19] rounded-full overflow-hidden">
+                  <div className="flex h-full">
+                    <div className="h-full bg-emerald-500/25" style={{width: '50%'}} />
+                    <div className="h-full bg-amber-500/25" style={{width: '33.33%'}} />
+                    <div className="h-full bg-red-500/25" style={{width: '16.67%'}} />
+                  </div>
+                </div>
+                {/* Threshold markers */}
+                <div className="absolute bottom-0" style={{left: '50%', marginLeft: '-1px'}}>
+                  <div className="w-0.5 h-5 bg-amber-400" />
+                  <span className="absolute top-0 left-1/2 -translate-x-1/2 text-[10px] text-amber-400 whitespace-nowrap">15%</span>
+                </div>
+                <div className="absolute bottom-0" style={{left: '83.33%', marginLeft: '-1px'}}>
+                  <div className="w-0.5 h-5 bg-red-400" />
+                  <span className="absolute top-0 left-1/2 -translate-x-1/2 text-[10px] text-red-400 whitespace-nowrap">25%</span>
+                </div>
+                {/* Current drift indicator */}
+                <div className="absolute -top-0.5" style={{left: `${(CANONICAL_MODEL.dataDrift / 30) * 100}%`, transform: 'translateX(-50%)'}}>
+                  <div className="relative">
+                    <div className="w-2.5 h-2.5 rounded-full bg-[#818cf8] border-2 border-[#0b0f19] shadow-lg shadow-indigo-500/40 mx-auto" />
+                    <div className="text-[10px] font-bold text-[#818cf8] text-center whitespace-nowrap">{(CANONICAL_MODEL.dataDrift).toFixed(1)}% Current</div>
+                  </div>
+                </div>
+              </div>
+              <div className="flex justify-between text-[10px] text-[#64748b] mt-1 px-0.5">
+                <span>0%</span>
+                <span>Safe</span>
+                <span className="text-amber-400/60">Warning</span>
+                <span className="text-red-400/60">Critical</span>
+                <span>30%</span>
               </div>
             </div>
           </div>
@@ -670,6 +709,9 @@ export default function ModelManagement() {
               <ToggleSwitch checked={autoRetrain} onChange={() => setAutoRetrain(!autoRetrain)} />
             </div>
             <div className="text-xs text-[#94a3b8]">Schedule: Every 14 days</div>
+            <div className="text-[10px] text-indigo-400">
+              Next scheduled: {fmtDate(new Date(new Date(CANONICAL_MODEL.trainingDate).getTime() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0])}
+            </div>
           </div>
 
           {/* Alert on Degradation */}
@@ -700,6 +742,66 @@ export default function ModelManagement() {
           </div>
         </div>
       </div>
+
+      {/* Retraining Simulation Modal */}
+      <Modal open={showRetrainModal} onClose={() => { if (retrainComplete) { setShowRetrainModal(false); } }} title="Model Retraining Simulation" wide>
+        {!retrainComplete ? (
+          <div className="space-y-6">
+            <div className="flex items-center gap-4 p-4 bg-amber-500/5 border border-amber-500/20 rounded-xl">
+              <Loader2 size={24} className="text-amber-400 animate-spin shrink-0" />
+              <div>
+                <p className="text-sm font-semibold text-amber-400">Retraining in Progress</p>
+                <p className="text-xs text-slate-400">Simulating model retraining pipeline — dataset v4.2, 128K records</p>
+              </div>
+            </div>
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm text-slate-300">{retrainingStages[retrainStage]?.text || 'Starting...'}</span>
+                <span className="text-xs text-slate-500 font-mono">{retrainProgress}%</span>
+              </div>
+              <div className="w-full bg-[#1e293b] rounded-full h-3 overflow-hidden">
+                <div
+                  className="h-full rounded-full transition-all duration-500 ease-out bg-gradient-to-r from-[#4f46e5] via-[#818cf8] to-[#38bdf8]"
+                  style={{ width: `${retrainProgress}%` }}
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-5 gap-2">
+              {retrainingStages.map((stage, i) => (
+                <div key={stage.text} className={`text-center p-2 rounded-lg border text-[10px] transition-all duration-300 ${
+                  i <= retrainStage
+                    ? 'bg-indigo-500/10 border-indigo-500/30 text-indigo-300'
+                    : 'bg-slate-800/40 border-slate-700/30 text-slate-600'
+                }`}>
+                  <div className={`w-2 h-2 rounded-full mx-auto mb-1 ${
+                    i < retrainStage ? 'bg-emerald-400' : i === retrainStage ? 'bg-amber-400 animate-pulse' : 'bg-slate-700'
+                  }`} />
+                  {stage.text.replace('...', '')}
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-6">
+            <div className="flex items-center gap-4 p-4 bg-emerald-500/5 border border-emerald-500/20 rounded-xl">
+              <CheckCircle2 size={24} className="text-emerald-400 shrink-0" />
+              <div>
+                <p className="text-sm font-semibold text-emerald-400">Retraining Complete</p>
+                <p className="text-xs text-slate-400">Duration: 4h 32m | Accuracy achieved: {(CANONICAL_MODEL.accuracy * 100).toFixed(1)}%</p>
+              </div>
+            </div>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => { setShowRetrainModal(false); setRetrainComplete(false); }}
+                className="px-5 py-2 bg-[#4f46e5] hover:bg-[#5b53e8] text-white text-sm font-medium rounded-xl transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
     </div>
   );
 }

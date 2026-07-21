@@ -16,6 +16,8 @@ allowed_origins = [
     "https://healthcare-fraud-detection.netlify.app/*",
     "https://healthcare-fraud-detection.netlify.com",
     "https://healthcare-fraud-detection.netlify.com/*",
+    # Add your Netlify URL here after deployment:
+    # "https://YOUR-SITE-NAME.netlify.app",
 ]
 
 env_origins = os.getenv("ALLOWED_ORIGINS")

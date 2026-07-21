@@ -11,9 +11,47 @@ import {
 import { formatCurrency, formatCompactCurrency, formatNumber } from '../../data/dataUtils';
 import {
   CANONICAL_MONTHLY_TRENDS, CANONICAL_FRAUD_DIAGNOSES, CANONICAL_FRAUD_CATEGORIES,
-  CANONICAL_PROVIDERS, CANONICAL_FUNNEL, CANONICAL_FINANCIALS, CANONICAL_STATUSES,
-  CANONICAL_REGIONAL_DATA, CANONICAL_CLAIMS_OVER_TIME
+  CANONICAL_PROVIDERS, CANONICAL_PATIENTS, CANONICAL_FUNNEL, CANONICAL_FINANCIALS, CANONICAL_STATUSES,
+  CANONICAL_REGIONAL_DATA, CANONICAL_MODEL, CANONICAL_REFERENCE, CANONICAL_CLAIMS_OVER_TIME
 } from '../../data/canonicalData';
+
+function generateFallbackClaimsForReports() {
+  const providers = CANONICAL_PROVIDERS;
+  const patients = CANONICAL_PATIENTS;
+  const results = [];
+  for (let i = 0; i < 200; i++) {
+    const p = providers[i % providers.length];
+    const pt = patients[i % patients.length];
+    const month = String(Math.floor(Math.random() * 12) + 1).padStart(2, '0');
+    const day = String(Math.floor(Math.random() * 28) + 1).padStart(2, '0');
+    const rawScore = Math.random();
+    let status;
+    if (rawScore >= 0.85) {
+      const high = ['Under Review', 'Investigating', 'Escalated', 'Fraud Confirmed'];
+      status = high[Math.floor(Math.random() * high.length)];
+    } else if (rawScore >= 0.65) {
+      const medHigh = ['Investigating', 'Escalated'];
+      status = medHigh[Math.floor(Math.random() * medHigh.length)];
+    } else if (rawScore >= 0.4) {
+      const med = ['Under Review', 'Rejected'];
+      status = med[Math.floor(Math.random() * med.length)];
+    } else {
+      const low = ['Submitted', 'AI Scored', 'Approved', 'Closed'];
+      status = low[Math.floor(Math.random() * low.length)];
+    }
+    results.push({
+      claim_id: `CLM-2026-${String(202000 + i).padStart(6, '0')}`,
+      patient_name: pt.name,
+      provider_name: p.name,
+      claim_amount: Math.round(5000 + Math.random() * 15000),
+      status,
+      fraud_score: Math.round(rawScore * 1000) / 1000,
+      claim_date: `2026-${month}-${day}`,
+      insurance_plan: ['Aetna','Blue Cross','Cigna','UnitedHealth','Kaiser'][Math.floor(Math.random() * 5)],
+    });
+  }
+  return results;
+}
 
 const fmt = new Intl.NumberFormat('en-US');
 const money = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
@@ -60,25 +98,12 @@ const regionData = CANONICAL_REGIONAL_DATA.map(r => ({
   percentage: +((r.fraud_claims / r.total_claims) * 100).toFixed(1),
 }));
 
-const allClaims = CANONICAL_CLAIMS_OVER_TIME.flatMap((m, i) =>
-  Array.from({ length: Math.min(m.fraud_claims, 5) }, (_, j) => ({
-    id: `CLM-2025-${String(i * 100 + j + 1).padStart(6, '0')}`,
-    patient: CANONICAL_PROVIDERS[j % CANONICAL_PROVIDERS.length] ? `Patient ${String.fromCharCode(65 + j)}-${i + 1}` : 'Unknown',
-    provider: CANONICAL_PROVIDERS[j % CANONICAL_PROVIDERS.length]?.name || 'Unknown',
-    amount: Math.round(150 + Math.random() * 150000),
-    status: ['Approved', 'Under Review', 'Rejected', 'Pending'][j % 4],
-    fraudScore: +(60 + Math.random() * 35).toFixed(1),
-    riskLevel: ['high', 'critical', 'medium', 'low'][j % 4],
-    date: m.date.replace('-01', `-${String(j + 1).padStart(2, '0')}`),
-    insurance: ['Medicare', 'Blue Cross', 'Aetna', 'UnitedHealth', 'Cigna'][j % 5],
-  }))
-);
 
 const kpis = [
   { label: 'Total Claims Analyzed', value: fmt.format(CANONICAL_FUNNEL.totalClaims), icon: BarChart3, color: 'from-indigo-500/20 to-indigo-600/5', iconColor: 'text-indigo-400', change: '+8.3%', up: true },
   { label: 'Fraud Cases Detected', value: fmt.format(CANONICAL_FUNNEL.aiScoredHighRisk), icon: AlertTriangle, color: 'from-amber-500/20 to-amber-600/5', iconColor: 'text-amber-400', change: '+12.1%', up: true },
-  { label: 'Financial Impact', value: formatCompactCurrency(CANONICAL_FINANCIALS.totalClaimValue), icon: TrendingUp, color: 'from-red-500/20 to-red-600/5', iconColor: 'text-red-400', change: '+15.4%', up: true },
-  { label: 'Detection Rate', value: `${((CANONICAL_FUNNEL.aiScoredHighRisk / CANONICAL_FUNNEL.totalClaims) * 100).toFixed(1)}%`, icon: Activity, color: 'from-emerald-500/20 to-emerald-600/5', iconColor: 'text-emerald-400', change: '+0.4%', up: true },
+  { label: 'Fraud Prevented', value: formatCompactCurrency(CANONICAL_FINANCIALS.totalFraudPrevented), icon: TrendingUp, color: 'from-red-500/20 to-red-600/5', iconColor: 'text-red-400', change: '+15.4%', up: true },
+  { label: 'Detection Rate', value: `${(CANONICAL_MODEL.accuracy * 100).toFixed(1)}%`, icon: Activity, color: 'from-emerald-500/20 to-emerald-600/5', iconColor: 'text-emerald-400', change: '+0.4%', up: true },
 ];
 
 const dateRanges = ['All Time', 'Last 30 Days', 'Last 90 Days', 'Last 6 Months', 'This Year'];
@@ -88,10 +113,10 @@ const riskLevels = ['Low', 'Medium', 'High', 'Critical'];
 const insurancePlans = ['Medicare', 'Medicaid', 'Blue Cross', 'Aetna', 'UnitedHealth', 'Cigna'];
 
 const riskColor = (score) => {
-  if (score < 30) return 'text-emerald-400';
-  if (score < 60) return 'text-amber-400';
-  if (score < 80) return 'text-orange-400';
-  return 'text-red-400';
+  if (score >= 85) return 'text-red-400';
+  if (score >= 65) return 'text-orange-400';
+  if (score >= 45) return 'text-amber-400';
+  return 'text-blue-400';
 };
 
 const riskBadge = (level) => {
@@ -143,10 +168,38 @@ export default function Reports() {
     risk: '',
     insurance: '',
   });
+  const [claims, setClaims] = useState([]);
+  const [showModal, setShowModal] = useState(false);
+  const [modalForm, setModalForm] = useState({ reportType: 'claims', dateRange: 'All Time', format: 'csv' });
 
   useEffect(() => {
-    const t = setTimeout(() => setLoading(false), 600);
-    return () => clearTimeout(t);
+    (async () => {
+      try {
+        let items = [];
+        try {
+          const data = await api.getClaims();
+          items = data.claims || data?.data || data || [];
+        } catch (_) { /* fallback */ }
+        if (!Array.isArray(items) || items.length === 0) {
+          items = generateFallbackClaimsForReports();
+        }
+        const mapped = items.map(c => ({
+          id: c.id || c.claim_id,
+          patient: c.patient_name,
+          provider: c.provider_name,
+          amount: c.amount || c.claim_amount,
+          status: c.status,
+          fraudScore: +((c.fraud_score || 0) * 100).toFixed(1),
+          riskLevel: c.risk_level,
+          date: c.claim_date,
+          insurance: c.insurance_plan || '',
+        }));
+        setClaims(mapped);
+      } catch (e) {
+        // fallback empty
+      }
+      setLoading(false);
+    })();
   }, []);
 
   const toastTimer = useRef(null);
@@ -184,7 +237,7 @@ export default function Reports() {
   }, [filters]);
 
   const filteredClaims = useMemo(() => {
-    let data = [...allClaims];
+    let data = [...claims];
     if (search) {
       const q = search.toLowerCase();
       data = data.filter((c) => c.id.toLowerCase().includes(q) || c.patient.toLowerCase().includes(q) || c.provider.toLowerCase().includes(q));
@@ -198,12 +251,12 @@ export default function Reports() {
       data = data.filter((c) => c.riskLevel === rl);
     }
     if (filters.dateRange !== 'All Time') {
-      const now = new Date('2025-12-31');
+      const now = new Date('2026-12-31');
       let cutoff;
       if (filters.dateRange === 'Last 30 Days') { cutoff = new Date(now); cutoff.setDate(cutoff.getDate() - 30); }
       else if (filters.dateRange === 'Last 90 Days') { cutoff = new Date(now); cutoff.setDate(cutoff.getDate() - 90); }
       else if (filters.dateRange === 'Last 6 Months') { cutoff = new Date(now); cutoff.setMonth(cutoff.getMonth() - 6); }
-      else if (filters.dateRange === 'This Year') { cutoff = new Date('2025-01-01'); }
+      else if (filters.dateRange === 'This Year') { cutoff = new Date('2026-01-01'); }
       if (cutoff) data = data.filter((c) => new Date(c.date) >= cutoff);
     }
     data.sort((a, b) => {
@@ -287,18 +340,66 @@ export default function Reports() {
     <div className="min-h-screen bg-[#0b0f19] p-6 space-y-6">
       <Toast message={toast} onClose={() => setToast('')} />
 
+      {showModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setShowModal(false)}>
+          <div className="w-full max-w-lg rounded-2xl border border-[#1e293b] bg-[#0f172a] p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="text-lg font-bold text-[#f8fafc]">Generate Custom Report</h3>
+              <button onClick={() => setShowModal(false)} className="text-[#94a3b8] hover:text-[#f8fafc] transition-colors"><X size={18} /></button>
+            </div>
+            <div className="space-y-4">
+              <div>
+                <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-[#94a3b8]">Report Type</label>
+                <select value={modalForm.reportType} onChange={(e) => setModalForm(f => ({...f, reportType: e.target.value}))} className="w-full rounded-lg border border-[#1e293b] bg-[#0b0f19] px-3 py-2 text-sm text-[#f8fafc] focus:border-[#4f46e5]/60 focus:outline-none">
+                  <option value="claims">Claims Detail Report</option>
+                  <option value="fraud-summary">Fraud Summary Report</option>
+                  <option value="provider">Provider Analysis</option>
+                  <option value="financial">Financial Impact Report</option>
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-[#94a3b8]">Date Range</label>
+                <select value={modalForm.dateRange} onChange={(e) => setModalForm(f => ({...f, dateRange: e.target.value}))} className="w-full rounded-lg border border-[#1e293b] bg-[#0b0f19] px-3 py-2 text-sm text-[#f8fafc] focus:border-[#4f46e5]/60 focus:outline-none">
+                  {dateRanges.map(d => <option key={d} value={d}>{d}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-[#94a3b8]">Export Format</label>
+                <select value={modalForm.format} onChange={(e) => setModalForm(f => ({...f, format: e.target.value}))} className="w-full rounded-lg border border-[#1e293b] bg-[#0b0f19] px-3 py-2 text-sm text-[#f8fafc] focus:border-[#4f46e5]/60 focus:outline-none">
+                  <option value="csv">CSV</option>
+                  <option value="excel">Excel</option>
+                  <option value="pdf">PDF</option>
+                </select>
+              </div>
+              <div className="flex gap-3 pt-2">
+                <button onClick={() => setShowModal(false)} className="flex-1 rounded-xl border border-[#1e293b] bg-[#0b0f19] py-2.5 text-sm font-medium text-[#94a3b8] hover:border-[#4f46e5]/50 hover:text-[#818cf8] transition-all">Cancel</button>
+                <button onClick={() => { setShowModal(false); showToast('Report generated successfully'); }} className="flex-1 rounded-xl bg-[#4f46e5] py-2.5 text-sm font-bold text-white hover:bg-[#4338ca] transition-all">Generate Report</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-2xl font-extrabold text-[#f8fafc] tracking-tight">Executive Analytics Dashboard</h1>
-          <p className="mt-1 text-sm text-[#94a3b8]">Comprehensive Fraud Intelligence & Reporting Hub</p>
+          <h1 className="text-2xl font-extrabold text-[#f8fafc] tracking-tight">Fraud Analysis Reports</h1>
+          <p className="mt-1 text-sm text-[#94a3b8]">Detailed fraud analysis, reporting, and data export</p>
         </div>
-        <button
-          onClick={() => { setLoading(true); setTimeout(() => setLoading(false), 800); }}
-          className="inline-flex items-center gap-2 rounded-xl border border-[#1e293b] bg-[#0f172a]/80 px-4 py-2 text-sm font-medium text-[#94a3b8] hover:border-[#4f46e5]/50 hover:text-[#818cf8] transition-all"
-        >
-          <RefreshCw size={14} /> Refresh
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setShowModal(true)}
+            className="inline-flex items-center gap-2 rounded-xl border border-[#4f46e5]/40 bg-[#4f46e5]/10 px-4 py-2 text-sm font-medium text-[#818cf8] hover:border-[#4f46e5]/70 hover:bg-[#4f46e5]/20 transition-all"
+          >
+            <FileText size={14} /> Generate Report
+          </button>
+          <button
+            onClick={() => { setLoading(true); setTimeout(() => setLoading(false), 800); }}
+            className="inline-flex items-center gap-2 rounded-xl border border-[#1e293b] bg-[#0f172a]/80 px-4 py-2 text-sm font-medium text-[#94a3b8] hover:border-[#4f46e5]/50 hover:text-[#818cf8] transition-all"
+          >
+            <RefreshCw size={14} /> Refresh
+          </button>
+        </div>
       </div>
 
       {/* KPIs */}
@@ -408,7 +509,7 @@ export default function Reports() {
       </div>
 
       {/* Charts Grid 1 */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
         {loading ? (
           Array.from({ length: 4 }).map((_, i) => (
             <div key={i} className="rounded-2xl border border-[#1e293b]/80 bg-[#0f172a]/80 p-5">
@@ -418,19 +519,19 @@ export default function Reports() {
           ))
         ) : (
           <>
-            <div className="rounded-2xl border border-[#1e293b]/80 bg-[#0f172a]/80 p-5">
+            <div className="rounded-2xl border border-[#1e293b]/80 bg-[#0f172a]/80 p-5 min-h-[380px]">
               <h3 className="mb-1 text-sm font-bold text-[#f8fafc]">Monthly Fraud Trend</h3>
               <p className="mb-3 text-xs text-[#94a3b8]">Claims volume vs fraud detection over 12 months</p>
               <PlotlyChart
                 data={[
-                  { x: monthlyData.map((d) => d.month), y: monthlyData.map((d) => d.claims), type: 'scatter', mode: 'lines+markers', name: 'Total Claims', line: { color: '#6366f1', width: 2 }, fill: 'tozeroy', fillcolor: 'rgba(99,102,241,0.08)' },
-                  { x: monthlyData.map((d) => d.month), y: monthlyData.map((d) => d.fraud), type: 'scatter', mode: 'lines+markers', name: 'Fraud Cases', line: { color: '#ef4444', width: 2 }, fill: 'tozeroy', fillcolor: 'rgba(239,68,68,0.08)' },
+                  { x: monthlyData.map((d) => d.month.replace(' 2025', " '25").replace(' 2026', " '26")), y: monthlyData.map((d) => d.claims), type: 'scatter', mode: 'lines+markers', name: 'Total Claims', line: { color: '#6366f1', width: 2 }, fill: 'tozeroy', fillcolor: 'rgba(99,102,241,0.08)' },
+                  { x: monthlyData.map((d) => d.month.replace(' 2025', " '25").replace(' 2026', " '26")), y: monthlyData.map((d) => d.fraud), type: 'scatter', mode: 'lines+markers', name: 'Fraud Cases', line: { color: '#ef4444', width: 2 }, fill: 'tozeroy', fillcolor: 'rgba(239,68,68,0.08)' },
                 ]}
-                layout={{ height: 300, xaxis: { tickangle: -45 }, yaxis: { title: 'Count' }, legend: { orientation: 'h', x: 0, y: -0.25 } }}
+                layout={{ height: 300, xaxis: { tickangle: -45, tickfont: { size: 10 } }, yaxis: { title: 'Count' }, legend: { orientation: 'h', x: 0, y: -0.3 } }}
               />
             </div>
 
-            <div className="rounded-2xl border border-[#1e293b]/80 bg-[#0f172a]/80 p-5">
+            <div className="rounded-2xl border border-[#1e293b]/80 bg-[#0f172a]/80 p-5 min-h-[380px]">
               <h3 className="mb-1 text-sm font-bold text-[#f8fafc]">Claims by Status</h3>
               <p className="mb-3 text-xs text-[#94a3b8]">Distribution of all claims by current status</p>
               <PlotlyChart
@@ -448,7 +549,7 @@ export default function Reports() {
               />
             </div>
 
-            <div className="rounded-2xl border border-[#1e293b]/80 bg-[#0f172a]/80 p-5">
+            <div className="rounded-2xl border border-[#1e293b]/80 bg-[#0f172a]/80 p-5 min-h-[380px]">
               <h3 className="mb-1 text-sm font-bold text-[#f8fafc]">Fraud by Provider</h3>
               <p className="mb-3 text-xs text-[#94a3b8]">Top providers by number of fraud cases</p>
               <PlotlyChart
@@ -467,30 +568,35 @@ export default function Reports() {
               />
             </div>
 
-            <div className="rounded-2xl border border-[#1e293b]/80 bg-[#0f172a]/80 p-5">
-              <h3 className="mb-1 text-sm font-bold text-[#f8fafc]">Fraud by Diagnosis</h3>
-              <p className="mb-3 text-xs text-[#94a3b8]">Top diagnosis codes associated with fraud</p>
-              <PlotlyChart
-                data={[{
-                  y: diagnosisData.map((d) => `${d.code} - ${d.name}`),
-                  x: diagnosisData.map((d) => d.cases),
-                  type: 'bar',
-                  orientation: 'h',
-                  marker: { color: diagnosisData.map((d) => d.rate > 12 ? '#ef4444' : d.rate > 10 ? '#f59e0b' : '#818cf8') },
-                  text: diagnosisData.map((d) => `${d.cases.toLocaleString()} (${d.rate}%)`),
-                  textposition: 'auto',
-                  textfont: { size: 9, color: '#f8fafc' },
-                  hovertemplate: '%{y}<br>Cases: %{x}<extra></extra>',
-                }]}
-                layout={{ height: 320, margin: { l: 160, r: 20, t: 10, b: 30 }, xaxis: { title: 'Fraud Cases' }, yaxis: { automargin: true }, showlegend: false }}
-              />
-            </div>
           </>
         )}
       </div>
 
+      {/* Top Fraud Categories — full-width above table */}
+      <div className="rounded-2xl border border-[#1e293b]/80 bg-[#0f172a]/80 p-5">
+        <h3 className="mb-1 text-sm font-bold text-[#f8fafc]">Top Fraud Categories</h3>
+        <p className="mb-3 text-xs text-[#94a3b8]">Most common fraud scheme types</p>
+        {loading ? (
+          <Skeleton rows={3} />
+        ) : (
+          <PlotlyChart
+            data={[{
+              x: fraudCategories.map((d) => d.category),
+              y: fraudCategories.map((d) => d.cases),
+              type: 'bar',
+              marker: { color: ['#ef4444', '#f59e0b', '#6366f1', '#8b5cf6', '#ec4899', '#06b6d4', '#94a3b8'] },
+              text: fraudCategories.map((d) => `${d.percentage}%`),
+              textposition: 'auto',
+              textfont: { size: 10, color: '#f8fafc' },
+              hovertemplate: '%{x}<br>Cases: %{y:,.0f}<extra></extra>',
+            }]}
+            layout={{ height: 300, xaxis: { tickangle: -25 }, yaxis: { title: 'Cases' }, showlegend: false }}
+          />
+        )}
+      </div>
+
       {/* Charts Grid 2 */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
         {loading ? (
           Array.from({ length: 4 }).map((_, i) => (
             <div key={i} className="rounded-2xl border border-[#1e293b]/80 bg-[#0f172a]/80 p-5">
@@ -500,7 +606,7 @@ export default function Reports() {
           ))
         ) : (
           <>
-            <div className="rounded-2xl border border-[#1e293b]/80 bg-[#0f172a]/80 p-5">
+            <div className="rounded-2xl border border-[#1e293b]/80 bg-[#0f172a]/80 p-5 min-h-[380px]">
               <h3 className="mb-1 text-sm font-bold text-[#f8fafc]">Financial Loss by Month</h3>
               <p className="mb-3 text-xs text-[#94a3b8]">Estimated financial losses attributed to fraud</p>
               <PlotlyChart
@@ -509,13 +615,16 @@ export default function Reports() {
                   y: monthlyData.map((d) => d.loss),
                   type: 'bar',
                   marker: { color: monthlyData.map((d) => d.loss > 3000000 ? '#ef4444' : '#6366f1'), },
+                  text: monthlyData.map((d) => '$' + (d.loss / 1000).toFixed(0) + 'k'),
+                  textposition: 'outside',
+                  textfont: { size: 9, color: '#94a3b8' },
                   hovertemplate: '%{x}<br>Loss: $%{y:,.0f}<extra></extra>',
                 }]}
-                layout={{ height: 300, xaxis: { tickangle: -45 }, yaxis: { title: 'Loss ($)', tickformat: '$.2s' }, showlegend: false }}
+                layout={{ height: 340, margin: { t: 25, b: 50 }, xaxis: { tickangle: -45, tickfont: { size: 10 } }, yaxis: { title: 'Loss ($)', tickformat: '$.2s' }, showlegend: false }}
               />
             </div>
 
-            <div className="rounded-2xl border border-[#1e293b]/80 bg-[#0f172a]/80 p-5">
+            <div className="rounded-2xl border border-[#1e293b]/80 bg-[#0f172a]/80 p-5 min-h-[380px]">
               <h3 className="mb-1 text-sm font-bold text-[#f8fafc]">Provider Risk Ranking</h3>
               <p className="mb-3 text-xs text-[#94a3b8]">Top 10 providers ranked by fraud risk rate</p>
               <PlotlyChart
@@ -526,33 +635,34 @@ export default function Reports() {
                   orientation: 'h',
                   marker: { color: providerFraud.map((d) => d.rate > 10 ? '#ef4444' : d.rate > 8 ? '#f59e0b' : '#10b981') },
                   text: providerFraud.map((d) => `${d.rate}%`),
-                  textposition: 'auto',
-                  textfont: { size: 9, color: '#f8fafc' },
+                  textposition: 'outside',
+                  textfont: { size: 10, color: '#f8fafc' },
                   hovertemplate: '%{y}<br>Risk Rate: %{x}%<extra></extra>',
                 }]}
-                layout={{ height: 320, margin: { l: 160, r: 20, t: 10, b: 30 }, xaxis: { title: 'Risk Rate (%)', range: [0, 14] }, yaxis: { automargin: true }, showlegend: false }}
+                layout={{ height: 340, margin: { l: 220, r: 40, t: 10, b: 30 }, xaxis: { title: 'Risk Rate (%)', range: [0, 16] }, yaxis: { automargin: true }, showlegend: false }}
               />
             </div>
 
-            <div className="rounded-2xl border border-[#1e293b]/80 bg-[#0f172a]/80 p-5">
-              <h3 className="mb-1 text-sm font-bold text-[#f8fafc]">Top Fraud Categories</h3>
-              <p className="mb-3 text-xs text-[#94a3b8]">Most common fraud scheme types</p>
+            <div className="rounded-2xl border border-[#1e293b]/80 bg-[#0f172a]/80 p-5 min-h-[380px]">
+              <h3 className="mb-1 text-sm font-bold text-[#f8fafc]">Fraud by Diagnosis</h3>
+              <p className="mb-3 text-xs text-[#94a3b8]">Top diagnosis codes associated with fraud</p>
               <PlotlyChart
                 data={[{
-                  x: fraudCategories.map((d) => d.category),
-                  y: fraudCategories.map((d) => d.cases),
+                  y: diagnosisData.map((d) => `${d.code} - ${d.name}`),
+                  x: diagnosisData.map((d) => d.cases),
                   type: 'bar',
-                  marker: { color: ['#ef4444', '#f59e0b', '#6366f1', '#8b5cf6', '#ec4899', '#06b6d4', '#94a3b8'] },
-                  text: fraudCategories.map((d) => `${d.percentage}%`),
-                  textposition: 'auto',
-                  textfont: { size: 10, color: '#f8fafc' },
-                  hovertemplate: '%{x}<br>Cases: %{y:,.0f}<extra></extra>',
+                  orientation: 'h',
+                  marker: { color: diagnosisData.map((d) => d.rate > 12 ? '#ef4444' : d.rate > 10 ? '#f59e0b' : '#818cf8') },
+                  text: diagnosisData.map((d) => `${d.cases.toLocaleString()} (${d.rate}%)`),
+                  textposition: 'outside',
+                  textfont: { size: 9, color: '#f8fafc' },
+                  hovertemplate: '%{y}<br>Cases: %{x}<extra></extra>',
                 }]}
-                layout={{ height: 300, xaxis: { tickangle: -25 }, yaxis: { title: 'Cases' }, showlegend: false }}
+                layout={{ height: 340, margin: { l: 220, r: 40, t: 10, b: 30 }, xaxis: { title: 'Fraud Cases' }, yaxis: { automargin: true }, showlegend: false }}
               />
             </div>
 
-            <div className="rounded-2xl border border-[#1e293b]/80 bg-[#0f172a]/80 p-5">
+            <div className="rounded-2xl border border-[#1e293b]/80 bg-[#0f172a]/80 p-5 min-h-[380px]">
               <h3 className="mb-1 text-sm font-bold text-[#f8fafc]">Fraud Distribution by Region</h3>
               <p className="mb-3 text-xs text-[#94a3b8]">Geographic breakdown of fraud cases</p>
               <PlotlyChart
@@ -560,13 +670,15 @@ export default function Reports() {
                   labels: regionData.map((d) => d.region),
                   values: regionData.map((d) => d.fraud),
                   type: 'pie',
-                  hole: 0.4,
+                  hole: 0.5,
                   marker: { colors: ['#6366f1', '#f59e0b', '#10b981', '#ef4444', '#8b5cf6'] },
                   textinfo: 'label+percent',
-                  textfont: { size: 11, color: '#f8fafc' },
+                  textposition: 'outside',
+                  textfont: { size: 12, color: '#f8fafc' },
+                  insidetextorientation: 'auto',
                   hovertemplate: '%{label}<br>Cases: %{value:,.0f}<br>Share: %{percent}<extra></extra>',
                 }]}
-                layout={{ height: 300, showlegend: true, legend: { orientation: 'h', x: 0, y: -0.1 } }}
+                layout={{ height: 340, showlegend: false, margin: { t: 10, b: 10, l: 40, r: 40 } }}
               />
             </div>
           </>

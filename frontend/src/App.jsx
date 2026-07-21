@@ -12,6 +12,7 @@ import TrackClaims from './pages/provider/TrackClaims';
 import InsuranceDashboard from './pages/insurance/InsuranceDashboard';
 import ExecutiveDashboard from './pages/insurance/ExecutiveDashboard';
 import ProviderManagement from './pages/insurance/ProviderManagement';
+import ProviderDetail from './pages/insurance/ProviderDetail';
 import PatientManagement from './pages/insurance/PatientManagement';
 import ReviewClaims from './pages/insurance/ReviewClaims';
 import FlaggedClaims from './pages/insurance/FlaggedClaims';
@@ -21,6 +22,7 @@ import ModelManagement from './pages/insurance/ModelManagement';
 import Analytics from './pages/insurance/Analytics';
 import Reports from './pages/insurance/Reports';
 import Policies from './pages/insurance/Policies';
+import PolicyDetail from './pages/insurance/PolicyDetail';
 import Settings from './pages/insurance/Settings';
 import AuditLogs from './pages/insurance/AuditLogs';
 import NotificationCenter from './pages/NotificationCenter';
@@ -77,8 +79,10 @@ function AppRoutes() {
           <Route path="/insurance/dashboard" element={<InsuranceDashboard />} />
           <Route path="/insurance/executive" element={<ExecutiveDashboard />} />
           <Route path="/insurance/providers" element={<ProviderManagement />} />
+          <Route path="/insurance/providers/:providerId" element={<ProviderDetail />} />
           <Route path="/insurance/patients" element={<PatientManagement />} />
           <Route path="/insurance/policies" element={<Policies />} />
+          <Route path="/insurance/policies/:policyId" element={<PolicyDetail />} />
           <Route path="/insurance/review" element={<ReviewClaims />} />
           <Route path="/insurance/flagged" element={<FlaggedClaims />} />
           <Route path="/insurance/reports" element={<Reports />} />
