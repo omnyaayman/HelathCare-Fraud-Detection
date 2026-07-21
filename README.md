@@ -8,6 +8,8 @@
   <strong>End-to-end AI-powered platform for detecting fraudulent healthcare insurance claims in real-time</strong>
 </p>
 
+https://github.com/omnyaayman/HelathCare-Fraud-Detection/raw/main/dashboard-demo.mp4
+
 <p align="center">
   <img src="https://img.shields.io/badge/FastAPI-05998B?style=for-the-badge&logo=fastapi&logoColor=white" alt="FastAPI"/>
   <img src="https://img.shields.io/badge/React-61DAFB?style=for-the-badge&logo=react&logoColor=black" alt="React"/>
