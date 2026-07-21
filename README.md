@@ -66,42 +66,7 @@ https://github.com/user-attachments/assets/d86148c4-3cc5-4e3f-9a50-2120e75b60fa
   <img src="architecture.jpeg" alt="System Architecture" width="800"/>
 </p>
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                        PRESENTATION LAYER                           │
-│  ┌─────────────────────────────────────────────────────────────┐    │
-│  │  React 19 + Vite + Tailwind CSS Dashboard (27 Pages)       │    │
-│  │  • Executive Dashboard  • AI Insights  • Fraud Heatmap     │    │
-│  │  • Claims Management   • Model Mgmt   • System Monitoring  │    │
-│  └─────────────────────────────────────────────────────────────┘    │
-├─────────────────────────────────────────────────────────────────────┤
-│                         API LAYER (44+ Endpoints)                   │
-│  ┌─────────────────────────────────────────────────────────────┐    │
-│  │  FastAPI + Uvicorn  │  HTTP Basic Auth  │  CORS Enabled    │    │
-│  └─────────────────────────────────────────────────────────────┘    │
-├─────────────────────────────────────────────────────────────────────┤
-│                      ML INFERENCE LAYER                             │
-│  ┌─────────────────────────────────────────────────────────────┐    │
-│  │  XGBoost Classifier (24 Features)                          │    │
-│  │  • Real-time prediction on claim submission                │    │
-│  │  • SHAP explainability for each flagged claim              │    │
-│  │  • Feature importance (gain-based) extraction              │    │
-│  └─────────────────────────────────────────────────────────────┘    │
-├─────────────────────────────────────────────────────────────────────┤
-│                    DATA PROCESSING LAYER                            │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────────────┐     │
-│  │  PySpark     │  │  Delta Lake  │  │  Apache Airflow      │     │
-│  │  Medallion   │→ │  Bronze/     │→ │  Daily ETL Pipeline  │     │
-│  │  Processing  │  │  Silver/Gold │  │  (13 tasks)          │     │
-│  └──────────────┘  └──────────────┘  └──────────────────────┘     │
-├─────────────────────────────────────────────────────────────────────┤
-│                     DATA & STORAGE LAYER                            │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────────────┐     │
-│  │  SQLite /     │  │  Azure SQL   │  │  Apache Kafka        │     │
-│  │  Local DB     │  │  (Production)│  │  Event Streaming     │     │
-│  └──────────────┘  └──────────────┘  └──────────────────────┘     │
-└─────────────────────────────────────────────────────────────────────┘
-```
+
 
 ### Medallion Architecture
 
