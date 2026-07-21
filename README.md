@@ -2,19 +2,20 @@
   <img src="https://svg-banners.vercel.app/api?type=origin&text1=Healthcare%20Fraud&text2=Detection%20System%20🚀&width=900&height=200&color=0078D4"/>
 </p>
 
-<!-- 🎬 DASHBOARD DEMO VIDEO — Replace YOUR_VIDEO_ID with your YouTube video ID -->
-<!-- Example: if your YouTube link is https://youtu.be/dQw4w9WgXcQ, use dQw4w9WgXcQ -->
+<!-- 🎬 DASHBOARD DEMO VIDEO -->
 <p align="center">
-  <a href="https://youtu.be/YOUR_VIDEO_ID">
-    <img src="https://img.shields.io/badge/🎬-Watch_Demo-FF0000?style=for-the-badge&logo=youtube&logoColor=white&labelColor=CC0000" alt="Watch Demo"/>
+  <a href="./dashboard-demo.mp4">
+    <img src="https://img.shields.io/badge/🎬-Watch_Dashboard_Demo-FF0000?style=for-the-badge&logo=youtube&logoColor=white&labelColor=CC0000" alt="Watch Demo"/>
   </a>
 </p>
 
-<p align="center">
-  <a href="https://youtu.be/YOUR_VIDEO_ID">
-    <img src="https://img.shields.io/badge/▶_Click_here_to_watch_the_full_dashboard_walkthrough-blue?style=flat-square" alt="Dashboard Walkthrough"/>
-  </a>
-</p>
+<div align="center">
+
+https://github.com/user-attachments/assets/dashboard-demo
+
+> 📹 **Full dashboard walkthrough** — Click ▶ to play
+
+</div>
 
 <h1 align="center">🏥 Healthcare Fraud Detection System</h1>
 
