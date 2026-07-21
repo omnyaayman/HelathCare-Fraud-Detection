@@ -9,13 +9,9 @@
   </a>
 </p>
 
-<div align="center">
+https://github.com/omnyaayman/HelathCare-Fraud-Detection/assets/dashboard-demo.mp4
 
-https://github.com/user-attachments/assets/dashboard-demo
-
-> 📹 **Full dashboard walkthrough** — Click ▶ to play
-
-</div>
+> 📹 **Full dashboard walkthrough** — Click ▶ to play the demo video above
 
 <h1 align="center">🏥 Healthcare Fraud Detection System</h1>
 
